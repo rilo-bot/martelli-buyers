@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.turbo/
+
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+*.local
+
+# Deploy tooling (kept local, not pushed per project requirement)
+render.yaml
+deploy.ps1
+deploy.sh
+.deploy/
+*.deploy.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

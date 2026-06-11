@@ -1,0 +1,18 @@
+{
+  "name": "rilo-project",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c green,cyan \"npm run dev -w @rilo/server\" \"npm run dev -w @rilo/web\"",
+    "dev:web": "npm run dev -w @rilo/web",
+    "dev:server": "npm run dev -w @rilo/server",
+    "build": "npm run build -w @rilo/server && npm run build -w @rilo/web",
+    "typecheck": "npm run typecheck -w @rilo/server && npm run typecheck -w @rilo/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

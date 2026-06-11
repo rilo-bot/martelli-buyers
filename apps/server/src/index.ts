@@ -1,0 +1,93 @@
+import express from 'express';
+import session from 'express-session';
+import MongoStore from 'connect-mongo';
+import helmet from 'helmet';
+import cors from 'cors';
+import { env } from './env';
+import { connectDb } from './db';
+import { seedDefaults } from './seed';
+import { authRouter } from './routes/auth';
+import { emailRouter } from './routes/email';
+import { aiRouter } from './routes/ai';
+import { uploadsRouter } from './routes/uploads';
+import { crudRouter } from './routes/crud';
+import { requireAuth } from './middleware/auth';
+import { asyncHandler, errorHandler } from './middleware/error';
+import { RESOURCES, User } from './models';
+
+const app = express();
+
+if (env.isProd) app.set('trust proxy', 1);
+
+app.use(helmet());
+app.use(
+  cors({
+    origin: env.CLIENT_ORIGIN,
+    credentials: true,
+  }),
+);
+app.use(express.json({ limit: '2mb' }));
+
+app.use(
+  session({
+    name: 'rilo.sid',
+    secret: env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: env.MONGODB_URI, ttl: 14 * 24 * 60 * 60 }),
+    cookie: {
+      httpOnly: true,
+      sameSite: env.isProd ? 'none' : 'lax',
+      secure: env.isProd,
+      maxAge: 14 * 24 * 60 * 60 * 1000,
+    },
+  }),
+);
+
+// Health check (unauthenticated)
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// Auth (unauthenticated entry points)
+app.use('/api/auth', authRouter);
+
+// Everything below requires a session.
+app.use('/api', requireAuth);
+
+// Read-only users list (for assignment dropdowns / settings).
+app.get(
+  '/api/users',
+  asyncHandler(async (_req, res) => {
+    const users = await User.find().sort({ createdAt: 1 });
+    res.json(users.map((u) => u.toJSON()));
+  }),
+);
+
+// Transactional email (templates, agent blasts).
+app.use('/api/email', emailRouter);
+
+// AI features (meeting/call summaries).
+app.use('/api/ai', aiRouter);
+
+// Direct-to-S3 file uploads (presigned URLs).
+app.use('/api/uploads', uploadsRouter);
+
+// Generic CRUD for every domain resource.
+for (const [resource, model] of Object.entries(RESOURCES)) {
+  app.use(`/api/${resource}`, crudRouter(resource, model));
+}
+
+app.use(errorHandler);
+
+async function start() {
+  await connectDb();
+  await seedDefaults();
+  app.listen(env.PORT, () => {
+    console.log(`[server] listening on http://localhost:${env.PORT}`);
+    console.log(`[server] CORS origin: ${env.CLIENT_ORIGIN}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('[server] failed to start:', err);
+  process.exit(1);
+});
