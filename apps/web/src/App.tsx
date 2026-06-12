@@ -1,10 +1,12 @@
 import '@/styles/theme.css';
 import '@/styles/brand.css';
 import { useEffect } from 'react';
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { PageTransition } from '@/components/motion';
 import { Sidebar } from '@/components/Sidebar';
+import { TopBar } from '@/components/TopBar';
 import { applyPersistedTheme } from '@/stores/themeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useBootstrapData } from '@/lib/bootstrap';
@@ -23,6 +25,7 @@ import AgentsPage from '@/pages/AgentsPage';
 import EmailsPage from '@/pages/EmailsPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
 import SettingsPage from '@/pages/SettingsPage';
+import SignAgreementPage from '@/pages/SignAgreementPage';
 
 // Apply persisted theme before first render to avoid flash
 applyPersistedTheme();
@@ -41,22 +44,26 @@ applyPersistedTheme();
 // Rendered only when authenticated — safe to load server data here.
 function AuthedShell() {
   useBootstrapData();
+  const location = useLocation();
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main
+      <div
         id="main-content"
-        className={[
-          'min-h-screen transition-[margin-left] duration-300 ease-in-out',
-          'pt-[calc(3.5rem+1.5rem)] lg:pt-8',
-          'pb-10',
-          'px-4 md:px-6 lg:px-8',
-        ].join(' ')}
+        className="min-h-screen transition-[margin-left] duration-300 ease-in-out"
       >
-        <div className="max-w-[1440px]">
-          <Outlet />
-        </div>
-      </main>
+        <TopBar />
+        <main className="px-4 pb-12 pt-14 md:px-6 lg:px-8 lg:pt-0">
+          <div className="mx-auto max-w-[1440px] pt-5 lg:pt-6">
+            {/* Keyed by full path: every navigation remounts and fades in cleanly.
+                No AnimatePresence/mode="wait" — that left the incoming page stuck
+                blank (until refresh) because the exit clone shares <Outlet/>. */}
+            <PageTransition key={location.pathname}>
+              <Outlet />
+            </PageTransition>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -82,6 +89,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/sign/:token" element={<SignAgreementPage />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/leads" element={<LeadsPage />} />

@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useEmailTemplatesStore } from '@/stores/emailTemplatesStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Building2, ArrowRight, CheckCircle, Shield, Mail } from 'lucide-react';
+import { ArrowRight, CheckCircle, Shield, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const BRAND_IMAGE = 'https://images.pexels.com/photos/6422937/pexels-photo-6422937.jpeg?auto=compress&cs=tinysrgb&h=650&w=940';
@@ -90,9 +90,7 @@ export default function SignupPage() {
         <div className="relative z-10 flex flex-col h-full p-10 xl:p-14">
           {/* Logo mark */}
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-lg">
-              <Building2 className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src="/images/logo.png" alt="Martelli Buyers" className="h-11 w-11 rounded-full bg-white object-contain shadow-lg" />
             <span className="text-sm font-bold tracking-wide" style={{ color: 'var(--paper-cream)' }}>
               Martelli Buyers CRM
             </span>
@@ -151,9 +149,7 @@ export default function SignupPage() {
         <div className="relative w-full max-w-[420px] space-y-7">
           {/* Mobile logo */}
           <div className="flex lg:hidden flex-col items-center gap-2">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary shadow-lg">
-              <Building2 className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src="/images/logo.png" alt="Martelli Buyers" className="h-12 w-12 rounded-full object-contain shadow-lg" />
             <span className="text-sm font-bold text-foreground">Martelli Buyers CRM</span>
           </div>
 

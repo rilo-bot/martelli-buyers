@@ -13,6 +13,8 @@ interface AgentsState {
   updateAgent: (id: string, updates: Partial<Agent>) => Promise<void>;
   deleteAgent: (id: string) => Promise<void>;
   togglePreferred: (id: string) => Promise<void>;
+  /** Best-effort: stamp lastContactDate on a set of agents after a blast. */
+  markContacted: (ids: string[], when?: string) => Promise<void>;
   getByGeo: (geo: AgentGeo) => Agent[];
   getPreferred: () => Agent[];
 }
@@ -52,6 +54,18 @@ export const useAgentsStore = create<AgentsState>()((set, get) => ({
     const agent = get().agents.find((a) => a.id === id);
     if (!agent) return Promise.resolve();
     return get().updateAgent(id, { isPreferred: !agent.isPreferred });
+  },
+
+  markContacted: async (ids, when = new Date().toISOString()) => {
+    const targets = new Set(ids);
+    if (targets.size === 0) return;
+    // Update local state immediately so the UI reflects the contact.
+    set((s) => ({
+      agents: s.agents.map((a) => (targets.has(a.id) ? { ...a, lastContactDate: when } : a)),
+    }));
+    // Persist in the background — a failure here must not surface to the user,
+    // since the blast itself already succeeded.
+    await Promise.allSettled([...targets].map((id) => api.update(id, { lastContactDate: when })));
   },
 
   getByGeo: (geo) => get().agents.filter((a) => a.geoTag === geo),

@@ -54,6 +54,34 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
   return (text ? JSON.parse(text) : undefined) as T
 }
 
+/** GET a binary response (e.g. a generated PDF) as a Blob, sending cookies. */
+export async function fetchBlob(path: string): Promise<Blob> {
+  const res = await fetch(apiUrl(path), { method: 'GET', credentials: 'include' })
+  if (!res.ok) {
+    let message = res.statusText
+    try {
+      const data = await res.json()
+      if (data?.error) message = data.error
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, message)
+  }
+  return res.blob()
+}
+
+/** Trigger a browser download for a Blob with the given filename. */
+export function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 /** Typed REST helpers for a `/api/<name>` collection. */
 export function resource<T extends { id: string }>(name: string) {
   const base = `/api/${name}`

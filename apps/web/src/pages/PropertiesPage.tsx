@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useOffMarketStore } from '@/stores/offMarketStore';
+import { useAgentsStore } from '@/stores/agentsStore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +11,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Plus, Search, Home, MapPin, Star, ArrowRight, Building2, ChevronRight } from 'lucide-react';
+import { Select } from '@/components/ui/select';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageTransition, Stagger, StaggerItem, CountUp } from '@/components/motion';
+import { Plus, Search, Home, MapPin, Star, ArrowRight, Building2, ChevronRight, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isVideoUrl } from '@/lib/upload';
 
@@ -28,6 +32,7 @@ export default function PropertiesPage() {
   const offMarket = useOffMarketStore((s) => s.properties);
   const addOffMarket = useOffMarketStore((s) => s.addProperty);
   const toggleActive = useOffMarketStore((s) => s.toggleActive);
+  const agents = useAgentsStore((s) => s.agents);
 
   const [search, setSearch] = useState('');
   const [showAddOffMarket, setShowAddOffMarket] = useState(false);
@@ -35,8 +40,11 @@ export default function PropertiesPage() {
   const [omForm, setOmForm] = useState({
     address: '', suburb: '', priceGuide: '', priceLow: '', priceHigh: '',
     bedrooms: '3', bathrooms: '2', carparks: '1', propertyType: '',
-    notes: '', sourceAgentName: '',
+    notes: '', sourceAgentId: '', sourceAgentName: '',
   });
+
+  // '__manual__' lets the user type a name for an agent not yet in the network.
+  const MANUAL = '__manual__';
 
   const filteredProperties = useMemo(() => {
     const q = search.toLowerCase();
@@ -62,20 +70,22 @@ export default function PropertiesPage() {
       carparks: Number(omForm.carparks) || 1,
       propertyType: omForm.propertyType.trim(),
       notes: omForm.notes.trim(),
-      sourceAgentId: '',
+      // Link to a real agent record when one was picked; manual entries keep
+      // only the typed name so the card still has a source to show.
+      sourceAgentId: omForm.sourceAgentId === MANUAL ? '' : omForm.sourceAgentId,
       sourceAgentName: omForm.sourceAgentName.trim(),
       attachments: [],
       usedInDealIds: [],
       isActive: true,
     });
-    setOmForm({ address: '', suburb: '', priceGuide: '', priceLow: '', priceHigh: '', bedrooms: '3', bathrooms: '2', carparks: '1', propertyType: '', notes: '', sourceAgentName: '' });
+    setOmForm({ address: '', suburb: '', priceGuide: '', priceLow: '', priceHigh: '', bedrooms: '3', bathrooms: '2', carparks: '1', propertyType: '', notes: '', sourceAgentId: '', sourceAgentName: '' });
     setShowAddOffMarket(false);
   };
 
   const activeOffMarket = useMemo(() => offMarket.filter((p) => p.isActive).length, [offMarket]);
 
   return (
-    <div className="space-y-6">
+    <PageTransition className="space-y-6">
       {/* Page header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -99,7 +109,7 @@ export default function PropertiesPage() {
           <Card key={s.label} className={cn('border kpi-card', s.accent)}>
             <CardContent className="pt-4 pb-4 px-5">
               <p className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">{s.label}</p>
-              <p className={cn('text-2xl font-bold mt-1 tabular-nums', s.text)}>{s.value}</p>
+              <CountUp value={s.value} className={cn('text-2xl font-bold mt-1 tabular-nums block', s.text)} />
             </CardContent>
           </Card>
         ))}
@@ -125,25 +135,26 @@ export default function PropertiesPage() {
         {/* DEAL PROPERTIES */}
         <TabsContent value="deal" className="mt-4">
           {filteredProperties.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/6 border-2 border-dashed border-primary/20 mb-5">
-                <Home className="h-8 w-8 text-primary/40" />
-              </div>
-              <h3 className="text-lg font-bold">No deal properties yet</h3>
-              <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
-                Properties are added when you track them against a deal. Visit a deal to add properties.
-              </p>
-              <Button asChild className="mt-5" variant="outline">
-                <Link to="/deals"><ArrowRight className="mr-2 h-4 w-4" />Go to Deals</Link>
-              </Button>
-            </div>
+            <EmptyState
+              icon={Home}
+              title={search ? 'No matching properties' : 'No deal properties yet'}
+              description={search
+                ? 'Try a different address or suburb.'
+                : 'Properties are added when you track them against a deal. Visit a deal to add properties.'}
+              action={!search && (
+                <Button asChild variant="outline">
+                  <Link to="/deals"><ArrowRight className="mr-2 h-4 w-4" />Go to Deals</Link>
+                </Button>
+              )}
+            />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" step={0.04}>
               {filteredProperties.map((prop) => {
                 const config = PROP_STATUS_CONFIG[prop.status] ?? PROP_STATUS_CONFIG['active'];
                 const cover = (prop.photos ?? []).find((u) => !isVideoUrl(u));
                 return (
-                  <Link key={prop.id} to={`/properties/${prop.id}`}>
+                  <StaggerItem key={prop.id}>
+                  <Link to={`/properties/${prop.id}`}>
                     <Card className="group border-border/70 card-interactive h-full bg-card overflow-hidden">
                       {cover && (
                         <div className="aspect-[16/9] w-full overflow-hidden bg-muted">
@@ -179,9 +190,10 @@ export default function PropertiesPage() {
                       </CardContent>
                     </Card>
                   </Link>
+                  </StaggerItem>
                 );
               })}
-            </div>
+            </Stagger>
           )}
         </TabsContent>
 
@@ -190,22 +202,23 @@ export default function PropertiesPage() {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Centralised off-market property database. Reuse entries across multiple client deals.</p>
             {filteredOffMarket.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/6 border-2 border-dashed border-primary/20 mb-5">
-                  <Building2 className="h-8 w-8 text-primary/40" />
-                </div>
-                <h3 className="text-lg font-bold">No off-market properties yet</h3>
-                <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
-                  Build your centralised off-market database to stop losing track of exclusive listings across spreadsheets.
-                </p>
-                <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => setShowAddOffMarket(true)}>
-                  <Plus className="mr-2 h-4 w-4" />Add your first off-market property
-                </Button>
-              </div>
+              <EmptyState
+                icon={Building2}
+                title={search ? 'No matching off-market properties' : 'No off-market properties yet'}
+                description={search
+                  ? 'Try a different address or suburb.'
+                  : 'Build your centralised off-market database to stop losing track of exclusive listings across spreadsheets.'}
+                action={!search && (
+                  <Button onClick={() => setShowAddOffMarket(true)}>
+                    <Plus className="mr-2 h-4 w-4" />Add your first off-market property
+                  </Button>
+                )}
+              />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" step={0.04}>
                 {filteredOffMarket.map((prop) => (
-                  <Card key={prop.id} className="group border-border/70 card-interactive bg-card">
+                  <StaggerItem key={prop.id}>
+                  <Card className="group border-border/70 card-interactive bg-card h-full">
                     <CardHeader className="pb-2 px-5 pt-5">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -228,12 +241,22 @@ export default function PropertiesPage() {
                         <span>{prop.bedrooms}bd / {prop.bathrooms}ba</span>
                         {prop.propertyType && <span className="col-span-2">{prop.propertyType}</span>}
                       </div>
-                      {prop.sourceAgentName && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Star className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                          <span>Source: {prop.sourceAgentName}</span>
-                        </div>
-                      )}
+                      {prop.sourceAgentName && (() => {
+                        const linked = prop.sourceAgentId ? agents.find((a) => a.id === prop.sourceAgentId) : null;
+                        return (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            {linked?.isPreferred
+                              ? <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                              : <User className="h-3.5 w-3.5 shrink-0" />}
+                            <span>Source: {prop.sourceAgentName}</span>
+                            {linked && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/8 text-primary border border-primary/15 font-semibold">
+                                {linked.geoTag}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {prop.notes && <p className="text-xs text-muted-foreground line-clamp-2">{prop.notes}</p>}
                       {prop.usedInDealIds.length > 0 && (
                         <p className="text-xs text-muted-foreground">Used in {prop.usedInDealIds.length} deal(s)</p>
@@ -245,8 +268,9 @@ export default function PropertiesPage() {
                       </div>
                     </CardContent>
                   </Card>
+                  </StaggerItem>
                 ))}
-              </div>
+              </Stagger>
             )}
           </div>
         </TabsContent>
@@ -302,7 +326,39 @@ export default function PropertiesPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="omAgent">Source agent</Label>
-                <Input id="omAgent" value={omForm.sourceAgentName} onChange={(e) => setOmForm((f) => ({ ...f, sourceAgentName: e.target.value }))} placeholder="Agent name" />
+                <Select
+                  id="omAgent"
+                  value={omForm.sourceAgentId}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const agent = agents.find((a) => a.id === val);
+                    setOmForm((f) => ({
+                      ...f,
+                      sourceAgentId: val,
+                      sourceAgentName: agent
+                        ? `${agent.firstName} ${agent.lastName}`.trim()
+                        : val === MANUAL
+                          ? f.sourceAgentName
+                          : '',
+                    }));
+                  }}
+                >
+                  <option value="">— None —</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.firstName} {a.lastName}{a.agency ? ` — ${a.agency}` : ''}{a.isPreferred ? ' ★' : ''}
+                    </option>
+                  ))}
+                  <option value={MANUAL}>Other (enter manually)…</option>
+                </Select>
+                {omForm.sourceAgentId === MANUAL && (
+                  <Input
+                    className="mt-2"
+                    value={omForm.sourceAgentName}
+                    onChange={(e) => setOmForm((f) => ({ ...f, sourceAgentName: e.target.value }))}
+                    placeholder="Agent name"
+                  />
+                )}
               </div>
             </div>
             <div className="space-y-1.5">
@@ -318,6 +374,6 @@ export default function PropertiesPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageTransition>
   );
 }

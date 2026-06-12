@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { resource } from '@/lib/api';
+import { emailInvoice as emailInvoiceApi } from '@/lib/documents';
 import type { Invoice, InvoiceStatus } from '@/types';
 
 const api = resource<Invoice>('invoices');
@@ -14,7 +15,9 @@ interface InvoicesState {
   deleteInvoice: (id: string) => Promise<void>;
   updateStatus: (id: string, status: InvoiceStatus) => Promise<void>;
   getInvoicesForDeal: (dealId: string) => Invoice[];
-  syncWithXero: (invoiceId: string) => Promise<{ ok: boolean; xeroId?: string; error?: string }>;
+  emailInvoice: (invoiceId: string) => Promise<void>;
+  /** Replace an invoice in state with an authoritative server copy (e.g. after a Xero sync). */
+  replaceInvoice: (invoice: Invoice) => void;
 }
 
 export const useInvoicesStore = create<InvoicesState>()((set, get) => ({
@@ -52,11 +55,17 @@ export const useInvoicesStore = create<InvoicesState>()((set, get) => ({
 
   getInvoicesForDeal: (dealId) => get().invoices.filter((inv) => inv.dealId === dealId),
 
-  // Mock Xero sync — flips status to "sent" and stamps a fake external id.
-  syncWithXero: async (invoiceId) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    const xeroId = `XERO-${Date.now()}`;
-    await get().updateInvoice(invoiceId, { xeroInvoiceId: xeroId, status: 'sent' });
-    return { ok: true, xeroId };
+  replaceInvoice: (invoice) =>
+    set((s) => ({ invoices: s.invoices.map((inv) => (inv.id === invoice.id ? invoice : inv)) })),
+
+  // Generate the invoice PDF server-side and email it to the client. The server
+  // flips a draft invoice to "sent"; reflect that locally.
+  emailInvoice: async (invoiceId) => {
+    const { status } = await emailInvoiceApi(invoiceId);
+    set((s) => ({
+      invoices: s.invoices.map((inv) =>
+        inv.id === invoiceId ? { ...inv, status: status as InvoiceStatus } : inv,
+      ),
+    }));
   },
 }));

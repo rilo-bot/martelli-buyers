@@ -3,21 +3,42 @@ import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  LogOut, Building2, Sun, Moon, LayoutDashboard, Users, FileText,
-  Home, Star, Mail, ShieldCheck, UserCheck, PanelLeft, Menu, Settings,
+  LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
+  Home, Star, Mail, ShieldCheck, UserCheck, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-const navLinks = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/leads', label: 'Leads', icon: Users },
-  { to: '/clients', label: 'Clients', icon: UserCheck },
-  { to: '/deals', label: 'Campaigns', icon: FileText },
-  { to: '/properties', label: 'Properties', icon: Home },
-  { to: '/agents', label: 'Agents', icon: Star },
-  { to: '/emails', label: 'Emails', icon: Mail },
-  { to: '/due-diligence', label: 'Due Diligence', icon: ShieldCheck },
+interface NavItem { to: string; label: string; icon: React.ElementType }
+interface NavGroup { label: string; links: NavItem[] }
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'Workspace',
+    links: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Pipeline',
+    links: [
+      { to: '/leads', label: 'Leads', icon: Users },
+      { to: '/clients', label: 'Clients', icon: UserCheck },
+      { to: '/deals', label: 'Campaigns', icon: FileText },
+    ],
+  },
+  {
+    label: 'Property',
+    links: [
+      { to: '/properties', label: 'Properties', icon: Home },
+      { to: '/due-diligence', label: 'Due Diligence', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Network',
+    links: [
+      { to: '/agents', label: 'Agents', icon: Star },
+      { to: '/emails', label: 'Emails', icon: Mail },
+    ],
+  },
 ];
 
 const bottomNavLinks = [
@@ -44,6 +65,18 @@ export function Sidebar() {
     try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  // Close the account menu on outside click.
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) setAccountOpen(false);
+    };
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, [accountOpen]);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -111,6 +144,14 @@ export function Sidebar() {
             {link.label}
           </span>
 
+          {/* Active chevron (right side) — hidden when collapsed (matches label) */}
+          {isActive && (
+            <ChevronRight
+              className={cn('ml-auto h-4 w-4 shrink-0 transition-transform duration-200', collapsed ? 'lg:hidden' : 'block')}
+              style={{ color: 'hsl(var(--sidebar-item-active))' }}
+            />
+          )}
+
           {/* Tooltip when collapsed */}
           {collapsed && (
             <span className="hidden lg:group-hover:flex items-center absolute left-full ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground border border-border shadow-lg whitespace-nowrap z-[70] pointer-events-none">
@@ -133,10 +174,7 @@ export function Sidebar() {
         }}
       >
         <NavLink to="/dashboard" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-            style={{ background: 'linear-gradient(135deg, hsl(213 94% 48%), hsl(174 72% 42%))' }}>
-            <Building2 className="h-4 w-4" style={{ color: '#fff' }} />
-          </div>
+          <img src="/images/logo.png" alt="Martelli Buyers" className="h-8 w-8 shrink-0 rounded-full object-contain" />
           <div className="leading-none">
             <span className="block text-sm font-bold tracking-tight" style={{ color: 'hsl(var(--sidebar-text))' }}>Martelli</span>
             <span className="block text-[9px] tracking-[0.12em] uppercase" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>Buyers CRM</span>
@@ -177,12 +215,7 @@ export function Sidebar() {
           style={{ borderColor: 'hsl(var(--sidebar-border))' }}
         >
           <NavLink to="/dashboard" className="flex items-center shrink-0" onClick={() => setMobileOpen(false)}>
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-md"
-              style={{ background: 'linear-gradient(135deg, hsl(213 94% 48%), hsl(174 72% 42%))' }}
-            >
-              <Building2 className="h-4 w-4" style={{ color: '#fff' }} />
-            </div>
+            <img src="/images/logo.png" alt="Martelli Buyers" className="h-8 w-8 shrink-0 rounded-full object-contain" />
           </NavLink>
 
           <div
@@ -221,18 +254,25 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Section label */}
-        {!collapsed && (
-          <div className="px-4 pt-4 pb-1">
-            <span className="text-[9px] font-bold tracking-[0.14em] uppercase" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>
-              Main Menu
-            </span>
-          </div>
-        )}
-
-        {/* Nav links */}
-        <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-          {navLinks.map(renderNavLink)}
+        {/* Grouped nav links */}
+        <nav className="flex-1 overflow-y-auto py-3 px-2">
+          {navGroups.map((group, gi) => (
+            <div key={group.label} className={cn(gi > 0 && 'mt-3')}>
+              {/* Expanded: group eyebrow (hidden on desktop when collapsed) */}
+              <div className={cn('px-3 pb-1.5', collapsed && 'lg:hidden')}>
+                <span className="text-[9px] font-bold tracking-[0.14em] uppercase" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>
+                  {group.label}
+                </span>
+              </div>
+              {/* Collapsed (desktop only): thin divider instead of a label */}
+              {collapsed && gi > 0 && (
+                <div className="mx-3 mb-2 hidden border-t lg:block" style={{ borderColor: 'hsl(var(--sidebar-border))' }} />
+              )}
+              <div className="space-y-0.5">
+                {group.links.map(renderNavLink)}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Bottom section */}
@@ -242,76 +282,71 @@ export function Sidebar() {
         >
           {bottomNavLinks.map(renderNavLink)}
 
-          {/* Theme toggle */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            className={cn(
-              'relative flex items-center gap-3 rounded-lg text-[13px] font-medium transition-all duration-150 w-full group',
-              collapsed ? 'lg:justify-center lg:px-0 lg:py-2.5 px-3 py-2.5' : 'px-3 py-2.5',
-              'sidebar-link-idle'
-            )}
-            style={{ color: 'hsl(var(--sidebar-text-muted))' }}
-          >
-            {isDark
-              ? <Sun className={cn('shrink-0', collapsed ? 'h-[18px] w-[18px]' : 'h-[16px] w-[16px]')} />
-              : <Moon className={cn('shrink-0', collapsed ? 'h-[18px] w-[18px]' : 'h-[16px] w-[16px]')} />
-            }
-            <span className={cn('whitespace-nowrap transition-all duration-200', collapsed ? 'lg:hidden' : 'block')}>
-              {isDark ? 'Light mode' : 'Dark mode'}
-            </span>
-            {collapsed && (
-              <span className="hidden lg:group-hover:flex items-center absolute left-full ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground border border-border shadow-lg whitespace-nowrap z-[70] pointer-events-none">
-                {isDark ? 'Light mode' : 'Dark mode'}
-              </span>
-            )}
-          </button>
-
-          {/* Divider */}
-          <div className="mx-2 my-1" style={{ borderTop: '1px solid hsl(var(--sidebar-border))' }} />
-
-          {/* User identity */}
-          <div className={cn('flex items-center gap-3 px-3 py-2 rounded-lg', collapsed ? 'lg:justify-center lg:px-0' : '')}>
-            <Avatar className="h-7 w-7 shrink-0 ring-2" style={{ ['--tw-ring-color' as string]: 'hsl(var(--sidebar-border))' } as React.CSSProperties}>
-              <AvatarFallback
-                className="text-[11px] font-bold"
-                style={{ background: 'linear-gradient(135deg, hsl(213 94% 38% / 0.35), hsl(174 72% 38% / 0.25))', color: 'hsl(var(--sidebar-text))' }}
+          {/* Account card + menu */}
+          <div className="relative mt-1.5" ref={accountRef}>
+            {/* Popup menu (opens above the card) */}
+            {accountOpen && (
+              <div
+                className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-xl border bg-card p-1 shadow-lg z-[70]"
+                style={{ borderColor: 'hsl(var(--sidebar-border))' }}
               >
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className={cn('min-w-0 transition-all duration-200', collapsed ? 'lg:hidden' : 'block')}>
-              <p className="text-[12px] font-semibold leading-none truncate" style={{ color: 'hsl(var(--sidebar-text))' }}>
-                {currentUser?.name ?? 'User'}
-              </p>
-              <p className="text-[10px] capitalize mt-0.5 truncate" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>
-                {currentUser?.role ?? 'member'}
-              </p>
-            </div>
-          </div>
+                <button
+                  type="button"
+                  onClick={() => { toggleTheme(); setAccountOpen(false); }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors hover:bg-muted"
+                  style={{ color: 'hsl(var(--sidebar-text))' }}
+                >
+                  {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                  {isDark ? 'Light mode' : 'Dark mode'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAccountOpen(false); handleLogout(); }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-destructive transition-colors hover:bg-destructive/10"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  Sign out
+                </button>
+              </div>
+            )}
 
-          {/* Sign out */}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className={cn(
-              'relative flex items-center gap-3 rounded-lg text-[13px] font-medium transition-all duration-150 w-full group',
-              collapsed ? 'lg:justify-center lg:px-0 lg:py-2.5 px-3 py-2.5' : 'px-3 py-2.5',
-              'sidebar-link-idle'
-            )}
-            style={{ color: 'hsl(var(--sidebar-text-muted))' }}
-          >
-            <LogOut className={cn('shrink-0', collapsed ? 'h-[18px] w-[18px]' : 'h-[16px] w-[16px]')} />
-            <span className={cn('whitespace-nowrap transition-all duration-200', collapsed ? 'lg:hidden' : 'block')}>
-              Sign out
-            </span>
-            {collapsed && (
-              <span className="hidden lg:group-hover:flex items-center absolute left-full ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground border border-border shadow-lg whitespace-nowrap z-[70] pointer-events-none">
-                Sign out
-              </span>
-            )}
-          </button>
+            {/* The card itself */}
+            <button
+              type="button"
+              onClick={() => setAccountOpen((o) => !o)}
+              aria-haspopup="menu"
+              aria-expanded={accountOpen}
+              className={cn(
+                'group flex w-full items-center gap-2.5 rounded-xl border transition-colors',
+                collapsed ? 'lg:justify-center lg:border-transparent lg:p-1.5 px-2.5 py-2' : 'px-2.5 py-2',
+              )}
+              style={{
+                borderColor: collapsed ? undefined : 'hsl(var(--sidebar-border))',
+                background: accountOpen ? 'hsl(var(--sidebar-item-hover))' : 'transparent',
+              }}
+            >
+              <Avatar className="h-8 w-8 shrink-0">
+                <AvatarFallback
+                  className="text-[11px] font-bold"
+                  style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }}
+                >
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className={cn('min-w-0 flex-1 text-left transition-all duration-200', collapsed ? 'lg:hidden' : 'block')}>
+                <p className="truncate text-[12.5px] font-semibold leading-tight" style={{ color: 'hsl(var(--sidebar-text))' }}>
+                  {currentUser?.name ?? 'Martelli Buyers'}
+                </p>
+                <p className="truncate text-[10.5px] capitalize leading-tight mt-0.5" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>
+                  {currentUser?.role ?? 'member'}
+                </p>
+              </div>
+              <ChevronsUpDown
+                className={cn('h-3.5 w-3.5 shrink-0 transition-colors', collapsed ? 'lg:hidden' : 'block')}
+                style={{ color: 'hsl(var(--sidebar-text-muted))' }}
+              />
+            </button>
+          </div>
         </div>
       </aside>
     </>

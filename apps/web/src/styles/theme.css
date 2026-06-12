@@ -1,15 +1,2 @@
-:root {
-  --primary: 215 55% 28%;
-  --primary-foreground: 0 0% 100%;
-  --accent: 198 60% 42%;
-  --accent-foreground: 0 0% 100%;
-  --ring: 215 55% 28%;
-}
-
-.dark {
-  --primary: 215 60% 55%;
-  --primary-foreground: 0 0% 100%;
-  --accent: 198 65% 58%;
-  --accent-foreground: 0 0% 100%;
-  --ring: 215 60% 55%;
-}
+/* Design tokens live in brand.css (Design System v3 — single source of truth).
+   This file is intentionally left empty to avoid a competing palette. */

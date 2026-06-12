@@ -7,11 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Plus, Search, Users, Star, Phone, Mail, MapPin, Edit } from 'lucide-react';
+import { Plus, Search, Users, Star, Phone, Mail, MapPin, Edit, Clock, Trash2, Loader2 } from 'lucide-react';
+import { Stagger, StaggerItem, CountUp } from '@/components/motion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { AgentGeo } from '@/types';
+import type { Agent, AgentGeo } from '@/types';
 
 const GEO_OPTIONS: AgentGeo[] = ['East', 'West', 'North', 'Central'];
 
@@ -38,8 +40,37 @@ const GEO_CONFIG: Record<AgentGeo, { pill: string; dot: string; cardBorder: stri
   },
 };
 
+/** Defensive lookup — geoTag could be an unexpected value from imported data. */
+const geoConfig = (geo: AgentGeo) => GEO_CONFIG[geo] ?? GEO_CONFIG.Central;
+
+/** Two-letter initials, resilient to empty names. */
+function initialsOf(agent: Agent): string {
+  const i = `${agent.firstName?.[0] ?? ''}${agent.lastName?.[0] ?? ''}`.toUpperCase();
+  return i || '??';
+}
+
+/** Human "x days ago" for the last-contact stamp. */
+function formatLastContact(iso: string): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'Contacted today';
+  if (days === 1) return 'Contacted yesterday';
+  if (days < 30) return `Contacted ${days}d ago`;
+  if (days < 365) return `Contacted ${Math.floor(days / 30)}mo ago`;
+  return `Contacted ${Math.floor(days / 365)}y ago`;
+}
+
+const EMPTY_FORM = {
+  firstName: '', lastName: '', email: '', phone: '', agency: '',
+  geoTag: 'Central' as AgentGeo, suburbs: '', isPreferred: false, notes: '',
+};
+
 export default function AgentsPage() {
   const agents = useAgentsStore((s) => s.agents);
+  const loaded = useAgentsStore((s) => s.loaded);
+  const loading = useAgentsStore((s) => s.loading);
   const addAgent = useAgentsStore((s) => s.addAgent);
   const updateAgent = useAgentsStore((s) => s.updateAgent);
   const deleteAgent = useAgentsStore((s) => s.deleteAgent);
@@ -50,16 +81,20 @@ export default function AgentsPage() {
   const [preferredOnly, setPreferredOnly] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const [form, setForm] = useState({
-    firstName: '', lastName: '', email: '', phone: '', agency: '',
-    geoTag: 'Central' as AgentGeo, suburbs: '', isPreferred: false, notes: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  const deleteTarget = deleteTargetId ? agents.find((a) => a.id === deleteTargetId) : null;
 
   const filteredAgents = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
     return agents.filter((a) => {
-      const matchesSearch = !q || `${a.firstName} ${a.lastName} ${a.email} ${a.agency}`.toLowerCase().includes(q);
+      const haystack = `${a.firstName} ${a.lastName} ${a.email} ${a.agency} ${a.suburbs.join(' ')}`.toLowerCase();
+      const matchesSearch = !q || haystack.includes(q);
       const matchesGeo = !geoFilter || a.geoTag === geoFilter;
       const matchesPreferred = !preferredOnly || a.isPreferred;
       return matchesSearch && matchesGeo && matchesPreferred;
@@ -76,7 +111,7 @@ export default function AgentsPage() {
 
   const openAdd = () => {
     setEditId(null);
-    setForm({ firstName: '', lastName: '', email: '', phone: '', agency: '', geoTag: 'Central', suburbs: '', isPreferred: false, notes: '' });
+    setForm(EMPTY_FORM);
     setShowAddDialog(true);
   };
 
@@ -92,7 +127,7 @@ export default function AgentsPage() {
     setShowAddDialog(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim()) {
       toast.error('First name and last name are required.');
@@ -106,13 +141,51 @@ export default function AgentsPage() {
       isPreferred: form.isPreferred, notes: form.notes.trim(),
       lastContactDate: '', dealsReferredIds: [],
     };
-    if (editId) {
-      updateAgent(editId, data);
-    } else {
-      addAgent(data);
+    setSaving(true);
+    try {
+      if (editId) {
+        await updateAgent(editId, data);
+        toast.success('Agent updated.');
+      } else {
+        await addAgent(data);
+        toast.success(`${data.firstName} ${data.lastName} added to your network.`);
+      }
+      setShowAddDialog(false);
+    } catch (err) {
+      // Keep the dialog open so the user's input isn't lost on a failed save.
+      toast.error(err instanceof Error ? err.message : 'Could not save the agent. Please try again.');
+    } finally {
+      setSaving(false);
     }
-    setShowAddDialog(false);
   };
+
+  const handleTogglePreferred = async (id: string) => {
+    setTogglingId(id);
+    try {
+      await togglePreferred(id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the agent.');
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetId) return;
+    const name = deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : 'Agent';
+    setDeleting(true);
+    try {
+      await deleteAgent(deleteTargetId);
+      toast.success(`${name.trim()} removed.`);
+      setDeleteTargetId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete the agent.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const hasFilters = !!geoFilter || preferredOnly || !!search.trim();
 
   return (
     <div className="space-y-6">
@@ -144,7 +217,7 @@ export default function AgentsPage() {
               </span>
             </div>
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Total Agents</p>
-            <p className="text-3xl font-bold tabular-nums">{stats.total}</p>
+            <CountUp value={stats.total} className="text-3xl font-bold tabular-nums" />
             <p className="text-xs text-muted-foreground mt-1">{stats.total === 0 ? 'No agents yet' : 'in your network'}</p>
           </CardContent>
         </Card>
@@ -156,12 +229,16 @@ export default function AgentsPage() {
           return (
             <Card
               key={geo}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isFiltered}
               className={cn(
-                'cursor-pointer border-border/70 shadow-sm kpi-card transition-all border-l-4',
+                'cursor-pointer border-border/70 shadow-sm kpi-card transition-all border-l-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                 config.cardBorder,
                 isFiltered && 'ring-2 ring-primary/30'
               )}
               onClick={() => setGeoFilter(isFiltered ? '' : geo)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGeoFilter(isFiltered ? '' : geo); } }}
             >
               <CardContent className="pt-4 pb-4 px-4">
                 <div className="flex items-center gap-1.5 mb-2">
@@ -189,6 +266,7 @@ export default function AgentsPage() {
         <button
           type="button"
           onClick={() => setPreferredOnly((v) => !v)}
+          aria-pressed={preferredOnly}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-all h-10',
             preferredOnly
@@ -199,113 +277,164 @@ export default function AgentsPage() {
           <Star className={cn('h-4 w-4', preferredOnly ? 'fill-amber-500 text-amber-500' : '')} />
           Preferred only
         </button>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setGeoFilter(''); setPreferredOnly(false); }}
+            className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-2 h-10"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
+      {/* Result count */}
+      {loaded && agents.length > 0 && (
+        <p className="text-xs text-muted-foreground -mt-2">
+          Showing <span className="font-semibold text-foreground tabular-nums">{filteredAgents.length}</span> of {agents.length} agents
+        </p>
+      )}
+
       {/* Agents grid */}
-      {filteredAgents.length === 0 ? (
+      {!loaded && loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-border/70 border-l-4 border-l-muted">
+              <CardHeader className="pb-3 px-5 pt-5">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-xl" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2.5 px-5 pb-5">
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-8 w-full mt-3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : filteredAgents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/6 border-2 border-dashed border-primary/20 mb-5">
             <Users className="h-8 w-8 text-primary/40" />
           </div>
           <h3 className="text-lg font-bold">
-            {geoFilter ? `No ${geoFilter} agents` : preferredOnly ? 'No preferred agents yet' : 'No agents yet'}
+            {geoFilter ? `No ${geoFilter} agents` : preferredOnly ? 'No preferred agents yet' : search.trim() ? 'No matching agents' : 'No agents yet'}
           </h3>
           <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
-            {geoFilter || preferredOnly
-              ? 'Try adjusting your filters.'
+            {hasFilters
+              ? 'Try adjusting your filters or search.'
               : 'Build your agent network. Add agents with geographic tags to enable targeted requirement blasts.'}
           </p>
-          {!geoFilter && !preferredOnly && (
+          {hasFilters ? (
+            <Button variant="outline" className="mt-5" onClick={() => { setSearch(''); setGeoFilter(''); setPreferredOnly(false); }}>
+              Clear filters
+            </Button>
+          ) : (
             <Button className="mt-5 shadow-md shadow-primary/20" onClick={openAdd}>
               <Plus className="mr-2 h-4 w-4" />Add your first agent
             </Button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredAgents.map((agent) => {
-            const config = GEO_CONFIG[agent.geoTag];
-            const initials = `${agent.firstName[0]}${agent.lastName[0]}`.toUpperCase();
+            const config = geoConfig(agent.geoTag);
+            const lastContact = formatLastContact(agent.lastContactDate);
             return (
-              <Card key={agent.id} className={cn('group border-border/70 card-interactive border-l-4', config.cardBorder)}>
-                <CardHeader className="pb-3 px-5 pt-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold shrink-0 border"
-                        style={{
-                          background: 'linear-gradient(135deg, hsl(213 94% 38% / 0.10), hsl(174 72% 38% / 0.06))',
-                          borderColor: 'hsl(213 94% 38% / 0.16)',
-                          color: 'hsl(213 94% 38%)',
-                        }}
-                      >
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <CardTitle className="text-[15px] font-bold truncate">{agent.firstName} {agent.lastName}</CardTitle>
-                          {agent.isPreferred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />}
+              <StaggerItem key={agent.id}>
+                <Card className={cn('group h-full border-border/70 card-interactive border-l-4', config.cardBorder)}>
+                  <CardHeader className="pb-3 px-5 pt-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold shrink-0 border"
+                          style={{
+                            background: 'linear-gradient(135deg, hsl(213 94% 38% / 0.10), hsl(174 72% 38% / 0.06))',
+                            borderColor: 'hsl(213 94% 38% / 0.16)',
+                            color: 'hsl(213 94% 38%)',
+                          }}
+                        >
+                          {initialsOf(agent)}
                         </div>
-                        <CardDescription className="text-[11px] truncate">{agent.agency}</CardDescription>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <CardTitle className="text-[15px] font-bold truncate">{agent.firstName} {agent.lastName}</CardTitle>
+                            {agent.isPreferred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />}
+                          </div>
+                          <CardDescription className="text-[11px] truncate">{agent.agency || 'Independent'}</CardDescription>
+                        </div>
                       </div>
+                      <Badge
+                        className={cn('text-[10px] px-2.5 py-1 shrink-0 font-bold border', config.pill)}
+                        variant="secondary"
+                      >
+                        {agent.geoTag}
+                      </Badge>
                     </div>
-                    <Badge
-                      className={cn('text-[10px] px-2.5 py-1 shrink-0 font-bold border', config.pill)}
-                      variant="secondary"
-                    >
-                      {agent.geoTag}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2 px-5 pb-5">
-                  {agent.email && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{agent.email}</span>
+                  </CardHeader>
+                  <CardContent className="space-y-2 px-5 pb-5">
+                    {agent.email && (
+                      <a href={`mailto:${agent.email}`} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors">
+                        <Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{agent.email}</span>
+                      </a>
+                    )}
+                    {agent.phone && (
+                      <a href={`tel:${agent.phone}`} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors">
+                        <Phone className="h-3.5 w-3.5 shrink-0" /><span>{agent.phone}</span>
+                      </a>
+                    )}
+                    {agent.suburbs.length > 0 && (
+                      <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>{agent.suburbs.slice(0, 3).join(', ')}{agent.suburbs.length > 3 ? ` +${agent.suburbs.length - 3}` : ''}</span>
+                      </div>
+                    )}
+                    {lastContact && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground/80">
+                        <Clock className="h-3.5 w-3.5 shrink-0" /><span>{lastContact}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-2 border-t border-border/50">
+                      <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => openEdit(agent.id)}>
+                        <Edit className="mr-1.5 h-3 w-3" />Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={agent.isPreferred ? 'secondary' : 'ghost'}
+                        disabled={togglingId === agent.id}
+                        className={cn('h-8 px-3', agent.isPreferred ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : '')}
+                        onClick={() => handleTogglePreferred(agent.id)}
+                        aria-label={agent.isPreferred ? 'Remove preferred' : 'Mark preferred'}
+                      >
+                        {togglingId === agent.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Star className={cn('h-3.5 w-3.5', agent.isPreferred ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground')} />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-3 hover:text-destructive hover:bg-destructive/8 text-muted-foreground"
+                        onClick={() => setDeleteTargetId(agent.id)}
+                        aria-label="Delete agent"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                  )}
-                  {agent.phone && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Phone className="h-3.5 w-3.5 shrink-0" /><span>{agent.phone}</span>
-                    </div>
-                  )}
-                  {agent.suburbs.length > 0 && (
-                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                      <span>{agent.suburbs.slice(0, 3).join(', ')}{agent.suburbs.length > 3 ? ` +${agent.suburbs.length - 3}` : ''}</span>
-                    </div>
-                  )}
-                  <div className="flex gap-2 pt-2 border-t border-border/50">
-                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => openEdit(agent.id)}>
-                      <Edit className="mr-1.5 h-3 w-3" />Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={agent.isPreferred ? 'secondary' : 'ghost'}
-                      className={cn('h-8 px-3', agent.isPreferred ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : '')}
-                      onClick={() => togglePreferred(agent.id)}
-                      aria-label={agent.isPreferred ? 'Remove preferred' : 'Mark preferred'}
-                    >
-                      <Star className={cn('h-3.5 w-3.5', agent.isPreferred ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground')} />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 px-3 hover:text-destructive hover:bg-destructive/8 text-muted-foreground text-base leading-none"
-                      onClick={() => deleteAgent(agent.id)}
-                      aria-label="Delete agent"
-                    >
-                      ×
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </StaggerItem>
             );
           })}
-        </div>
+        </Stagger>
       )}
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!saving) setShowAddDialog(open); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? 'Edit Agent' : 'Add Agent'}</DialogTitle>
@@ -365,12 +494,35 @@ export default function AgentsPage() {
               <Textarea id="agentNotes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
             <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-              <Button type="submit" disabled={!form.firstName.trim() || !form.lastName.trim()} className="shadow-sm shadow-primary/20">
-                <Plus className="mr-2 h-4 w-4" />{editId ? 'Save Changes' : 'Add Agent'}
+              <DialogClose asChild><Button type="button" variant="ghost" disabled={saving}>Cancel</Button></DialogClose>
+              <Button type="submit" disabled={saving || !form.firstName.trim() || !form.lastName.trim()} className="shadow-sm shadow-primary/20">
+                {saving
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
+                  : <><Plus className="mr-2 h-4 w-4" />{editId ? 'Save Changes' : 'Add Agent'}</>}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open && !deleting) setDeleteTargetId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove Agent</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to remove{' '}
+            <strong className="text-foreground">{deleteTarget?.firstName} {deleteTarget?.lastName}</strong>
+            {deleteTarget?.agency ? <> from <strong className="text-foreground">{deleteTarget.agency}</strong></> : null}
+            ? This can't be undone. Any listings sourced from them will keep the source name on record.
+          </p>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="ghost" disabled={deleting}>Cancel</Button></DialogClose>
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleting}>
+              {deleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Removing…</> : <><Trash2 className="mr-2 h-4 w-4" />Remove Agent</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

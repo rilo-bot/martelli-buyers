@@ -10,15 +10,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Stagger, StaggerItem, CountUp } from '@/components/motion';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
 } from '@/components/ui/dialog';
 import {
-  Plus, Search, Users, ArrowRight, Phone, Mail, Building2, FileText, ChevronRight,
+  Plus, Search, Users, Phone, Mail, Building2, FileText, ChevronRight, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Client } from '@/types';
+
+const EMPTY_FORM = {
+  firstName: '', lastName: '', email: '', phone: '', company: '', notes: '', tags: '',
+};
 
 export default function ClientsPage() {
   const clients = useClientsStore((s) => s.clients);
@@ -31,10 +38,9 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-
-  const [form, setForm] = useState({
-    firstName: '', lastName: '', email: '', phone: '', company: '', notes: '', tags: '',
-  });
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const filteredClients = useMemo(() => {
     const q = search.toLowerCase();
@@ -54,67 +60,88 @@ export default function ClientsPage() {
     completed: deals.filter((d) => d.clientId && d.stage === 'complete').length,
   }), [clients, deals]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const canSubmit = !!form.firstName.trim() && !!form.lastName.trim() && !!form.email.trim();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
+    if (submitting) return;
+    if (!canSubmit) {
       toast.error('First name, last name and email are required.');
       return;
     }
-    addClient({
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone.trim(),
-      company: form.company.trim(),
-      notes: form.notes.trim(),
-      leadIds: [],
-      dealIds: [],
-      tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean),
-      assignedTo: currentUser?.id ?? '',
-    });
-    setForm({ firstName: '', lastName: '', email: '', phone: '', company: '', notes: '', tags: '' });
-    setShowAddDialog(false);
-    toast.success('Client added.');
+    setSubmitting(true);
+    try {
+      await addClient({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        company: form.company.trim(),
+        notes: form.notes.trim(),
+        leadIds: [],
+        dealIds: [],
+        tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        assignedTo: currentUser?.id ?? '',
+        xeroContactId: '',
+        xeroSyncedAt: '',
+      });
+      setForm(EMPTY_FORM);
+      setShowAddDialog(false);
+      toast.success('Client added.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add client.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    deleteClient(id);
-    setDeleteTargetId(null);
-    toast.success('Client removed.');
+  const handleDelete = async (id: string) => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await deleteClient(id);
+      setDeleteTargetId(null);
+      toast.success('Client removed.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove client.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const deleteTarget = deleteTargetId ? clients.find((c) => c.id === deleteTargetId) : null;
 
+  const statCards = [
+    { label: 'Total Clients', value: stats.total },
+    { label: 'Active Deals', value: stats.active },
+    { label: 'Completed', value: stats.completed },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="section-eyebrow mb-1.5">Relationships</p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Clients</h1>
-          <p className="text-sm text-muted-foreground mt-1">All buyer clients, linked to their leads and active deals.</p>
-        </div>
-        <Button onClick={() => setShowAddDialog(true)} className="shadow-md shadow-primary/25 h-9">
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          Add Client
-        </Button>
-      </div>
+      <PageHeader
+        title="Clients"
+        subtitle="All buyer clients, linked to their leads and active deals."
+        actions={
+          <Button onClick={() => setShowAddDialog(true)} className="h-9 shadow-sm shadow-primary/20">
+            <Plus className="mr-2 h-4 w-4" /> Add Client
+          </Button>
+        }
+      />
 
       {/* Stats strip */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Total Clients', value: stats.total, accent: 'bg-primary/8 border-primary/15', textAccent: 'text-primary' },
-          { label: 'Active Deals', value: stats.active, accent: 'bg-emerald-500/8 border-emerald-500/15', textAccent: 'text-emerald-700 dark:text-emerald-400' },
-          { label: 'Completed', value: stats.completed, accent: 'bg-muted border-border', textAccent: 'text-muted-foreground' },
-        ].map((s) => (
-          <Card key={s.label} className={cn('border kpi-card', s.accent)}>
-            <CardContent className="pt-4 pb-4 px-5">
-              <p className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">{s.label}</p>
-              <p className={cn('text-2xl font-bold mt-1 tabular-nums', s.textAccent)}>{s.value}</p>
-            </CardContent>
-          </Card>
+      <Stagger className="grid grid-cols-3 gap-3">
+        {statCards.map((s) => (
+          <StaggerItem key={s.label}>
+            <Card className="border-border/70 kpi-card">
+              <CardContent className="px-5 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{s.label}</p>
+                <CountUp value={s.value} className="mt-1 block text-2xl font-bold tabular-nums text-foreground" />
+              </CardContent>
+            </Card>
+          </StaggerItem>
         ))}
-      </div>
+      </Stagger>
 
       {/* Search */}
       <div className="relative max-w-sm">
@@ -123,139 +150,126 @@ export default function ClientsPage() {
           placeholder="Search by name, email or company..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 h-10"
+          className="h-10 pl-9"
         />
       </div>
 
       {/* Client grid */}
       {filteredClients.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/6 border-2 border-dashed border-primary/20 mb-5">
-            <Users className="h-8 w-8 text-primary/40" />
-          </div>
-          <h3 className="text-lg font-bold">
-            {search ? 'No clients match your search' : 'No clients yet'}
-          </h3>
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
-            {search
+        <EmptyState
+          icon={Users}
+          title={search ? 'No clients match your search' : 'No clients yet'}
+          description={
+            search
               ? 'Try a different name, email or company.'
-              : 'Clients are created automatically when you mark a lead as Won, or add one manually.'}
-          </p>
-          {!search && (
-            <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => setShowAddDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add your first client
+              : 'Clients are created automatically when you mark a lead as Won, or add one manually.'
+          }
+          action={!search && (
+            <Button onClick={() => setShowAddDialog(true)} className="shadow-sm shadow-primary/20">
+              <Plus className="mr-2 h-4 w-4" /> Add your first client
             </Button>
           )}
-        </div>
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <Stagger className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" step={0.04}>
           {filteredClients.map((client) => {
             const clientDeals = getClientDeals(client);
             const clientLeads = getClientLeads(client);
             const activeDeals = clientDeals.filter((d) => d.stage !== 'complete');
-            const initials = `${client.firstName[0]}${client.lastName[0]}`.toUpperCase();
+            const initials = `${client.firstName[0] ?? ''}${client.lastName[0] ?? ''}`.toUpperCase();
 
             return (
-              <Card
-                key={client.id}
-                className="group border-border/70 card-interactive bg-card"
-              >
-                <CardHeader className="pb-3 px-5 pt-5">
-                  <div className="flex items-start gap-3">
-                    <div
-                      className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-bold shrink-0 border"
-                      style={{
-                        background: 'linear-gradient(135deg, hsl(213 94% 38% / 0.12), hsl(174 72% 38% / 0.08))',
-                        borderColor: 'hsl(213 94% 38% / 0.20)',
-                        color: 'hsl(213 94% 38%)',
-                      }}
-                    >
-                      {initials}
+              <StaggerItem key={client.id}>
+                <Card className="group h-full border-border/70 bg-card card-interactive">
+                  <CardHeader className="px-5 pb-3 pt-5">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="truncate text-[15px] font-bold transition-colors group-hover:text-primary">
+                          {client.firstName} {client.lastName}
+                        </CardTitle>
+                        {client.company && (
+                          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                            <Building2 className="h-3 w-3 shrink-0" />
+                            {client.company}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-[15px] font-bold group-hover:text-primary transition-colors truncate">
-                        {client.firstName} {client.lastName}
-                      </CardTitle>
-                      {client.company && (
-                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 truncate">
-                          <Building2 className="h-3 w-3 shrink-0" />
-                          {client.company}
-                        </p>
+                  </CardHeader>
+                  <CardContent className="space-y-3 px-5 pb-5">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Mail className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{client.email}</span>
+                      </div>
+                      {client.phone && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Phone className="h-3.5 w-3.5 shrink-0" />
+                          <span>{client.phone}</span>
+                        </div>
                       )}
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3 px-5 pb-5">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Mail className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{client.email}</span>
+
+                    {/* Deal + lead counters */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold',
+                        activeDeals.length > 0
+                          ? 'border-primary/20 bg-primary/8 text-primary'
+                          : 'border-border bg-muted text-muted-foreground',
+                      )}>
+                        <FileText className="h-3 w-3" />
+                        {clientDeals.length} {clientDeals.length === 1 ? 'deal' : 'deals'}
+                      </span>
+                      {clientLeads.length > 0 && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
+                          <Users className="h-3 w-3" />
+                          {clientLeads.length} {clientLeads.length === 1 ? 'lead' : 'leads'}
+                        </span>
+                      )}
                     </div>
-                    {client.phone && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Phone className="h-3.5 w-3.5 shrink-0" />
-                        <span>{client.phone}</span>
+
+                    {/* Tags */}
+                    {client.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {client.tags.slice(0, 3).map((tag) => (
+                          <Badge key={tag} variant="secondary" className="px-2 py-0.5 text-[10px]">{tag}</Badge>
+                        ))}
+                        {client.tags.length > 3 && (
+                          <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">+{client.tags.length - 3}</Badge>
+                        )}
                       </div>
                     )}
-                  </div>
 
-                  {/* Deal + lead counters */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn(
-                      'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full font-bold border',
-                      activeDeals.length > 0
-                        ? 'bg-primary/8 text-primary border-primary/20'
-                        : 'bg-muted text-muted-foreground border-border'
-                    )}>
-                      <FileText className="h-3 w-3" />
-                      {clientDeals.length} {clientDeals.length === 1 ? 'deal' : 'deals'}
-                    </span>
-                    {clientLeads.length > 0 && (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full font-bold bg-muted text-muted-foreground border border-border">
-                        <Users className="h-3 w-3" />
-                        {clientLeads.length} {clientLeads.length === 1 ? 'lead' : 'leads'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Tags */}
-                  {client.tags.length > 0 && (
-                    <div className="flex gap-1 flex-wrap">
-                      {client.tags.slice(0, 3).map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-[10px] px-2 py-0.5">{tag}</Badge>
-                      ))}
-                      {client.tags.length > 3 && (
-                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5">+{client.tags.length - 3}</Badge>
-                      )}
+                    <div className="flex gap-2 border-t border-border/50 pt-2">
+                      <Button asChild size="sm" className="h-8 flex-1 text-xs shadow-sm shadow-primary/15">
+                        <Link to={`/clients/${client.id}`}>
+                          View profile <ChevronRight className="ml-1 h-3 w-3" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-3 text-xs text-destructive hover:bg-destructive/8 hover:text-destructive"
+                        onClick={() => setDeleteTargetId(client.id)}
+                      >
+                        Remove
+                      </Button>
                     </div>
-                  )}
-
-                  <div className="flex gap-2 pt-2 border-t border-border/50">
-                    <Button asChild size="sm" className="flex-1 h-8 text-xs shadow-sm shadow-primary/15">
-                      <Link to={`/clients/${client.id}`}>
-                        View profile <ChevronRight className="ml-1 h-3 w-3" />
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-xs text-destructive hover:bg-destructive/8 hover:text-destructive px-3"
-                      onClick={() => setDeleteTargetId(client.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </StaggerItem>
             );
           })}
-        </div>
+        </Stagger>
       )}
 
       {/* Add Client Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <Dialog open={showAddDialog} onOpenChange={(o) => { if (!submitting) setShowAddDialog(o); }}>
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Client</DialogTitle>
           </DialogHeader>
@@ -294,11 +308,14 @@ export default function ClientsPage() {
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost" disabled={submitting}>Cancel</Button>
               </DialogClose>
-              <Button type="submit" disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()} className="shadow-sm shadow-primary/20">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Client
+              <Button type="submit" disabled={!canSubmit || submitting} className="shadow-sm shadow-primary/20">
+                {submitting ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding…</>
+                ) : (
+                  <><Plus className="mr-2 h-4 w-4" /> Add Client</>
+                )}
               </Button>
             </DialogFooter>
           </form>
@@ -306,7 +323,7 @@ export default function ClientsPage() {
       </Dialog>
 
       {/* Delete Confirm Dialog */}
-      <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
+      <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open && !deleting) setDeleteTargetId(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove Client</DialogTitle>
@@ -318,10 +335,14 @@ export default function ClientsPage() {
           </p>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="ghost">Cancel</Button>
+              <Button variant="ghost" disabled={deleting}>Cancel</Button>
             </DialogClose>
-            <Button variant="destructive" onClick={() => deleteTargetId && handleDelete(deleteTargetId)}>
-              Remove Client
+            <Button variant="destructive" disabled={deleting} onClick={() => deleteTargetId && handleDelete(deleteTargetId)}>
+              {deleting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Removing…</>
+              ) : (
+                'Remove Client'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

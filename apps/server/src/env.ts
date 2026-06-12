@@ -38,6 +38,23 @@ export const env = {
     // Optional CDN/custom domain; defaults to the bucket's regional URL.
     publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '',
   },
+  XERO: {
+    // OAuth 2.0 app credentials. Until both are set, "Send to Xero" stays
+    // gated ("Not configured") in the UI.
+    clientId: process.env.XERO_CLIENT_ID ?? '',
+    clientSecret: process.env.XERO_CLIENT_SECRET ?? '',
+    // Must exactly match a redirect URI registered in the Xero app.
+    redirectUri: process.env.XERO_REDIRECT_URI ?? 'http://localhost:3001/api/xero/callback',
+    // Signing key for the Xero "Invoices" webhook (status sync).
+    webhookKey: process.env.XERO_WEBHOOK_KEY ?? '',
+    // NZ defaults — revenue account code + GST tax type on pushed invoices.
+    salesAccountCode: process.env.XERO_SALES_ACCOUNT_CODE ?? '200',
+    taxType: process.env.XERO_TAX_TYPE ?? 'OUTPUT2',
+    // Space-separated OAuth scopes. Must match the scopes enabled on the Xero
+    // app exactly (apps now use granular scopes, e.g. accounting.invoices).
+    scopes: process.env.XERO_SCOPES
+      ?? 'openid profile email accounting.transactions accounting.contacts offline_access',
+  },
 };
 
 /** True when a SendGrid API key is configured; otherwise dev logs instead of sending. */
@@ -50,3 +67,6 @@ export const hasAi = Boolean(env.AI.apiKey);
 export const hasS3 = Boolean(
   env.S3.region && env.S3.accessKeyId && env.S3.secretAccessKey && env.S3.bucket,
 );
+
+/** True when real Xero OAuth credentials are configured. */
+export const hasXero = Boolean(env.XERO.clientId && env.XERO.clientSecret);

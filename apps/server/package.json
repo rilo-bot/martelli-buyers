@@ -15,6 +15,7 @@
     "@openrouter/ai-sdk-provider": "^2.9.1",
     "@rilo/shared": "*",
     "@sendgrid/mail": "^8.1.4",
+    "@types/pdfkit": "^0.17.6",
     "ai": "^6.0.202",
     "bcryptjs": "^2.4.3",
     "connect-mongo": "^5.1.0",
@@ -25,6 +26,7 @@
     "express-session": "^1.18.1",
     "helmet": "^8.0.0",
     "mongoose": "^8.9.5",
+    "pdfkit": "^0.19.1",
     "tsx": "^4.19.2",
     "zod": "^3.24.1"
   },

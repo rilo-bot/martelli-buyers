@@ -10,11 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Plus, Search, Mail, Send, Edit, Star, ChevronRight } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Plus, Search, Mail, Send, Edit, Star, Sparkles, AlertTriangle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { sendBlast } from '@/lib/email';
+import { dealVariables, interpolate, unresolvedVariables, hasRecipientVars } from '@/lib/templates';
 import type { EmailTemplateCategory, AgentGeo } from '@/types';
 
 const CATEGORY_LABELS: Record<EmailTemplateCategory, string> = {
@@ -44,7 +45,7 @@ export default function EmailsPage() {
   const campaigns = useEmailTemplatesStore((s) => s.campaigns);
   const addTemplate = useEmailTemplatesStore((s) => s.addTemplate);
   const updateTemplate = useEmailTemplatesStore((s) => s.updateTemplate);
-  const addCampaign = useEmailTemplatesStore((s) => s.addCampaign);
+  const recordSentCampaign = useEmailTemplatesStore((s) => s.recordSentCampaign);
   const agents = useAgentsStore((s) => s.agents);
   const deals = useDealsStore((s) => s.deals);
 
@@ -61,7 +62,8 @@ export default function EmailsPage() {
   });
 
   const [blastForm, setBlastForm] = useState({
-    dealId: '', templateId: '', geoFilter: [] as AgentGeo[], preferredOnly: false, customBody: '',
+    dealId: '', templateId: '', geoFilter: [] as AgentGeo[], preferredOnly: false,
+    subject: '', body: '',
   });
 
   const filteredTemplates = useMemo(() => {
@@ -73,13 +75,55 @@ export default function EmailsPage() {
     });
   }, [templates, search, categoryFilter]);
 
-  const blastAgentCount = useMemo(() => {
-    return agents.filter((a) => {
-      const matchesGeo = blastForm.geoFilter.length === 0 || blastForm.geoFilter.includes(a.geoTag);
-      const matchesPreferred = !blastForm.preferredOnly || a.isPreferred;
-      return matchesGeo && matchesPreferred;
-    }).length;
-  }, [agents, blastForm.geoFilter, blastForm.preferredOnly]);
+  // Agents matching the audience filters, and the subset we can actually email.
+  const targetedAgents = useMemo(
+    () =>
+      agents.filter((a) => {
+        const matchesGeo = blastForm.geoFilter.length === 0 || blastForm.geoFilter.includes(a.geoTag);
+        const matchesPreferred = !blastForm.preferredOnly || a.isPreferred;
+        return matchesGeo && matchesPreferred;
+      }),
+    [agents, blastForm.geoFilter, blastForm.preferredOnly],
+  );
+
+  const recipients = useMemo(
+    () =>
+      targetedAgents
+        .filter((a) => a.email.trim())
+        .map((a) => ({ email: a.email.trim(), name: `${a.firstName} ${a.lastName}`.trim() })),
+    [targetedAgents],
+  );
+
+  const missingEmailCount = targetedAgents.length - recipients.length;
+
+  // Placeholders that won't be filled (excludes {{agentName}}, resolved per-recipient).
+  const unresolved = useMemo(
+    () => unresolvedVariables(`${blastForm.subject}\n${blastForm.body}`),
+    [blastForm.subject, blastForm.body],
+  );
+  const personalizesPerAgent = useMemo(
+    () => hasRecipientVars(`${blastForm.subject}\n${blastForm.body}`),
+    [blastForm.subject, blastForm.body],
+  );
+
+  /** Fill subject/body from a template, interpolating the linked deal's data. */
+  const applyTemplateAndDeal = (templateId: string, dealId: string) => {
+    const template = templates.find((t) => t.id === templateId);
+    const deal = deals.find((d) => d.id === dealId);
+    const vars = dealVariables(deal);
+    setBlastForm((f) => ({
+      ...f,
+      templateId,
+      dealId,
+      subject: template ? interpolate(template.subject, vars) : f.subject,
+      body: template ? interpolate(template.body, vars) : f.body,
+    }));
+  };
+
+  const openBlast = () => {
+    setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, subject: '', body: '' });
+    setShowBlastDialog(true);
+  };
 
   const openEdit = (id: string) => {
     const t = templates.find((tmpl) => tmpl.id === id);
@@ -121,42 +165,26 @@ export default function EmailsPage() {
       toast.error('Please select a template.');
       return;
     }
-    const template = templates.find((t) => t.id === blastForm.templateId);
-    if (!template) return;
-
-    // Resolve the targeted agents and keep only those with a valid email.
-    const recipients = agents
-      .filter((a) => {
-        const matchesGeo = blastForm.geoFilter.length === 0 || blastForm.geoFilter.includes(a.geoTag);
-        const matchesPreferred = !blastForm.preferredOnly || a.isPreferred;
-        return matchesGeo && matchesPreferred;
-      })
-      .filter((a) => a.email.trim())
-      .map((a) => ({ email: a.email.trim(), name: `${a.firstName} ${a.lastName}`.trim() }));
-
+    if (!blastForm.subject.trim()) {
+      toast.error('Subject line is required.');
+      return;
+    }
     if (recipients.length === 0) {
       toast.error('No targeted agents have an email address on file.');
       return;
     }
 
-    const body = blastForm.customBody || template.body;
     setBlasting(true);
     try {
-      const result = await sendBlast(recipients, template.subject, body);
-      // Record the campaign with the count actually delivered.
-      await addCampaign({
+      const result = await sendBlast(recipients, blastForm.subject.trim(), blastForm.body, {
         dealId: blastForm.dealId,
         templateId: blastForm.templateId,
-        subject: template.subject,
-        body,
-        recipientType: 'agents',
         agentGeoFilter: blastForm.geoFilter,
         preferredOnly: blastForm.preferredOnly,
-        recipientCount: result.sent,
-        sentAt: new Date().toISOString(),
-        status: 'sent',
       });
-      setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, customBody: '' });
+      // Server already persisted the record atomically with the send.
+      if (result.campaign) recordSentCampaign(result.campaign);
+      setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, subject: '', body: '' });
       setShowBlastDialog(false);
       toast.success(
         result.failed > 0
@@ -200,7 +228,7 @@ export default function EmailsPage() {
           <p className="text-sm text-muted-foreground mt-1">Reusable branded templates for every stage of the buyer journey.</p>
         </div>
         <div className="flex gap-2.5">
-          <Button variant="outline" onClick={() => setShowBlastDialog(true)} className="h-9 shadow-sm">
+          <Button variant="outline" onClick={openBlast} className="h-9 shadow-sm">
             <Send className="mr-2 h-3.5 w-3.5" />
             Agent Blast
           </Button>
@@ -347,7 +375,7 @@ export default function EmailsPage() {
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 Send your first agent requirement blast to start reaching your network.
               </p>
-              <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => setShowBlastDialog(true)}>
+              <Button className="mt-5 shadow-md shadow-primary/20" onClick={openBlast}>
                 <Send className="mr-2 h-4 w-4" />Send Agent Blast
               </Button>
             </div>
@@ -358,26 +386,35 @@ export default function EmailsPage() {
                 <span>Recipients</span>
                 <span className="text-right">Sent</span>
               </div>
-              {[...campaigns].reverse().map((campaign, i) => (
-                <div
-                  key={campaign.id}
-                  className={cn('grid grid-cols-[1fr_auto_auto] gap-4 items-center px-5 py-3.5 data-table-row', i === campaigns.length - 1 && 'border-b-0')}
-                >
-                  <div>
-                    <p className="text-sm font-semibold">{campaign.subject}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {campaign.agentGeoFilter.length > 0 ? campaign.agentGeoFilter.join(', ') : 'All regions'}
-                      {campaign.preferredOnly ? ' · preferred only' : ''}
-                    </p>
+              {[...campaigns].reverse().map((campaign, i) => {
+                const tplName = templates.find((t) => t.id === campaign.templateId)?.name;
+                return (
+                  <div
+                    key={campaign.id}
+                    className={cn('grid grid-cols-[1fr_auto_auto] gap-4 items-center px-5 py-3.5 data-table-row', i === campaigns.length - 1 && 'border-b-0')}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary border border-primary/15">
+                        <Send className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{campaign.subject}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {tplName ? `${tplName} · ` : ''}
+                          {campaign.agentGeoFilter.length > 0 ? campaign.agentGeoFilter.join(', ') : 'All regions'}
+                          {campaign.preferredOnly ? ' · preferred only' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full font-bold bg-primary/8 text-primary border border-primary/20">
+                      {campaign.recipientCount} agents
+                    </span>
+                    <span className="text-xs text-muted-foreground text-right tabular-nums">
+                      {new Date(campaign.sentAt).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
                   </div>
-                  <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full font-bold bg-primary/8 text-primary border border-primary/20">
-                    {campaign.recipientCount} agents
-                  </span>
-                  <span className="text-xs text-muted-foreground text-right">
-                    {new Date(campaign.sentAt).toLocaleDateString('en-NZ')}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -429,69 +466,165 @@ export default function EmailsPage() {
 
       {/* Agent Blast Dialog */}
       <Dialog open={showBlastDialog} onOpenChange={setShowBlastDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Send Agent Requirement Blast</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Send className="h-3.5 w-3.5" />
+              </span>
+              Send Agent Requirement Blast
+            </DialogTitle>
+            <DialogDescription>
+              Personalised per agent — each recipient&apos;s name is filled in automatically. Review the message before sending.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSendBlast} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="blastDeal">Linked deal (optional)</Label>
-              <Select id="blastDeal" value={blastForm.dealId} onChange={(e) => setBlastForm((f) => ({ ...f, dealId: e.target.value }))}>
-                <option value="">No deal linked</option>
-                {deals.map((d) => <option key={d.id} value={d.id}>{d.clientName}</option>)}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="blastTemplate">Template *</Label>
-              <Select id="blastTemplate" value={blastForm.templateId} onChange={(e) => setBlastForm((f) => ({ ...f, templateId: e.target.value }))}>
-                <option value="">Select a template</option>
-                {templates.filter((t) => t.isActive).map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Target regions</Label>
-              <div className="flex flex-wrap gap-2">
-                {GEO_OPTIONS.map((geo) => (
-                  <button
-                    key={geo}
-                    type="button"
-                    onClick={() => toggleGeoFilter(geo)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all',
-                      blastForm.geoFilter.includes(geo)
-                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                        : 'border-border hover:bg-muted text-muted-foreground'
-                    )}
+          <form onSubmit={handleSendBlast} className="space-y-5">
+            {/* Step 1 — Source */}
+            <div className="space-y-3">
+              <p className="section-eyebrow">1 · Source</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="blastTemplate">Template *</Label>
+                  <Select
+                    id="blastTemplate"
+                    value={blastForm.templateId}
+                    onChange={(e) => applyTemplateAndDeal(e.target.value, blastForm.dealId)}
                   >
-                    {geo} ({agents.filter((a) => a.geoTag === geo).length})
-                  </button>
-                ))}
-                <span className="text-xs text-muted-foreground self-center italic">(empty = all regions)</span>
+                    <option value="">Select a template</option>
+                    {templates.filter((t) => t.isActive).map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="blastDeal">Linked campaign (optional)</Label>
+                  <Select
+                    id="blastDeal"
+                    value={blastForm.dealId}
+                    onChange={(e) => applyTemplateAndDeal(blastForm.templateId, e.target.value)}
+                  >
+                    <option value="">No campaign linked</option>
+                    {deals.map((d) => <option key={d.id} value={d.id}>{d.clientName}</option>)}
+                  </Select>
+                </div>
               </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors">
-              <input
-                type="checkbox"
-                checked={blastForm.preferredOnly}
-                onChange={(e) => setBlastForm((f) => ({ ...f, preferredOnly: e.target.checked }))}
-                className="rounded"
-              />
-              <Star className="h-4 w-4 text-amber-400" />
-              <span>Preferred agents only</span>
-            </label>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-              <p className="text-sm">
-                <span className="font-bold text-primary text-lg tabular-nums">{blastAgentCount}</span>
-                <span className="text-muted-foreground ml-1.5">agents will receive this email</span>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Linking a campaign auto-fills budget, suburbs, property type &amp; requirements.
               </p>
             </div>
+
+            {/* Step 2 — Audience */}
+            <div className="space-y-3 border-t border-border/60 pt-4">
+              <p className="section-eyebrow">2 · Audience</p>
+              <div className="space-y-2">
+                <Label>Target regions <span className="font-normal text-muted-foreground">(empty = all)</span></Label>
+                <div className="flex flex-wrap gap-2">
+                  {GEO_OPTIONS.map((geo) => (
+                    <button
+                      key={geo}
+                      type="button"
+                      onClick={() => toggleGeoFilter(geo)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all',
+                        blastForm.geoFilter.includes(geo)
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'border-border hover:bg-muted text-muted-foreground'
+                      )}
+                    >
+                      {geo} ({agents.filter((a) => a.geoTag === geo).length})
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors">
+                <input
+                  type="checkbox"
+                  checked={blastForm.preferredOnly}
+                  onChange={(e) => setBlastForm((f) => ({ ...f, preferredOnly: e.target.checked }))}
+                  className="rounded"
+                />
+                <Star className="h-4 w-4 text-amber-400" />
+                <span>Preferred agents only</span>
+              </label>
+            </div>
+
+            {/* Step 3 — Message */}
+            <div className="space-y-3 border-t border-border/60 pt-4">
+              <p className="section-eyebrow">3 · Message</p>
+              {!blastForm.templateId ? (
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
+                  <Mail className="mx-auto h-6 w-6 text-muted-foreground/50" />
+                  <p className="mt-2 text-sm text-muted-foreground">Select a template above to compose your message.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="blastSubject">Subject *</Label>
+                    <Input
+                      id="blastSubject"
+                      value={blastForm.subject}
+                      onChange={(e) => setBlastForm((f) => ({ ...f, subject: e.target.value }))}
+                      placeholder="Subject line"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="blastBody">Body</Label>
+                    <Textarea
+                      id="blastBody"
+                      value={blastForm.body}
+                      onChange={(e) => setBlastForm((f) => ({ ...f, body: e.target.value }))}
+                      rows={10}
+                      className="font-sans leading-relaxed"
+                    />
+                  </div>
+                  {personalizesPerAgent && (
+                    <p className="flex items-center gap-1.5 text-xs text-primary">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span><code className="font-mono">{'{{agentName}}'}</code> is replaced with each agent&apos;s name on send.</span>
+                    </p>
+                  )}
+                  {unresolved.length > 0 && (
+                    <div className="flex gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div className="text-xs text-amber-800 dark:text-amber-300">
+                        <span className="font-semibold">{unresolved.length} placeholder{unresolved.length > 1 ? 's' : ''} won&apos;t be filled.</span>{' '}
+                        Link a campaign or edit the text to replace:{' '}
+                        <span className="font-mono">{unresolved.map((v) => `{{${v}}}`).join(', ')}</span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Recipient summary + send */}
+            <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Users className="h-4 w-4" />
+              </span>
+              <div className="text-sm leading-tight">
+                <p>
+                  <span className="font-bold text-primary text-lg tabular-nums">{recipients.length}</span>
+                  <span className="text-muted-foreground ml-1.5">agent{recipients.length === 1 ? '' : 's'} will receive this email</span>
+                </p>
+                {missingEmailCount > 0 && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {missingEmailCount} matched agent{missingEmailCount === 1 ? '' : 's'} skipped — no email on file
+                  </p>
+                )}
+              </div>
+            </div>
+
             <DialogFooter>
               <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-              <Button type="submit" disabled={!blastForm.templateId || blastAgentCount === 0 || blasting} className="shadow-sm shadow-primary/20">
+              <Button
+                type="submit"
+                disabled={!blastForm.templateId || !blastForm.subject.trim() || recipients.length === 0 || blasting}
+                className="shadow-sm shadow-primary/20"
+              >
                 <Send className="mr-2 h-4 w-4" />
-                {blasting ? 'Sending…' : `Send to ${blastAgentCount} Agents`}
+                {blasting ? 'Sending…' : `Send to ${recipients.length} Agent${recipients.length === 1 ? '' : 's'}`}
               </Button>
             </DialogFooter>
           </form>

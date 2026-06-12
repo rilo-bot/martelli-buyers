@@ -98,6 +98,7 @@ export default function DealsPage() {
       bathrooms: Number(form.bathrooms) || 2,
       agreementStatus: 'pending',
       agreementUrl: '',
+      agreementSignToken: '', agreementSentAt: '', agreementSignerName: '', agreementSignedAt: '', agreementSignerIp: '',
       invoiceIds: [],
       assignedTo: currentUser?.id ?? '',
       aiConsentStatus: 'pending',

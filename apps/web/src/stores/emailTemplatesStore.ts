@@ -42,7 +42,8 @@ interface EmailTemplatesState {
   addTemplate: (template: Omit<EmailTemplate, 'id' | 'createdAt' | 'updatedAt'>) => Promise<EmailTemplate>;
   updateTemplate: (id: string, updates: Partial<EmailTemplate>) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
-  addCampaign: (campaign: Omit<EmailCampaign, 'id' | 'createdAt'>) => Promise<EmailCampaign>;
+  /** Append a campaign the server already persisted (via /api/email/blast). */
+  recordSentCampaign: (campaign: EmailCampaign) => void;
   /** Server seeds nothing for templates — bulk-create the defaults if none exist yet. */
   seedDefaultTemplates: () => Promise<void>;
 }
@@ -79,10 +80,8 @@ export const useEmailTemplatesStore = create<EmailTemplatesState>()((set, get) =
     set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }));
   },
 
-  addCampaign: async (data) => {
-    const campaign = await campaignsApi.create(data);
+  recordSentCampaign: (campaign) => {
     set((s) => ({ campaigns: [...s.campaigns, campaign] }));
-    return campaign;
   },
 
   seedDefaultTemplates: async () => {

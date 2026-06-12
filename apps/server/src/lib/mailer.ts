@@ -20,11 +20,18 @@ function textToHtml(text: string): string {
  * Generic transactional send used by app features (templates, agent blasts)
  * and OTP. Throws on failure so callers can surface a real error.
  */
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  type: string;
+}
+
 export async function sendMail(opts: {
   to: string;
   subject: string;
   text?: string;
   html?: string;
+  attachments?: MailAttachment[];
 }): Promise<void> {
   if (!hasEmail) {
     throw new Error('Email is not configured (set SENDGRID_API_KEY).');
@@ -36,6 +43,12 @@ export async function sendMail(opts: {
       subject: opts.subject,
       text: opts.text ?? '',
       html: opts.html ?? (opts.text ? textToHtml(opts.text) : ''),
+      attachments: opts.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content.toString('base64'),
+        type: a.type,
+        disposition: 'attachment',
+      })),
     });
   } catch (err: unknown) {
     // SendGrid surfaces useful detail on err.response.body.errors.

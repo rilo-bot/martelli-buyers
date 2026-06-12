@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { resource } from '@/lib/api';
+import { useDealsStore } from '@/stores/dealsStore';
 import type { Client } from '@/types';
 
 const api = resource<Client>('clients');
+
+const IDENTITY_FIELDS: (keyof Client)[] = ['firstName', 'lastName', 'email', 'phone'];
 
 interface ClientsState {
   clients: Client[];
@@ -41,6 +44,20 @@ export const useClientsStore = create<ClientsState>()((set, get) => ({
   updateClient: async (id, updates) => {
     const updated = await api.update(id, updates);
     set((s) => ({ clients: s.clients.map((c) => (c.id === id ? updated : c)) }));
+
+    // The server fans identity changes out to the client's deals (denormalised
+    // clientName/clientEmail/clientPhone snapshots). Mirror that locally so the
+    // UI reflects it immediately without a refetch.
+    if (IDENTITY_FIELDS.some((f) => f in updates)) {
+      const clientName = `${updated.firstName} ${updated.lastName}`.trim();
+      useDealsStore.setState((s) => ({
+        deals: s.deals.map((d) =>
+          d.clientId === id
+            ? { ...d, clientName, clientEmail: updated.email, clientPhone: updated.phone }
+            : d,
+        ),
+      }));
+    }
   },
 
   deleteClient: async (id) => {

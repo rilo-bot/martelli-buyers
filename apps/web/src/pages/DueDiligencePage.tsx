@@ -18,6 +18,8 @@ import {
   FileText, ArrowLeft, Trash2, Link as LinkIcon, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { downloadDdReport } from '@/lib/documents';
 import type { ChecklistItemStatus } from '@/types';
 
 const STATUS_ICONS: Record<ChecklistItemStatus, React.ReactNode> = {
@@ -125,11 +127,19 @@ export default function DueDiligencePage() {
   };
 
   const handleGenerateReport = async () => {
-    if (!selectedRecordId) return;
+    if (!selectedRecord) return;
     setGeneratingReport(true);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    updateRecord(selectedRecordId, { reportGenerated: true, reportUrl: `#report-${selectedRecordId}` });
-    setGeneratingReport(false);
+    try {
+      await downloadDdReport(selectedRecord.id, selectedRecord.address);
+      if (!selectedRecord.reportGenerated) {
+        updateRecord(selectedRecord.id, { reportGenerated: true });
+      }
+      toast.success('Due diligence report downloaded as PDF.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate report.');
+    } finally {
+      setGeneratingReport(false);
+    }
   };
 
   const completedItems = useMemo(
@@ -154,11 +164,11 @@ export default function DueDiligencePage() {
             variant={selectedRecord.reportGenerated ? 'secondary' : 'default'}
             size="sm"
             onClick={handleGenerateReport}
-            disabled={generatingReport || selectedRecord.reportGenerated}
+            disabled={generatingReport}
             className={cn('h-9 shadow-sm', !selectedRecord.reportGenerated && 'shadow-primary/20')}
           >
             <FileText className="mr-1.5 h-4 w-4" />
-            {generatingReport ? 'Generating...' : selectedRecord.reportGenerated ? 'Report Ready' : 'Generate PDF Report'}
+            {generatingReport ? 'Generating...' : selectedRecord.reportGenerated ? 'Download PDF Report' : 'Generate PDF Report'}
           </Button>
         </div>
 
@@ -166,7 +176,7 @@ export default function DueDiligencePage() {
           <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
               <CheckCircle className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">DD Report generated. In production this would download a comprehensive PDF.</span>
+              <span className="text-sm font-medium">DD report ready. Use “Download PDF Report” to fetch the latest copy.</span>
             </div>
           </div>
         )}

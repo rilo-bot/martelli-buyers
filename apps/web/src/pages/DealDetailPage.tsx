@@ -3,6 +3,7 @@ import { useParams, Navigate, Link } from 'react-router-dom';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
+import { useOffMarketStore } from '@/stores/offMarketStore';
 import { useInvoicesStore } from '@/stores/invoicesStore';
 import { useCommentsStore } from '@/stores/commentsStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
@@ -17,12 +18,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Zap, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw, Download, Copy, FileSignature, Building2, Search, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { DealStage, PropertyStatus, ConsentStatus } from '@/types';
+import type { DealStage, PropertyStatus, ConsentStatus, OffMarketProperty } from '@/types';
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
+import { useConfigStore } from '@/stores/configStore';
+import { useXeroStore } from '@/stores/xeroStore';
+import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement } from '@/lib/documents';
+import { pushInvoiceToXero, refreshInvoiceFromXero } from '@/lib/xero';
+import { ExternalLink } from 'lucide-react';
 
 const STAGE_OPTIONS: DealStage[] = ['qualification', 'search', 'shortlisting', 'due_diligence', 'offer', 'settlement', 'complete'];
 const STAGE_LABELS: Record<DealStage, string> = {
@@ -70,9 +76,14 @@ export default function DealDetailPage() {
   const properties = usePropertiesStore((s) => s.properties);
   const addProperty = usePropertiesStore((s) => s.addProperty);
   const updateProperty = usePropertiesStore((s) => s.updateProperty);
+  const offMarket = useOffMarketStore((s) => s.properties);
+  const linkOffMarketToDeal = useOffMarketStore((s) => s.linkToDeal);
   const invoices = useInvoicesStore((s) => s.invoices);
   const addInvoice = useInvoicesStore((s) => s.addInvoice);
-  const syncWithXero = useInvoicesStore((s) => s.syncWithXero);
+  const emailInvoice = useInvoicesStore((s) => s.emailInvoice);
+  const replaceInvoice = useInvoicesStore((s) => s.replaceInvoice);
+  const hasXero = useConfigStore((s) => s.hasXero);
+  const xeroConnected = useXeroStore((s) => s.connected);
   const comments = useCommentsStore((s) => s.comments);
   const addComment = useCommentsStore((s) => s.addComment);
   const summaries = useAISummariesStore((s) => s.summaries);
@@ -83,11 +94,16 @@ export default function DealDetailPage() {
   const agents = useAgentsStore((s) => s.agents);
 
   const [showAddProperty, setShowAddProperty] = useState(false);
+  const [addPropMode, setAddPropMode] = useState<'new' | 'offmarket'>('new');
+  const [omSearch, setOmSearch] = useState('');
+  const [linkingOmId, setLinkingOmId] = useState<string | null>(null);
   const [showAddInvoice, setShowAddInvoice] = useState(false);
   const [showAISummary, setShowAISummary] = useState(false);
   const [showReenableConsent, setShowReenableConsent] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [xeroBusyId, setXeroBusyId] = useState<string | null>(null);
+  const [sendingAgreement, setSendingAgreement] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [aiConsentError, setAiConsentError] = useState(false);
   const [aiForm, setAiForm] = useState({ type: 'call' as 'call' | 'meeting', title: '', participants: '', transcript: '' });
@@ -171,6 +187,54 @@ export default function DealDetailPage() {
     setShowAddProperty(false);
   };
 
+  // Off-market entries that are active and not already on this deal.
+  const linkableOffMarket = useMemo(() => {
+    const alreadyLinked = new Set(dealProperties.map((p) => p.offMarketPropertyId).filter(Boolean));
+    const q = omSearch.trim().toLowerCase();
+    return offMarket.filter(
+      (om) =>
+        om.isActive &&
+        !alreadyLinked.has(om.id) &&
+        (!q || om.address.toLowerCase().includes(q) || om.suburb.toLowerCase().includes(q)),
+    );
+  }, [offMarket, dealProperties, omSearch]);
+
+  const handleLinkOffMarket = async (om: OffMarketProperty) => {
+    if (!id) return;
+    setLinkingOmId(om.id);
+    try {
+      await addProperty({
+        dealId: id,
+        address: om.address,
+        suburb: om.suburb,
+        price: 0,
+        priceGuide: om.priceGuide,
+        bedrooms: om.bedrooms,
+        bathrooms: om.bathrooms,
+        carparks: om.carparks,
+        landSize: 0,
+        propertyType: om.propertyType,
+        status: 'active',
+        notes: om.notes,
+        clientVisibleNotes: '',
+        isClientVisible: true,
+        agentId: om.sourceAgentId,
+        sourceAgentName: om.sourceAgentName,
+        listingUrl: '',
+        photos: [],
+        isOffMarket: true,
+        offMarketPropertyId: om.id,
+      });
+      await linkOffMarketToDeal(om.id, id);
+      toast.success(`${om.address} added to this campaign.`);
+      setShowAddProperty(false);
+    } catch {
+      toast.error('Failed to link off-market property.');
+    } finally {
+      setLinkingOmId(null);
+    }
+  };
+
   const handleAddInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invForm.amount || !invForm.dueDate) return;
@@ -179,6 +243,9 @@ export default function DealDetailPage() {
     const invoice = await addInvoice({
       dealId: id,
       xeroInvoiceId: '',
+      xeroStatus: '',
+      xeroUrl: '',
+      xeroLastSyncedAt: '',
       invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
       type: invForm.type,
       amount,
@@ -194,10 +261,69 @@ export default function DealDetailPage() {
     setShowAddInvoice(false);
   };
 
-  const handleSyncXero = async (invoiceId: string) => {
-    setSyncingId(invoiceId);
-    await syncWithXero(invoiceId);
-    setSyncingId(null);
+  const handleDownloadInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    try {
+      await downloadInvoicePdf(invoiceId, invoiceNumber);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to download invoice.');
+    }
+  };
+
+  const handleEmailInvoice = async (invoiceId: string) => {
+    setEmailingId(invoiceId);
+    try {
+      await emailInvoice(invoiceId);
+      toast.success('Invoice emailed to the client.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to email invoice.');
+    } finally {
+      setEmailingId(null);
+    }
+  };
+
+  const handlePushXero = async (invoiceId: string) => {
+    setXeroBusyId(invoiceId);
+    try {
+      replaceInvoice(await pushInvoiceToXero(invoiceId));
+      toast.success('Invoice sent to Xero.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send to Xero.');
+    } finally {
+      setXeroBusyId(null);
+    }
+  };
+
+  const handleRefreshXero = async (invoiceId: string) => {
+    setXeroBusyId(invoiceId);
+    try {
+      replaceInvoice(await refreshInvoiceFromXero(invoiceId));
+      toast.success('Invoice status refreshed from Xero.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to refresh from Xero.');
+    } finally {
+      setXeroBusyId(null);
+    }
+  };
+
+  const handleSendAgreement = async () => {
+    setSendingAgreement(true);
+    try {
+      const { emailed } = await sendAgreement(id);
+      await useDealsStore.getState().fetch();
+      toast.success(emailed ? 'Agreement emailed to the client for signing.' : 'Agreement ready — email is not configured, share the signing link manually.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send agreement.');
+    } finally {
+      setSendingAgreement(false);
+    }
+  };
+
+  const handleCopySignLink = () => {
+    const url = `${window.location.origin}/sign/${deal.agreementSignToken}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success('Signing link copied.'),
+      () => toast.error('Could not copy link.'),
+    );
   };
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -405,14 +531,47 @@ export default function DealDetailPage() {
               <CardContent className="space-y-5">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Agency Agreement</p>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <Badge variant={deal.agreementStatus === 'signed' ? 'default' : deal.agreementStatus === 'sent' ? 'secondary' : 'outline'}>
                       {deal.agreementStatus === 'signed' ? 'Signed' : deal.agreementStatus === 'sent' ? 'Sent' : 'Pending'}
                     </Badge>
-                    <Button size="sm" variant="outline" onClick={() => updateDeal(id, { agreementStatus: deal.agreementStatus === 'pending' ? 'sent' : deal.agreementStatus === 'sent' ? 'signed' : 'pending' })}>
-                      {deal.agreementStatus === 'pending' ? 'Send Agreement' : deal.agreementStatus === 'sent' ? 'Mark as Signed' : 'Reset'}
+                    {deal.agreementStatus !== 'signed' && (
+                      <Button size="sm" onClick={handleSendAgreement} disabled={sendingAgreement}>
+                        <FileSignature className="mr-1.5 h-3.5 w-3.5" />
+                        {sendingAgreement ? 'Sending…' : deal.agreementStatus === 'sent' ? 'Resend' : 'Generate & Send'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => downloadAgreementPdf(id)}>
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      {deal.agreementStatus === 'signed' ? 'Signed PDF' : 'Preview PDF'}
                     </Button>
                   </div>
+
+                  {deal.agreementStatus === 'sent' && deal.agreementSignToken && (
+                    <div className="mt-3 space-y-2">
+                      {deal.agreementSentAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Sent {new Date(deal.agreementSentAt).toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Input readOnly value={`${window.location.origin}/sign/${deal.agreementSignToken}`} className="h-8 text-xs" />
+                        <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={handleCopySignLink}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {deal.agreementStatus === 'signed' && (
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                        Signed by <span className="font-semibold">{deal.agreementSignerName}</span>
+                        {deal.agreementSignedAt && ` on ${new Date(deal.agreementSignedAt).toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}`}.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-border/60">
@@ -549,9 +708,82 @@ export default function DealDetailPage() {
             )}
           </div>
 
-          <Dialog open={showAddProperty} onOpenChange={setShowAddProperty}>
+          <Dialog open={showAddProperty} onOpenChange={(o) => { setShowAddProperty(o); if (!o) { setAddPropMode('new'); setOmSearch(''); } }}>
             <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Add Property to Campaign</DialogTitle></DialogHeader>
+
+              {/* Mode toggle: enter a new property, or reuse one from the off-market database. */}
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+                {([
+                  { key: 'new', label: 'New property', icon: Plus },
+                  { key: 'offmarket', label: 'From off-market', icon: Building2 },
+                ] as const).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setAddPropMode(m.key)}
+                    className={cn(
+                      'flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                      addPropMode === m.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <m.icon className="h-3.5 w-3.5" />{m.label}
+                  </button>
+                ))}
+              </div>
+
+              {addPropMode === 'offmarket' ? (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input value={omSearch} onChange={(e) => setOmSearch(e.target.value)} placeholder="Search off-market by address or suburb..." className="pl-9" />
+                  </div>
+                  {linkableOffMarket.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border py-10 text-center">
+                      <Building2 className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {offMarket.length === 0
+                          ? 'No off-market properties in your database yet.'
+                          : omSearch.trim()
+                            ? 'No matches — try a different search.'
+                            : 'Every active off-market property is already on this campaign.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">
+                      {linkableOffMarket.map((om) => (
+                        <button
+                          key={om.id}
+                          type="button"
+                          disabled={linkingOmId !== null}
+                          onClick={() => handleLinkOffMarket(om)}
+                          className="group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
+                            <Home className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{om.address}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {om.suburb || '—'} · {om.bedrooms}bd/{om.bathrooms}ba{om.priceGuide ? ` · ${om.priceGuide}` : ''}
+                            </p>
+                          </div>
+                          {linkingOmId === om.id ? (
+                            <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                          ) : (
+                            <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                              <Check className="h-3.5 w-3.5" />Add
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                  </DialogFooter>
+                </div>
+              ) : (
               <form onSubmit={handleAddProperty} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="propAddress">Street address *</Label>
@@ -610,6 +842,7 @@ export default function DealDetailPage() {
                   </Button>
                 </DialogFooter>
               </form>
+              )}
             </DialogContent>
           </Dialog>
         </TabsContent>
@@ -630,7 +863,7 @@ export default function DealDetailPage() {
                   <DollarSign className="h-8 w-8 text-primary/40" />
                 </div>
                 <h3 className="text-base font-semibold">No invoices yet</h3>
-                <p className="mt-1.5 text-sm text-muted-foreground">Create an engagement invoice to send via Xero.</p>
+                <p className="mt-1.5 text-sm text-muted-foreground">Create an engagement invoice to download or email to the client.</p>
                 <Button size="sm" className="mt-5" onClick={() => setShowAddInvoice(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />Create Invoice
                 </Button>
@@ -649,7 +882,7 @@ export default function DealDetailPage() {
                             </Badge>
                             <Badge variant="outline" className="text-xs">{inv.type}</Badge>
                             {inv.xeroInvoiceId && (
-                              <Badge variant="outline" className="text-xs">Xero: {inv.xeroInvoiceId}</Badge>
+                              <Badge variant="outline" className="text-xs">In Xero</Badge>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">{inv.description || 'Buyer agency services'} · Due {inv.dueDate}</p>
@@ -659,15 +892,65 @@ export default function DealDetailPage() {
                             <p className="text-sm font-bold tabular-nums">${inv.total.toLocaleString()}</p>
                             <p className="text-xs text-muted-foreground">incl. GST</p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSyncXero(inv.id)}
-                            disabled={!!inv.xeroInvoiceId || syncingId === inv.id}
-                          >
-                            <Zap className="mr-1.5 h-3.5 w-3.5" />
-                            {syncingId === inv.id ? 'Syncing...' : inv.xeroInvoiceId ? 'Synced' : 'Send to Xero'}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleDownloadInvoice(inv.id, inv.invoiceNumber)}>
+                              <Download className="mr-1.5 h-3.5 w-3.5" />
+                              PDF
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEmailInvoice(inv.id)}
+                              disabled={emailingId === inv.id}
+                            >
+                              <Mail className="mr-1.5 h-3.5 w-3.5" />
+                              {emailingId === inv.id ? 'Emailing…' : 'Email to client'}
+                            </Button>
+                            {!hasXero ? (
+                              <span
+                                className="text-[11px] text-muted-foreground border border-dashed border-border rounded-md px-2 py-1"
+                                title="Set XERO_CLIENT_ID/SECRET on the server to enable Xero."
+                              >
+                                Xero — Not configured
+                              </span>
+                            ) : !xeroConnected ? (
+                              <Button asChild size="sm" variant="outline" title="Connect Xero in Settings">
+                                <Link to="/settings">Connect Xero</Link>
+                              </Button>
+                            ) : inv.xeroInvoiceId ? (
+                              <>
+                                <Badge variant="secondary" className="text-[11px] capitalize">
+                                  Xero · {(inv.xeroStatus || 'synced').toLowerCase()}
+                                </Badge>
+                                {inv.xeroUrl && (
+                                  <Button asChild size="sm" variant="ghost" className="h-8 px-2">
+                                    <a href={inv.xeroUrl} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="mr-1 h-3.5 w-3.5" /> View
+                                    </a>
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRefreshXero(inv.id)}
+                                  disabled={xeroBusyId === inv.id}
+                                >
+                                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                                  {xeroBusyId === inv.id ? '…' : 'Refresh'}
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handlePushXero(inv.id)}
+                                disabled={xeroBusyId === inv.id}
+                              >
+                                <Send className="mr-1.5 h-3.5 w-3.5" />
+                                {xeroBusyId === inv.id ? 'Sending…' : 'Send to Xero'}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </CardContent>

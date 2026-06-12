@@ -1,9 +1,20 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { sendMail } from '../lib/mailer';
+import { EmailCampaign } from '../models';
 import { asyncHandler } from '../middleware/error';
 
 export const emailRouter = Router();
+
+// Guard against accidental or abusive mass-sending: cap blasts per IP per hour.
+const blastLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many blasts sent. Please wait a while before sending more.' },
+});
 
 const sendSchema = z.object({
   to: z.string().email(),
@@ -18,6 +29,16 @@ const blastSchema = z.object({
     .max(500),
   subject: z.string().min(1),
   body: z.string().default(''),
+  // Optional audit metadata — when present the server records the campaign in
+  // the same request, so a successful send always has a matching record.
+  campaign: z
+    .object({
+      dealId: z.string().default(''),
+      templateId: z.string().default(''),
+      agentGeoFilter: z.array(z.string()).default([]),
+      preferredOnly: z.boolean().default(false),
+    })
+    .optional(),
 });
 
 /** Replace {{agentName}} (and {{name}}) per recipient; leave other placeholders intact. */
@@ -44,8 +65,9 @@ emailRouter.post(
 /** POST /api/email/blast — send one personalized email per recipient. */
 emailRouter.post(
   '/blast',
+  blastLimiter,
   asyncHandler(async (req, res) => {
-    const { recipients, subject, body } = blastSchema.parse(req.body);
+    const { recipients, subject, body, campaign } = blastSchema.parse(req.body);
 
     // De-dupe by email (case-insensitive).
     const seen = new Set<string>();
@@ -68,6 +90,23 @@ emailRouter.post(
       res.status(502).json({ error: 'No emails could be sent. Check SMTP settings.' });
       return;
     }
-    res.json({ ok: true, sent, failed });
+
+    // Record the campaign atomically with the send so the audit trail can't
+    // drift from what actually went out. recipientCount is the real delivered count.
+    let record = null;
+    if (campaign) {
+      const doc = await EmailCampaign.create({
+        ...campaign,
+        subject,
+        body,
+        recipientType: 'agents',
+        recipientCount: sent,
+        sentAt: new Date().toISOString(),
+        status: 'sent',
+      });
+      record = doc.toJSON();
+    }
+
+    res.json({ ok: true, sent, failed, campaign: record });
   }),
 );

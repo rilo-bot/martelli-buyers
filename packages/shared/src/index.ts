@@ -37,6 +37,10 @@ export interface Client {
   dealIds: string[];
   tags: string[];
   assignedTo: string;
+  /** Linked Xero ContactID (empty until synced). */
+  xeroContactId: string;
+  /** ISO timestamp of the last successful push to Xero. */
+  xeroSyncedAt: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +113,11 @@ export interface Deal {
   bathrooms: number;
   agreementStatus: 'pending' | 'sent' | 'signed';
   agreementUrl: string;
+  agreementSignToken: string;
+  agreementSentAt: string;
+  agreementSignerName: string;
+  agreementSignedAt: string;
+  agreementSignerIp: string;
   invoiceIds: string[];
   assignedTo: string;
   aiConsentStatus: ConsentStatus;
@@ -212,6 +221,9 @@ export interface Invoice {
   id: string;
   dealId: string;
   xeroInvoiceId: string;
+  xeroStatus: string;
+  xeroUrl: string;
+  xeroLastSyncedAt: string;
   invoiceNumber: string;
   type: 'engagement' | 'milestone' | 'final';
   amount: number;

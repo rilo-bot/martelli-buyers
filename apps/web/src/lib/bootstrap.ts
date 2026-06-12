@@ -12,6 +12,8 @@ import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useEmailTemplatesStore } from '@/stores/emailTemplatesStore';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
+import { useConfigStore } from '@/stores/configStore';
+import { useXeroStore } from '@/stores/xeroStore';
 
 /**
  * Load every server-backed store once, after authentication. Mounted inside the
@@ -32,6 +34,8 @@ export function useBootstrapData() {
       useAISummariesStore.getState().fetch,
       useEmailTemplatesStore.getState().fetch,
       useQualificationStagesStore.getState().fetch,
+      useConfigStore.getState().fetch,
+      useXeroStore.getState().fetchStatus,
     ];
     Promise.all(fetchers.map((f) => f())).catch(() => {
       toast.error('Failed to load some data. Please refresh.');

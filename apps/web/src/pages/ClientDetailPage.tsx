@@ -12,13 +12,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   ArrowLeft, Mail, Phone, Building2, FileText, Users, Edit, Check, X,
-  DollarSign, ArrowRight, Search, Filter, ChevronDown,
+  DollarSign, ArrowRight, Search, Filter, ChevronDown, Loader2, Plug,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Deal, Lead, DealStage, LeadStatus } from '@/types';
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
+import { useXeroStore } from '@/stores/xeroStore';
+import { pushClientToXero } from '@/lib/xero';
 
 /* ─── label / style maps ─── */
 
@@ -436,8 +438,11 @@ export default function ClientDetailPage() {
   const deals = useDealsStore((s) => s.deals);
   const leads = useLeadsStore((s) => s.leads);
   const agents = useAgentsStore((s) => s.agents);
+  const xeroConnected = useXeroStore((s) => s.connected);
 
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncingXero, setSyncingXero] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [formState, setFormState] = useState({
     firstName: '',
@@ -454,16 +459,6 @@ export default function ClientDetailPage() {
 
   const client = clients.find((c) => c.id === id);
   if (!client) return <Navigate to="/clients" replace />;
-
-  const form = {
-    firstName: formState.firstName || client.firstName,
-    lastName: formState.lastName || client.lastName,
-    email: formState.email || client.email,
-    phone: formState.phone !== undefined ? formState.phone : client.phone,
-    company: formState.company !== undefined ? formState.company : client.company,
-    notes: formState.notes !== undefined ? formState.notes : client.notes,
-    tags: formState.tags !== undefined ? formState.tags : client.tags.join(', '),
-  };
 
   const clientDeals = deals.filter((d) => client.dealIds.includes(d.id));
   const clientLeads = leads.filter((l) => client.leadIds.includes(l.id));
@@ -485,23 +480,31 @@ export default function ClientDetailPage() {
     clientEmail: client.email,
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!formState.firstName.trim() || !formState.lastName.trim() || !formState.email.trim()) {
       toast.error('First name, last name and email are required.');
       return;
     }
-    updateClient(id, {
-      firstName: formState.firstName.trim(),
-      lastName: formState.lastName.trim(),
-      email: formState.email.trim().toLowerCase(),
-      phone: formState.phone.trim(),
-      company: formState.company.trim(),
-      notes: formState.notes.trim(),
-      tags: formState.tags.split(',').map((t) => t.trim()).filter(Boolean),
-    });
-    setEditing(false);
-    toast.success('Client updated.');
+    setSaving(true);
+    try {
+      await updateClient(id, {
+        firstName: formState.firstName.trim(),
+        lastName: formState.lastName.trim(),
+        email: formState.email.trim().toLowerCase(),
+        phone: formState.phone.trim(),
+        company: formState.company.trim(),
+        notes: formState.notes.trim(),
+        tags: formState.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      });
+      setEditing(false);
+      toast.success('Client updated.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update client.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleStartEdit = () => {
@@ -519,6 +522,21 @@ export default function ClientDetailPage() {
 
   const handleCancelEdit = () => {
     setEditing(false);
+  };
+
+  const handleSyncXero = async () => {
+    setSyncingXero(true);
+    try {
+      const updated = await pushClientToXero(id);
+      useClientsStore.setState((s) => ({
+        clients: s.clients.map((c) => (c.id === id ? updated : c)),
+      }));
+      toast.success('Client synced to Xero.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to sync client to Xero.');
+    } finally {
+      setSyncingXero(false);
+    }
   };
 
   return (
@@ -547,6 +565,20 @@ export default function ClientDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {client.xeroContactId ? (
+            <Badge variant="secondary" className="gap-1">
+              <Plug className="h-3 w-3" />
+              In Xero
+            </Badge>
+          ) : xeroConnected ? (
+            <Button variant="outline" size="sm" onClick={handleSyncXero} disabled={syncingXero}>
+              {syncingXero ? (
+                <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Syncing…</>
+              ) : (
+                <><Plug className="mr-1.5 h-3.5 w-3.5" />Sync to Xero</>
+              )}
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
@@ -670,9 +702,12 @@ export default function ClientDetailPage() {
                   rows={3}
                 />
               </div>
-              <Button type="submit" size="sm" className="shadow-sm shadow-primary/20">
-                <Check className="mr-1.5 h-3.5 w-3.5" />
-                Save Changes
+              <Button type="submit" size="sm" disabled={saving} className="shadow-sm shadow-primary/20">
+                {saving ? (
+                  <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Saving…</>
+                ) : (
+                  <><Check className="mr-1.5 h-3.5 w-3.5" /> Save Changes</>
+                )}
               </Button>
             </form>
           ) : (

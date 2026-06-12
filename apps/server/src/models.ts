@@ -100,7 +100,7 @@ const UserSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, default: '' },
-    role: { type: String, default: 'staff' },
+    role: { type: String, enum: ['admin', 'staff', 'client', 'agent'], default: 'staff' },
   },
   baseOpts,
 );
@@ -134,6 +134,9 @@ const ClientSchema = new Schema(
     dealIds: { type: [String], default: [] },
     tags: { type: [String], default: [] },
     assignedTo: { type: String, default: '' },
+    // Linked Xero ContactID + last successful push (empty until synced).
+    xeroContactId: { type: String, default: '' },
+    xeroSyncedAt: { type: String, default: '' },
   },
   baseOpts,
 );
@@ -156,7 +159,11 @@ const LeadSchema = new Schema(
     email: { type: String, default: '' },
     phone: { type: String, default: '' },
     source: { type: String, default: '' },
-    status: { type: String, default: 'new' },
+    status: {
+      type: String,
+      enum: ['new', 'contacted', 'qualified', 'agreement_sent', 'active', 'won', 'lost'],
+      default: 'new',
+    },
     qualificationStageId: { type: String, default: '' },
     stageProgress: { type: Schema.Types.Mixed, default: {} },
     notes: { type: String, default: '' },
@@ -178,20 +185,29 @@ const DealSchema = new Schema(
     clientName: { type: String, default: '' },
     clientEmail: { type: String, default: '' },
     clientPhone: { type: String, default: '' },
-    stage: { type: String, default: 'qualification' },
+    stage: {
+      type: String,
+      enum: ['qualification', 'search', 'shortlisting', 'due_diligence', 'offer', 'settlement', 'complete'],
+      default: 'qualification',
+    },
     brief: { type: String, default: '' },
     budget: { type: Number, default: 0 },
     fee: { type: Number, default: 0 },
-    feeType: { type: String, default: 'fixed' },
+    feeType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
     preferredSuburbs: { type: [String], default: [] },
     propertyType: { type: String, default: '' },
     bedrooms: { type: Number, default: 0 },
     bathrooms: { type: Number, default: 0 },
-    agreementStatus: { type: String, default: 'pending' },
+    agreementStatus: { type: String, enum: ['pending', 'sent', 'signed'], default: 'pending' },
     agreementUrl: { type: String, default: '' },
+    agreementSignToken: { type: String, default: '', index: true },
+    agreementSentAt: { type: String, default: '' },
+    agreementSignerName: { type: String, default: '' },
+    agreementSignedAt: { type: String, default: '' },
+    agreementSignerIp: { type: String, default: '' },
     invoiceIds: { type: [String], default: [] },
     assignedTo: { type: String, default: '' },
-    aiConsentStatus: { type: String, default: 'pending' },
+    aiConsentStatus: { type: String, enum: ['pending', 'granted', 'declined'], default: 'pending' },
     aiConsentDate: { type: String, default: '' },
   },
   baseOpts,
@@ -209,7 +225,11 @@ const PropertySchema = new Schema(
     carparks: { type: Number, default: 0 },
     landSize: { type: Number, default: 0 },
     propertyType: { type: String, default: '' },
-    status: { type: String, default: 'active' },
+    status: {
+      type: String,
+      enum: ['active', 'shortlisted', 'inspected', 'passed', 'offer_made', 'purchased'],
+      default: 'active',
+    },
     notes: { type: String, default: '' },
     clientVisibleNotes: { type: String, default: '' },
     isClientVisible: { type: Boolean, default: false },
@@ -251,7 +271,7 @@ const AgentSchema = new Schema(
     email: { type: String, default: '' },
     phone: { type: String, default: '' },
     agency: { type: String, default: '' },
-    geoTag: { type: String, default: 'Central' },
+    geoTag: { type: String, enum: ['East', 'West', 'North', 'Central'], default: 'Central' },
     suburbs: { type: [String], default: [] },
     isPreferred: { type: Boolean, default: false },
     notes: { type: String, default: '' },
@@ -264,7 +284,11 @@ const AgentSchema = new Schema(
 const EmailTemplateSchema = new Schema(
   {
     name: { type: String, default: '' },
-    category: { type: String, default: 'other' },
+    category: {
+      type: String,
+      enum: ['welcome', 'dd_request', 'status_update', 'requirement_blast', 'thank_you', 'post_settlement', 'other'],
+      default: 'other',
+    },
     subject: { type: String, default: '' },
     body: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
@@ -279,12 +303,12 @@ const EmailCampaignSchema = new Schema(
     templateId: { type: String, default: '' },
     subject: { type: String, default: '' },
     body: { type: String, default: '' },
-    recipientType: { type: String, default: 'agents' },
+    recipientType: { type: String, enum: ['agents', 'client', 'stakeholders'], default: 'agents' },
     agentGeoFilter: { type: [String], default: [] },
     preferredOnly: { type: Boolean, default: false },
     recipientCount: { type: Number, default: 0 },
     sentAt: { type: String, default: '' },
-    status: { type: String, default: 'draft' },
+    status: { type: String, enum: ['draft', 'sent'], default: 'draft' },
   },
   baseOpts,
 );
@@ -293,15 +317,40 @@ const InvoiceSchema = new Schema(
   {
     dealId: { type: String, default: '' },
     xeroInvoiceId: { type: String, default: '' },
+    xeroStatus: { type: String, default: '' },
+    xeroUrl: { type: String, default: '' },
+    xeroLastSyncedAt: { type: String, default: '' },
     invoiceNumber: { type: String, default: '' },
-    type: { type: String, default: 'engagement' },
+    type: { type: String, enum: ['engagement', 'milestone', 'final'], default: 'engagement' },
     amount: { type: Number, default: 0 },
     gst: { type: Number, default: 0 },
     total: { type: Number, default: 0 },
-    status: { type: String, default: 'draft' },
+    status: { type: String, enum: ['draft', 'sent', 'paid', 'overdue'], default: 'draft' },
     dueDate: { type: String, default: '' },
     paidDate: { type: String, default: '' },
     description: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+// Single org-wide Xero OAuth connection (one document). Tokens are server-side
+// only and never serialised to the client.
+const XeroConnectionSchema = new Schema(
+  {
+    tenantId: { type: String, default: '' },
+    tenantName: { type: String, default: '' },
+    accessToken: { type: String, default: '' },
+    refreshToken: { type: String, default: '' },
+    expiresAt: { type: Date },
+    scopes: { type: String, default: '' },
+    connectedByEmail: { type: String, default: '' },
+    connectedAt: { type: String, default: '' },
+    // Initial-import progress (set when pulling Contacts/Invoices from Xero).
+    importStatus: { type: String, enum: ['idle', 'running', 'done', 'error'], default: 'idle' },
+    lastImportAt: { type: String, default: '' },
+    importedClients: { type: Number, default: 0 },
+    linkedInvoices: { type: Number, default: 0 },
+    importError: { type: String, default: '' },
   },
   baseOpts,
 );
@@ -332,7 +381,7 @@ const ClientCommentSchema = new Schema(
     propertyId: { type: String, default: '' },
     authorId: { type: String, default: '' },
     authorName: { type: String, default: '' },
-    authorRole: { type: String, default: 'staff' },
+    authorRole: { type: String, enum: ['admin', 'staff', 'client', 'agent'], default: 'staff' },
     content: { type: String, default: '' },
     attachments: { type: [CommentAttachmentSchema], default: [] },
     isClientVisible: { type: Boolean, default: true },
@@ -343,7 +392,7 @@ const ClientCommentSchema = new Schema(
 const AISummarySchema = new Schema(
   {
     dealId: { type: String, default: '' },
-    type: { type: String, default: 'call' },
+    type: { type: String, enum: ['call', 'meeting'], default: 'call' },
     title: { type: String, default: '' },
     date: { type: String, default: '' },
     participants: { type: [String], default: [] },
@@ -362,7 +411,7 @@ const ReferralPartnerSchema = new Schema(
     company: { type: String, default: '' },
     email: { type: String, default: '' },
     phone: { type: String, default: '' },
-    type: { type: String, default: 'other' },
+    type: { type: String, enum: ['lawyer', 'mortgage_broker', 'financial_advisor', 'other'], default: 'other' },
     notes: { type: String, default: '' },
     dealsReferredIds: { type: [String], default: [] },
   },
@@ -388,6 +437,8 @@ export const ClientComment = model('ClientComment', ClientCommentSchema);
 export const AISummary = model('AISummary', AISummarySchema);
 export const QualificationStage = model('QualificationStage', QualificationStageSchema);
 export const ReferralPartner = model('ReferralPartner', ReferralPartnerSchema);
+// Singleton — not a CRUD resource (no entry in RESOURCES).
+export const XeroConnection = model('XeroConnection', XeroConnectionSchema);
 
 export type AnyModel = mongoose.Model<any>;
 
