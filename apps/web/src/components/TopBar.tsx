@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Search, Plus, ChevronRight } from 'lucide-react';
 import { CommandPalette } from '@/components/CommandPalette';
 import { StatusPill } from '@/components/ui/status-pill';
+import { usePermissions } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 
 const SECTION_TITLES: Record<string, string> = {
@@ -16,22 +17,25 @@ const SECTION_TITLES: Record<string, string> = {
   emails: 'Emails',
   invoices: 'Invoices',
   'due-diligence': 'Due Diligence',
+  team: 'Team',
   settings: 'Settings',
 };
 
 const CREATE_LINKS = [
-  { label: 'New lead', to: '/leads?new=1' },
-  { label: 'New buyer journey', to: '/journeys?new=1' },
-  { label: 'New client', to: '/clients?new=1' },
-  { label: 'New agent', to: '/agents?new=1' },
+  { label: 'New lead', to: '/leads?new=1', perm: 'leads:create' },
+  { label: 'New buyer journey', to: '/journeys?new=1', perm: 'journeys:create' },
+  { label: 'New client', to: '/clients?new=1', perm: 'clients:create' },
+  { label: 'New agent', to: '/agents?new=1', perm: 'agents:create' },
 ];
 
 export function TopBar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const newRef = useRef<HTMLDivElement>(null);
+  const createLinks = CREATE_LINKS.filter((l) => can(l.perm));
 
   // Global ⌘K / Ctrl+K to open the command palette.
   useEffect(() => {
@@ -97,6 +101,7 @@ export function TopBar() {
         </button>
 
         {/* Quick create */}
+        {createLinks.length > 0 && (
         <div className="relative" ref={newRef}>
           <button
             type="button"
@@ -108,7 +113,7 @@ export function TopBar() {
           </button>
           {newOpen && (
             <div className="absolute right-0 top-11 z-40 w-44 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg">
-              {CREATE_LINKS.map((l) => (
+              {createLinks.map((l) => (
                 <button
                   key={l.to}
                   type="button"
@@ -122,6 +127,7 @@ export function TopBar() {
             </div>
           )}
         </div>
+        )}
       </header>
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />

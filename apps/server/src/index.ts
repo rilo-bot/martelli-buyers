@@ -18,9 +18,11 @@ import { leadsRouter } from './routes/leads';
 import { timelineRouter } from './routes/timeline';
 import { xeroRouter } from './routes/xero';
 import { xeroWebhookHandler } from './routes/xeroWebhook';
+import { usersRouter } from './routes/users';
+import { rolesRouter } from './routes/roles';
 import { requireAuth } from './middleware/auth';
-import { asyncHandler, errorHandler } from './middleware/error';
-import { RESOURCES, User } from './models';
+import { errorHandler } from './middleware/error';
+import { RESOURCES, RESOURCE_MODULE } from './models';
 
 const app = express();
 
@@ -72,14 +74,10 @@ app.get('/api/config', (_req, res) =>
   res.json({ hasEmail, hasAi, hasS3, hasXero }),
 );
 
-// Read-only users list (for assignment dropdowns / settings).
-app.get(
-  '/api/users',
-  asyncHandler(async (_req, res) => {
-    const users = await User.find().sort({ createdAt: 1 });
-    res.json(users.map((u) => u.toJSON()));
-  }),
-);
+// User management (GET list is open for assignment dropdowns; writes need
+// team:manage) + role management (super-admin only for mutations).
+app.use('/api/users', usersRouter);
+app.use('/api/roles', rolesRouter);
 
 // Transactional email (templates, agent blasts).
 app.use('/api/email', emailRouter);
@@ -103,9 +101,9 @@ app.use('/api/leads', leadsRouter);
 // Read-only Buyer Journey timeline / audit events.
 app.use('/api/timeline', timelineRouter);
 
-// Generic CRUD for every domain resource.
+// Generic CRUD for every domain resource — each gated on its RBAC module.
 for (const [resource, model] of Object.entries(RESOURCES)) {
-  app.use(`/api/${resource}`, crudRouter(resource, model));
+  app.use(`/api/${resource}`, crudRouter(resource, model, RESOURCE_MODULE[resource] ?? resource));
 }
 
 app.use(errorHandler);

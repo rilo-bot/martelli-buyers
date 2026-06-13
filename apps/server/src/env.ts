@@ -18,6 +18,11 @@ export const env = {
   MONGODB_URI: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/rilo'),
   SESSION_SECRET: required('SESSION_SECRET', 'dev-insecure-secret-change-me'),
   OTP_TTL_MIN: Number(process.env.OTP_TTL_MIN ?? 10),
+  // The single super-admin account (by email). Always has every permission,
+  // cannot be locked out, and is the only account that may create/edit roles.
+  SUPER_ADMIN_EMAIL: (process.env.SUPER_ADMIN_EMAIL ?? '').trim().toLowerCase(),
+  // How long an invite link stays valid before it must be re-sent.
+  INVITE_TTL_DAYS: Number(process.env.INVITE_TTL_DAYS ?? 7),
   EMAIL: {
     // SendGrid Web API (HTTPS) — works on hosts that block SMTP ports (e.g.
     // Render free tier). Falls back to the legacy SMTP_* names so existing
@@ -78,3 +83,9 @@ export const hasS3 = Boolean(
 
 /** True when real Xero OAuth credentials are configured. */
 export const hasXero = Boolean(env.XERO.clientId && env.XERO.clientSecret);
+
+/** True when the given email is the configured super admin (case-insensitive). */
+export function isSuperAdminEmail(email: string | undefined | null): boolean {
+  if (!env.SUPER_ADMIN_EMAIL || !email) return false;
+  return email.trim().toLowerCase() === env.SUPER_ADMIN_EMAIL;
+}

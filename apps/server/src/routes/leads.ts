@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error';
+import { requirePermission } from '../lib/permissions';
 import { Lead, Deal, Client } from '../models';
 import { syncClientToXero } from '../lib/xeroSync';
 
@@ -21,6 +22,7 @@ export const leadsRouter = Router();
  */
 leadsRouter.post(
   '/:id/win',
+  requirePermission('leads:edit'),
   asyncHandler(async (req, res) => {
     const lead = await Lead.findById(req.params.id);
     if (!lead) {

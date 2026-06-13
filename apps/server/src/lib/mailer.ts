@@ -86,3 +86,35 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
     console.warn('[mailer] dev OTP email skipped —', (err as Error).message);
   }
 }
+
+function inviteHtml(name: string, url: string): string {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+  <div style="font-family:Inter,system-ui,sans-serif;max-width:480px;margin:0 auto;padding:32px;color:#111">
+    <h2 style="margin:0 0 8px;font-family:'Playfair Display',Georgia,serif">Martelli Buyers</h2>
+    <p style="color:#555;margin:0 0 8px">${greeting}</p>
+    <p style="color:#555;margin:0 0 24px">You've been invited to the Martelli Buyers CRM. Click below to activate your account and sign in.</p>
+    <a href="${url}" style="display:inline-block;background:#0a66c2;color:#fff;text-decoration:none;font-weight:600;border-radius:10px;padding:13px 22px">Accept invite &amp; sign in</a>
+    <p style="color:#888;font-size:13px;margin:24px 0 0">This link expires in ${env.INVITE_TTL_DAYS} day(s) and can only be used once. If you weren't expecting this, you can ignore it.</p>
+  </div>`;
+}
+
+/**
+ * Email an invite link to a newly added user. Best-effort: logs the link in dev
+ * (no provider needed) and never throws to the caller — the inviting admin also
+ * gets the link returned in the API response.
+ */
+export async function sendInviteEmail(to: string, name: string, url: string): Promise<void> {
+  if (!env.isProd) console.log(`[mailer] invite for ${to}: ${url}`);
+  try {
+    await sendMail({
+      to,
+      subject: "You've been invited to Martelli Buyers CRM",
+      text: `You've been invited to the Martelli Buyers CRM. Activate your account and sign in: ${url}\n\nThis link expires in ${env.INVITE_TTL_DAYS} day(s).`,
+      html: inviteHtml(name, url),
+    });
+  } catch (err) {
+    if (env.isProd) throw err;
+    console.warn('[mailer] dev invite email skipped —', (err as Error).message);
+  }
+}

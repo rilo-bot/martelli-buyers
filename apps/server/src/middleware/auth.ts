@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { User } from '../models';
+import { getEffectivePermissions } from '../lib/permissions';
 
-/** Blocks the request unless a valid session user exists. Attaches req.user. */
+/** Blocks the request unless a valid session user exists. Attaches req.user + req.auth. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const userId = req.session.userId;
   if (!userId) {
@@ -15,6 +16,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
-  (req as Request & { user?: unknown }).user = user;
+  const { permissions, isSuperAdmin } = await getEffectivePermissions({
+    email: user.get('email'),
+    role: user.get('role'),
+  });
+  req.user = user;
+  req.auth = { user, permissions, isSuperAdmin };
   next();
 }

@@ -6,9 +6,19 @@ import { generateCode, hashCode, verifyCode, MAX_OTP_ATTEMPTS } from '../lib/otp
 import { sendOtpEmail } from '../lib/mailer';
 import { asyncHandler } from '../middleware/error';
 import { requireAuth } from '../middleware/auth';
+import { getEffectivePermissions } from '../lib/permissions';
 import { env } from '../env';
 
 export const authRouter = Router();
+
+/** Serialise a user for the session client, with effective RBAC fields. */
+async function buildSessionUser(user: { toJSON(): Record<string, unknown>; get(k: string): unknown }) {
+  const { permissions, isSuperAdmin } = await getEffectivePermissions({
+    email: user.get('email') as string,
+    role: user.get('role') as string,
+  });
+  return { ...user.toJSON(), permissions: Array.from(permissions), isSuperAdmin };
+}
 
 // Throttle code requests: max 5 per 10 min per IP.
 const requestLimiter = rateLimit({
@@ -21,7 +31,6 @@ const requestLimiter = rateLimit({
 
 const requestSchema = z.object({
   email: z.string().email(),
-  name: z.string().trim().max(120).optional(),
 });
 
 const verifySchema = z.object({
@@ -29,13 +38,27 @@ const verifySchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
 });
 
-/** POST /api/auth/request-otp — email a one-time code. Always returns 200. */
+const acceptSchema = z.object({
+  token: z.string().min(10),
+});
+
+/**
+ * POST /api/auth/request-otp — email a one-time sign-in code. Self-signup is
+ * disabled: a code is only sent to an email that already has an account. The
+ * response is always {ok:true} so the endpoint never reveals which emails exist.
+ */
 authRouter.post(
   '/request-otp',
   requestLimiter,
   asyncHandler(async (req, res) => {
-    const { email, name } = requestSchema.parse(req.body);
+    const { email } = requestSchema.parse(req.body);
     const normalized = email.trim().toLowerCase();
+
+    // No account → no code (but don't leak that to the caller).
+    if (!(await User.exists({ email: normalized }))) {
+      res.json({ ok: true });
+      return;
+    }
 
     const code = generateCode();
     const codeHash = await hashCode(code);
@@ -43,7 +66,7 @@ authRouter.post(
 
     // Supersede any prior unconsumed tokens for this email.
     await OtpToken.deleteMany({ email: normalized, consumed: false });
-    await OtpToken.create({ email: normalized, codeHash, expiresAt, pendingName: name ?? '' });
+    await OtpToken.create({ email: normalized, codeHash, expiresAt });
 
     try {
       await sendOtpEmail(normalized, code);
@@ -83,24 +106,49 @@ authRouter.post(
       return;
     }
 
+    // Accounts are never created here — only an admin invite (or the env super
+    // admin) can provision a user. An unknown email cannot sign in.
+    const user = await User.findOne({ email: normalized });
+    if (!user) {
+      res.status(400).json({ error: 'No account found for this email — ask your administrator for an invite.' });
+      return;
+    }
+
     token.consumed = true;
     await token.save();
 
-    let user = await User.findOne({ email: normalized });
-    if (!user) {
-      const isFirstUser = (await User.estimatedDocumentCount()) === 0;
-      user = await User.create({
-        email: normalized,
-        name: token.pendingName || normalized.split('@')[0],
-        role: isFirstUser ? 'admin' : 'staff',
-      });
-    } else if (token.pendingName && !user.name) {
-      user.name = token.pendingName;
-      await user.save();
-    }
+    // First successful login also activates a still-pending invited account.
+    if (user.get('status') !== 'active') user.set('status', 'active');
+    await user.save();
 
     req.session.userId = String(user._id);
-    res.json(user.toJSON());
+    res.json(await buildSessionUser(user));
+  }),
+);
+
+/**
+ * POST /api/auth/accept-invite — open an invite link to auto-login. The token
+ * is the only credential; on success it establishes a session, activates the
+ * account, and burns the token (single-use).
+ */
+authRouter.post(
+  '/accept-invite',
+  requestLimiter,
+  asyncHandler(async (req, res) => {
+    const { token } = acceptSchema.parse(req.body);
+    const user = await User.findOne({ inviteToken: token }).select('+inviteToken +inviteExpiresAt');
+    const expiresAt = user?.get('inviteExpiresAt') as Date | undefined;
+    if (!user || !expiresAt || expiresAt.getTime() < Date.now()) {
+      res.status(400).json({ error: 'This invite link is invalid or has expired.' });
+      return;
+    }
+    user.set('status', 'active');
+    user.set('inviteToken', '');
+    user.set('inviteExpiresAt', undefined);
+    await user.save();
+
+    req.session.userId = String(user._id);
+    res.json(await buildSessionUser(user));
   }),
 );
 
@@ -117,6 +165,6 @@ authRouter.get(
   '/me',
   requireAuth,
   asyncHandler(async (req, res) => {
-    res.json((req as { user?: { toJSON(): unknown } }).user!.toJSON());
+    res.json(await buildSessionUser(req.user));
   }),
 );

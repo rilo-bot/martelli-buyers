@@ -100,7 +100,29 @@ const UserSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, default: '' },
-    role: { type: String, enum: ['admin', 'staff', 'client', 'agent'], default: 'staff' },
+    // Role key — references a Role.key (built-in 'admin'|'manager'|'staff' or a
+    // custom role). No enum: custom role keys can't be enumerated; the users
+    // route validates that the key references an existing Role on write.
+    role: { type: String, default: 'staff' },
+    // 'invited' once an admin adds them (until they accept/login), then 'active'.
+    // Default 'active' so the super admin + any pre-existing users aren't pending.
+    status: { type: String, enum: ['invited', 'active'], default: 'active' },
+    // Single-use auto-login invite credential — never serialised (select:false).
+    inviteToken: { type: String, default: '', select: false, index: true },
+    inviteExpiresAt: { type: Date, select: false },
+  },
+  baseOpts,
+);
+
+// A role definition: a named set of permission strings. Built-in roles have
+// isSystem=true (cannot be deleted; only the super admin may edit them).
+const RoleSchema = new Schema(
+  {
+    key: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    name: { type: String, default: '' },
+    description: { type: String, default: '' },
+    permissions: { type: [String], default: [] },
+    isSystem: { type: Boolean, default: false },
   },
   baseOpts,
 );
@@ -495,10 +517,38 @@ const ReferralPartnerSchema = new Schema(
   baseOpts,
 );
 
+// Cached AI daily briefing — one document per user per day (NZ date). Not a
+// CRUD resource; served read-only via /api/ai/daily-summary.
+const DailySummaryItemSchema = new Schema(
+  {
+    text: { type: String, default: '' },
+    // Optional in-app route to deep-link the insight (e.g. '/leads').
+    to: { type: String, default: '' },
+  },
+  sub,
+);
+
+const DailySummarySchema = new Schema(
+  {
+    userId: { type: String, required: true, index: true },
+    // 'YYYY-MM-DD' in Pac/Auckland — the firm's day boundary.
+    date: { type: String, required: true, index: true },
+    role: { type: String, default: '' },
+    headline: { type: String, default: '' },
+    insights: { type: [DailySummaryItemSchema], default: [] },
+    focus: { type: String, default: '' },
+    generatedAt: { type: String, default: '' },
+  },
+  baseOpts,
+);
+DailySummarySchema.index({ userId: 1, date: 1 }, { unique: true });
+
 /* ───────────────────────── model registry ───────────────────────────── */
 
 export const User = model('User', UserSchema);
 export const OtpToken = model('OtpToken', OtpTokenSchema);
+// Roles are managed via the gated /api/roles router — not a generic CRUD resource.
+export const Role = model('Role', RoleSchema);
 
 export const Lead = model('Lead', LeadSchema);
 export const Deal = model('Deal', DealSchema);
@@ -521,8 +571,37 @@ export const ReferralPartner = model('ReferralPartner', ReferralPartnerSchema);
 export const XeroConnection = model('XeroConnection', XeroConnectionSchema);
 // Append-only audit/timeline log — not a CRUD resource (read-only via /api/timeline).
 export const AuditEvent = model('AuditEvent', AuditEventSchema);
+// Cached AI daily briefings — not a CRUD resource (served via /api/ai/daily-summary).
+export const DailySummary = model('DailySummary', DailySummarySchema);
 
 export type AnyModel = mongoose.Model<any>;
+
+/**
+ * Maps each REST resource to its RBAC permission module. The generic CRUD
+ * router gates every request on `${module}:${action}` (GET→view, POST→create,
+ * PATCH→edit, DELETE→delete). Keep in sync with RESOURCES below.
+ */
+export const RESOURCE_MODULE: Record<string, string> = {
+  leads: 'leads',
+  deals: 'journeys',
+  clients: 'clients',
+  offers: 'journeys',
+  tasks: 'journeys',
+  purchases: 'journeys',
+  properties: 'properties',
+  'off-market': 'properties',
+  agents: 'agents',
+  'email-templates': 'emails',
+  'email-campaigns': 'emails',
+  invoices: 'invoices',
+  'due-diligence': 'dueDiligence',
+  comments: 'journeys',
+  'ai-summaries': 'journeys',
+  // Editing stages needs settings:manage, but all roles get settings:view so
+  // the pipeline loads. (The router maps GET→view automatically.)
+  'qualification-stages': 'settings',
+  'referral-partners': 'agents',
+};
 
 /** Maps REST resource path → Mongoose model for the generic CRUD router. */
 export const RESOURCES: Record<string, AnyModel> = {

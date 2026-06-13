@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { StatusPill } from '@/components/ui/status-pill';
 import { FadeInView } from '@/components/motion';
 import { useDashboardData } from '@/pages/dashboard/dashboardData';
+import { DailyBriefing } from '@/pages/dashboard/DailyBriefing';
 import { NeedsAttention } from '@/pages/dashboard/NeedsAttention';
 import { KpiCards } from '@/pages/dashboard/KpiCards';
 import { PipelineFunnel } from '@/pages/dashboard/PipelineFunnel';
@@ -44,6 +45,8 @@ export default function DashboardPage() {
           </>
         }
       />
+
+      <DailyBriefing />
 
       <NeedsAttention items={attention} />
 

@@ -21,12 +21,94 @@ export type TaskType = 'call' | 'viewing' | 'lim' | 'builders_report' | 'finance
 export type TaskPriority = 'low' | 'normal' | 'high';
 export type PurchaseStatus = 'pending' | 'unconditional' | 'settled';
 
+/* ───────────────────────── RBAC: permissions + roles ─────────────────────
+ * Permissions are "<module>:<action>" strings. The catalog below is the single
+ * source of truth shared by the Express API (enforcement) and the web client
+ * (gating + the role-permission matrix editor).
+ * ------------------------------------------------------------------------- */
+
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'send' | 'manage';
+export type Permission = string; // `${moduleKey}:${PermissionAction}`
+
+export interface PermissionModule {
+  key: string;
+  label: string;
+  actions: PermissionAction[];
+}
+
+/** Module → available actions. Drives both enforcement and the matrix UI. */
+export const PERMISSION_MODULES: PermissionModule[] = [
+  { key: 'dashboard', label: 'Dashboard', actions: ['view'] },
+  { key: 'leads', label: 'Leads', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'clients', label: 'Clients', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'journeys', label: 'Buyer Journeys', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'properties', label: 'Properties', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'invoices', label: 'Invoices', actions: ['view', 'create', 'edit', 'delete', 'send'] },
+  { key: 'agents', label: 'Agents', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'emails', label: 'Emails', actions: ['view', 'create', 'edit', 'delete', 'send'] },
+  { key: 'dueDiligence', label: 'Due Diligence', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'settings', label: 'Settings', actions: ['view', 'manage'] },
+  { key: 'team', label: 'Team & Roles', actions: ['view', 'manage'] },
+];
+
+/** Flat list of every valid permission string. */
+export const ALL_PERMISSIONS: Permission[] = PERMISSION_MODULES.flatMap((m) =>
+  m.actions.map((a) => `${m.key}:${a}`),
+);
+
+/** Always granted to any authenticated user, so a misconfigured role is never fully locked out. */
+export const ALWAYS_GRANTED: Permission[] = ['dashboard:view'];
+
+/** Built-in role keys. Custom roles are any other key. */
+export const SYSTEM_ROLES = ['admin', 'manager', 'staff'] as const;
+export type SystemRole = (typeof SYSTEM_ROLES)[number];
+
+const OPERATIONAL_FULL = ['leads', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence'];
+
+/** Default permission set per built-in role. Super admin always gets everything regardless. */
+export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
+  admin: ALL_PERMISSIONS,
+  manager: [
+    'dashboard:view',
+    ...OPERATIONAL_FULL.flatMap((m) => [`${m}:view`, `${m}:create`, `${m}:edit`, `${m}:delete`]),
+    'invoices:view', 'invoices:create', 'invoices:edit', 'invoices:delete', 'invoices:send',
+    'emails:view', 'emails:create', 'emails:edit', 'emails:delete', 'emails:send',
+    'settings:view',
+  ],
+  staff: [
+    'dashboard:view',
+    ...OPERATIONAL_FULL.flatMap((m) => [`${m}:view`, `${m}:create`, `${m}:edit`]),
+    'invoices:view',
+    'emails:view',
+    'settings:view',
+  ],
+};
+
+/** A role definition (built-in or custom). */
+export interface Role {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  permissions: Permission[];
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  /** Role key — references a Role.key (built-in or custom). */
+  role: string;
+  /** 'invited' until they accept the invite (or log in); then 'active'. */
+  status?: 'invited' | 'active';
   createdAt: string;
+  /** Effective permissions for the signed-in user. Populated on /me + verify-otp only. */
+  permissions?: string[];
+  /** True when this user matches SUPER_ADMIN_EMAIL. Populated on /me + verify-otp only. */
+  isSuperAdmin?: boolean;
 }
 
 export interface Client {

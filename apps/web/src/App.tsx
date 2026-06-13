@@ -7,11 +7,12 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PageTransition } from '@/components/motion';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
+import { Assistant } from '@/components/Assistant';
 import { applyPersistedTheme } from '@/stores/themeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useBootstrapData } from '@/lib/bootstrap';
 import LoginPage from '@/pages/LoginPage';
-import SignupPage from '@/pages/SignupPage';
+import InviteAcceptPage from '@/pages/InviteAcceptPage';
 import DashboardPage from '@/pages/DashboardPage';
 import LeadsPage from '@/pages/LeadsPage';
 import LeadDetailPage from '@/pages/LeadDetailPage';
@@ -25,8 +26,10 @@ import AgentsPage from '@/pages/AgentsPage';
 import EmailsPage from '@/pages/EmailsPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
+import TeamPage from '@/pages/TeamPage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignAgreementPage from '@/pages/SignAgreementPage';
+import { RequirePermission } from '@/components/RequirePermission';
 
 // Apply persisted theme before first render to avoid flash
 applyPersistedTheme();
@@ -65,6 +68,7 @@ function AuthedShell() {
           </div>
         </main>
       </div>
+      <Assistant />
     </div>
   );
 }
@@ -89,7 +93,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/invite/:token" element={<InviteAcceptPage />} />
         <Route path="/sign/:token" element={<SignAgreementPage />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
@@ -109,6 +113,14 @@ export default function App() {
           <Route path="/emails" element={<EmailsPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/due-diligence" element={<DueDiligencePage />} />
+          <Route
+            path="/team"
+            element={
+              <RequirePermission perm="team:view">
+                <TeamPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

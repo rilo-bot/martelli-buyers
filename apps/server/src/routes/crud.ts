@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import { PERMISSION_MODULES } from '@rilo/shared';
 import { asyncHandler } from '../middleware/error';
+import { requirePermission } from '../lib/permissions';
 import { keyFromUrl, deleteObject, hasS3 } from '../lib/s3';
 import { syncClientToXero, syncInvoiceToXero } from '../lib/xeroSync';
 import { recordEvent } from '../lib/audit';
@@ -227,12 +229,31 @@ async function auditUpdate(resource: string, before: Doc, after: Doc, actorId: s
   }
 }
 
-/** Build a REST CRUD router for one Mongoose model. */
-export function crudRouter(resource: string, modelRef: AnyModel): Router {
+// Module key → set of actions it actually supports (from the shared catalog).
+const MODULE_ACTIONS: Record<string, Set<string>> = Object.fromEntries(
+  PERMISSION_MODULES.map((m) => [m.key, new Set<string>(m.actions)]),
+);
+
+/**
+ * Resolve the permission string a CRUD action requires for a module. Modules
+ * that don't define a write action (e.g. `settings` has only view/manage)
+ * collapse create/edit/delete onto `:manage`.
+ */
+function permFor(module: string, action: 'view' | 'create' | 'edit' | 'delete'): string {
+  if (action === 'view') return `${module}:view`;
+  const actions = MODULE_ACTIONS[module];
+  if (actions?.has(action)) return `${module}:${action}`;
+  if (actions?.has('manage')) return `${module}:manage`;
+  return `${module}:${action}`; // unknown → nobody but the super admin holds it
+}
+
+/** Build a REST CRUD router for one Mongoose model, gated on `${module}:${action}`. */
+export function crudRouter(resource: string, modelRef: AnyModel, module: string): Router {
   const router = Router();
 
   router.get(
     '/',
+    requirePermission(permFor(module, 'view')),
     asyncHandler(async (_req, res) => {
       const docs = await modelRef.find().sort({ createdAt: 1 });
       res.json(docs.map((d) => d.toJSON()));
@@ -241,6 +262,7 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
 
   router.get(
     '/:id',
+    requirePermission(permFor(module, 'view')),
     asyncHandler(async (req, res) => {
       const doc = await modelRef.findById(req.params.id);
       if (!doc) {
@@ -253,6 +275,7 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
 
   router.post(
     '/',
+    requirePermission(permFor(module, 'create')),
     asyncHandler(async (req, res) => {
       const doc = await modelRef.create(sanitize(req.body ?? {}));
       if (AUDITED.has(resource)) await auditCreate(resource, doc, req.session.userId ?? '');
@@ -270,6 +293,7 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
 
   router.patch(
     '/:id',
+    requirePermission(permFor(module, 'edit')),
     asyncHandler(async (req, res) => {
       const patch = sanitize(req.body ?? {});
       // Capture the pre-update doc when this resource records timeline events.
@@ -297,6 +321,7 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
 
   router.delete(
     '/:id',
+    requirePermission(permFor(module, 'delete')),
     asyncHandler(async (req, res) => {
       const doc = await modelRef.findById(req.params.id);
       if (!doc) {

@@ -1,4 +1,6 @@
-import { QualificationStage, Property } from './models';
+import { SYSTEM_ROLES, DEFAULT_ROLE_PERMISSIONS, type SystemRole } from '@rilo/shared';
+import { QualificationStage, Property, Role, User } from './models';
+import { env } from './env';
 
 // Mirrors the prototype's DEFAULT_STAGES so a fresh DB starts with a sensible
 // buyers-agency pipeline. Runs once when the collection is empty.
@@ -71,8 +73,60 @@ async function migratePropertyStatuses(): Promise<void> {
   if (migrated > 0) console.log(`[seed] migrated ${migrated} property statuses to the new set`);
 }
 
+// Pretty labels for the built-in roles.
+const SYSTEM_ROLE_META: Record<SystemRole, { name: string; description: string }> = {
+  admin: { name: 'Admin', description: 'Full access, including user management.' },
+  manager: { name: 'Manager', description: 'Full access to operational data; no admin or integration controls.' },
+  staff: { name: 'Staff', description: 'View, create and edit operational data. No deletes, sends or admin areas.' },
+};
+
+/**
+ * Insert the built-in roles if they don't already exist. Insert-only — never
+ * overwrites an existing role, so super-admin permission edits survive reboots.
+ */
+async function seedRoles(): Promise<void> {
+  let inserted = 0;
+  for (const key of SYSTEM_ROLES) {
+    const exists = await Role.exists({ key });
+    if (exists) continue;
+    const meta = SYSTEM_ROLE_META[key];
+    await Role.create({
+      key,
+      name: meta.name,
+      description: meta.description,
+      permissions: DEFAULT_ROLE_PERMISSIONS[key],
+      isSystem: true,
+    });
+    inserted += 1;
+  }
+  if (inserted > 0) console.log(`[seed] inserted ${inserted} built-in roles`);
+}
+
+/**
+ * Ensure the configured super-admin account exists at the 'admin' role so they
+ * can sign in via OTP. (Permissions are overlaid to "all" at request time
+ * regardless of stored role; this just gives them a clean record.)
+ */
+async function ensureSuperAdmin(): Promise<void> {
+  const email = env.SUPER_ADMIN_EMAIL;
+  if (!email) return;
+  const existing = await User.findOne({ email });
+  if (existing) {
+    if (existing.get('role') !== 'admin') {
+      existing.set('role', 'admin');
+      await existing.save();
+      console.log(`[seed] promoted super admin ${email} to admin role`);
+    }
+    return;
+  }
+  await User.create({ email, name: email.split('@')[0], role: 'admin' });
+  console.log(`[seed] provisioned super admin user ${email}`);
+}
+
 export async function seedDefaults(): Promise<void> {
   await migratePropertyStatuses();
+  await seedRoles();
+  await ensureSuperAdmin();
 
   const count = await QualificationStage.estimatedDocumentCount();
   if (count > 0) return;

@@ -4,8 +4,12 @@ import { z } from 'zod';
 import { sendMail } from '../lib/mailer';
 import { EmailCampaign } from '../models';
 import { asyncHandler } from '../middleware/error';
+import { requirePermission } from '../lib/permissions';
 
 export const emailRouter = Router();
+
+// All outbound email requires the emails:send permission.
+emailRouter.use(requirePermission('emails:send'));
 
 // Guard against accidental or abusive mass-sending: cap blasts per IP per hour.
 const blastLimiter = rateLimit({

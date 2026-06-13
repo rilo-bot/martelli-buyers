@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useOffMarketStore } from '@/stores/offMarketStore';
 import { useAgentsStore } from '@/stores/agentsStore';
+import { usePermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +35,8 @@ export default function PropertiesPage() {
   const addOffMarket = useOffMarketStore((s) => s.addProperty);
   const toggleActive = useOffMarketStore((s) => s.toggleActive);
   const agents = useAgentsStore((s) => s.agents);
+  const { can } = usePermissions();
+  const canCreateProperty = can('properties:create');
 
   const [search, setSearch] = useState('');
   const [showAddOffMarket, setShowAddOffMarket] = useState(false);
@@ -94,10 +97,12 @@ export default function PropertiesPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Properties</h1>
           <p className="text-sm text-muted-foreground mt-1">Track deal-specific listings and manage your off-market property database.</p>
         </div>
-        <Button onClick={() => setShowAddOffMarket(true)} className="shadow-md shadow-primary/25 h-9">
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          Add Off-Market
-        </Button>
+        {canCreateProperty && (
+          <Button onClick={() => setShowAddOffMarket(true)} className="shadow-md shadow-primary/25 h-9">
+            <Plus className="mr-2 h-3.5 w-3.5" />
+            Add Off-Market
+          </Button>
+        )}
       </div>
 
       {/* Stats strip */}
@@ -209,7 +214,7 @@ export default function PropertiesPage() {
                 description={search
                   ? 'Try a different address or suburb.'
                   : 'Build your centralised off-market database to stop losing track of exclusive listings across spreadsheets.'}
-                action={!search && (
+                action={!search && canCreateProperty && (
                   <Button onClick={() => setShowAddOffMarket(true)}>
                     <Plus className="mr-2 h-4 w-4" />Add your first off-market property
                   </Button>

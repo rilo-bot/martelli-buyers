@@ -15,6 +15,7 @@ import { Plus, Search, Mail, Send, Edit, Star, Sparkles, AlertTriangle, Users } 
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { sendBlast } from '@/lib/email';
+import { usePermissions } from '@/lib/permissions';
 import { dealVariables, interpolate, unresolvedVariables, hasRecipientVars } from '@/lib/templates';
 import type { EmailTemplateCategory, AgentGeo } from '@/types';
 
@@ -48,6 +49,7 @@ export default function EmailsPage() {
   const recordSentCampaign = useEmailTemplatesStore((s) => s.recordSentCampaign);
   const agents = useAgentsStore((s) => s.agents);
   const deals = useDealsStore((s) => s.deals);
+  const { can } = usePermissions();
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -228,14 +230,18 @@ export default function EmailsPage() {
           <p className="text-sm text-muted-foreground mt-1">Reusable branded templates for every stage of the buyer journey.</p>
         </div>
         <div className="flex gap-2.5">
-          <Button variant="outline" onClick={openBlast} className="h-9 shadow-sm">
-            <Send className="mr-2 h-3.5 w-3.5" />
-            Agent Blast
-          </Button>
-          <Button onClick={openAdd} className="h-9 shadow-md shadow-primary/25">
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            New Template
-          </Button>
+          {can('emails:send') && (
+            <Button variant="outline" onClick={openBlast} className="h-9 shadow-sm">
+              <Send className="mr-2 h-3.5 w-3.5" />
+              Agent Blast
+            </Button>
+          )}
+          {can('emails:create') && (
+            <Button onClick={openAdd} className="h-9 shadow-md shadow-primary/25">
+              <Plus className="mr-2 h-3.5 w-3.5" />
+              New Template
+            </Button>
+          )}
         </div>
       </div>
 
@@ -375,9 +381,11 @@ export default function EmailsPage() {
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                 Send your first agent requirement blast to start reaching your network.
               </p>
-              <Button className="mt-5 shadow-md shadow-primary/20" onClick={openBlast}>
-                <Send className="mr-2 h-4 w-4" />Send Agent Blast
-              </Button>
+              {can('emails:send') && (
+                <Button className="mt-5 shadow-md shadow-primary/20" onClick={openBlast}>
+                  <Send className="mr-2 h-4 w-4" />Send Agent Blast
+                </Button>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border border-border/70 overflow-hidden shadow-sm">

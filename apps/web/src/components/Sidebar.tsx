@@ -1,43 +1,50 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
+import { usePermissions } from '@/lib/permissions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
-  Home, Star, Mail, ShieldCheck, UserCheck, Receipt, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
+  Home, Star, Mail, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-interface NavItem { to: string; label: string; icon: React.ElementType }
+interface NavItem { to: string; label: string; icon: React.ElementType; perm?: string }
 interface NavGroup { label: string; links: NavItem[] }
 
 const navGroups: NavGroup[] = [
   {
     label: 'Workspace',
-    links: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+    links: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, perm: 'dashboard:view' }],
   },
   {
     label: 'Pipeline',
     links: [
-      { to: '/leads', label: 'Leads', icon: Users },
-      { to: '/clients', label: 'Clients', icon: UserCheck },
-      { to: '/journeys', label: 'Buyer Journeys', icon: FileText },
-      { to: '/invoices', label: 'Invoices', icon: Receipt },
+      { to: '/leads', label: 'Leads', icon: Users, perm: 'leads:view' },
+      { to: '/clients', label: 'Clients', icon: UserCheck, perm: 'clients:view' },
+      { to: '/journeys', label: 'Buyer Journeys', icon: FileText, perm: 'journeys:view' },
+      { to: '/invoices', label: 'Invoices', icon: Receipt, perm: 'invoices:view' },
     ],
   },
   {
     label: 'Property',
     links: [
-      { to: '/properties', label: 'Properties', icon: Home },
-      { to: '/due-diligence', label: 'Due Diligence', icon: ShieldCheck },
+      { to: '/properties', label: 'Properties', icon: Home, perm: 'properties:view' },
+      { to: '/due-diligence', label: 'Due Diligence', icon: ShieldCheck, perm: 'dueDiligence:view' },
     ],
   },
   {
     label: 'Network',
     links: [
-      { to: '/agents', label: 'Agents', icon: Star },
-      { to: '/emails', label: 'Emails', icon: Mail },
+      { to: '/agents', label: 'Agents', icon: Star, perm: 'agents:view' },
+      { to: '/emails', label: 'Emails', icon: Mail, perm: 'emails:view' },
+    ],
+  },
+  {
+    label: 'Administration',
+    links: [
+      { to: '/team', label: 'Team', icon: UserCog, perm: 'team:view' },
     ],
   },
 ];
@@ -61,6 +68,12 @@ export function Sidebar() {
   const navigate = useNavigate();
   const isDark = useThemeStore((s) => s.isDark);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const { can } = usePermissions();
+
+  // Hide nav links the current role can't view; drop now-empty groups.
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, links: g.links.filter((l) => !l.perm || can(l.perm)) }))
+    .filter((g) => g.links.length > 0);
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
@@ -257,7 +270,7 @@ export function Sidebar() {
 
         {/* Grouped nav links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {navGroups.map((group, gi) => (
+          {visibleGroups.map((group, gi) => (
             <div key={group.label} className={cn(gi > 0 && 'mt-3')}>
               {/* Expanded: group eyebrow (hidden on desktop when collapsed) */}
               <div className={cn('px-3 pb-1.5', collapsed && 'lg:hidden')}>

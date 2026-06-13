@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error';
+import { requirePermission } from '../lib/permissions';
 import { AuditEvent, User } from '../models';
 
 export const timelineRouter = Router();
@@ -11,6 +12,7 @@ export const timelineRouter = Router();
  */
 timelineRouter.get(
   '/deal/:dealId',
+  requirePermission('journeys:view'),
   asyncHandler(async (req, res) => {
     const events = await AuditEvent.find({ dealId: req.params.dealId }).sort({ createdAt: -1 });
 

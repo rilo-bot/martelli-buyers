@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useLeadsStore } from '@/stores/leadsStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/lib/permissions';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
 import { getStageDotClass } from '@/pages/SettingsPage';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ export default function LeadsPage() {
   const currentUser = useAuthStore((s) => s.currentUser);
   const stages = useQualificationStagesStore((s) => s.stages);
   const convertToWon = useWonConversion();
+  const { can } = usePermissions();
 
   const sortedStages = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
 
@@ -127,9 +129,11 @@ export default function LeadsPage() {
         title="Leads"
         subtitle="Track and qualify your incoming buyer enquiries."
         actions={
-          <Button onClick={() => setShowAddDialog(true)} className="h-9">
-            <Plus className="mr-2 h-4 w-4" /> Add Lead
-          </Button>
+          can('leads:create') && (
+            <Button onClick={() => setShowAddDialog(true)} className="h-9">
+              <Plus className="mr-2 h-4 w-4" /> Add Lead
+            </Button>
+          )
         }
       />
 

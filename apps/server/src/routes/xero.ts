@@ -10,6 +10,7 @@ import {
 } from '../lib/xero';
 import { runInitialImport } from '../lib/xeroImport';
 import { syncClientToXero } from '../lib/xeroSync';
+import { requirePermission } from '../lib/permissions';
 
 export const xeroRouter = Router();
 
@@ -33,6 +34,9 @@ xeroRouter.get(
     });
   }),
 );
+
+// Everything past /status mutates the Xero integration — admin concern.
+xeroRouter.use(requirePermission('settings:manage'));
 
 /** GET /api/xero/connect — kick off OAuth (browser navigates here). */
 xeroRouter.get(

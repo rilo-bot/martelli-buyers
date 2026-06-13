@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { Invoice, DueDiligence, Deal } from '../models';
 import { asyncHandler } from '../middleware/error';
+import { requirePermission } from '../lib/permissions';
 import { sendMail } from '../lib/mailer';
 import { env, hasEmail } from '../env';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
@@ -26,6 +27,7 @@ function sendPdf(res: Response, buf: Buffer, filename: string): void {
 /** GET /api/documents/invoice/:id.pdf — download a GST invoice PDF. */
 documentsRouter.get(
   '/invoice/:id.pdf',
+  requirePermission('invoices:view'),
   asyncHandler(async (req, res) => {
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
@@ -43,6 +45,7 @@ documentsRouter.get(
 /** POST /api/documents/invoice/:id/email — email the invoice PDF to the client. */
 documentsRouter.post(
   '/invoice/:id/email',
+  requirePermission('invoices:send'),
   asyncHandler(async (req, res) => {
     if (!hasEmail) {
       res.status(503).json({ error: 'Email is not configured on the server.' });
@@ -71,6 +74,7 @@ documentsRouter.post(
 /** POST /api/documents/invoice/:id/remind — re-email an outstanding invoice as a reminder. */
 documentsRouter.post(
   '/invoice/:id/remind',
+  requirePermission('invoices:send'),
   asyncHandler(async (req, res) => {
     if (!hasEmail) {
       res.status(503).json({ error: 'Email is not configured on the server.' });
@@ -108,6 +112,7 @@ documentsRouter.post(
 /** GET /api/documents/dd/:id/report.pdf — download the DD report PDF. */
 documentsRouter.get(
   '/dd/:id/report.pdf',
+  requirePermission('dueDiligence:view'),
   asyncHandler(async (req, res) => {
     const record = await DueDiligence.findById(req.params.id);
     if (!record) {
@@ -129,6 +134,7 @@ documentsRouter.get(
 /** GET /api/documents/agreement/:dealId.pdf — staff preview of the agreement. */
 documentsRouter.get(
   '/agreement/:dealId.pdf',
+  requirePermission('journeys:view'),
   asyncHandler(async (req, res) => {
     const deal = await Deal.findById(req.params.dealId);
     if (!deal) {
@@ -143,6 +149,7 @@ documentsRouter.get(
 /** POST /api/documents/agreement/:dealId/send — create a sign link + email the client. */
 documentsRouter.post(
   '/agreement/:dealId/send',
+  requirePermission('journeys:edit'),
   asyncHandler(async (req, res) => {
     const deal = await Deal.findById(req.params.dealId);
     if (!deal) {

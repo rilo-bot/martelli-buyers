@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { Settings2, Plug, ClipboardList, type LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
+import { usePermissions } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { WorkspaceSection } from '@/pages/settings/WorkspaceSection';
 import { IntegrationsSection } from '@/pages/settings/IntegrationsSection';
@@ -9,18 +10,21 @@ import { LeadSettings } from '@/pages/settings/LeadSettings';
 // Re-exported for back-compat: several Leads pages import these from here.
 export { getStagePillClass, getStageDotClass } from '@/pages/settings/stageColors';
 
-interface Section { id: string; label: string; desc: string; icon: LucideIcon; render: () => React.ReactNode }
+interface Section { id: string; label: string; desc: string; icon: LucideIcon; perm?: string; render: () => React.ReactNode }
 
 const SECTIONS: Section[] = [
   { id: 'workspace', label: 'Workspace', desc: 'Profile & appearance', icon: Settings2, render: () => <WorkspaceSection /> },
-  { id: 'integrations', label: 'Integrations', desc: 'Xero, email, storage, AI', icon: Plug, render: () => <IntegrationsSection /> },
-  { id: 'leads', label: 'Lead Settings', desc: 'Qualification stages', icon: ClipboardList, render: () => <LeadSettings /> },
+  { id: 'integrations', label: 'Integrations', desc: 'Xero, email, storage, AI', icon: Plug, perm: 'settings:manage', render: () => <IntegrationsSection /> },
+  { id: 'leads', label: 'Lead Settings', desc: 'Qualification stages', icon: ClipboardList, perm: 'settings:manage', render: () => <LeadSettings /> },
 ];
 
 export default function SettingsPage() {
   const [params, setParams] = useSearchParams();
+  const { can } = usePermissions();
+  // Workspace (profile/appearance) is universal; admin-only sections require settings:manage.
+  const sections = SECTIONS.filter((s) => !s.perm || can(s.perm));
   const requested = params.get('section');
-  const active = SECTIONS.find((s) => s.id === requested) ?? SECTIONS[0];
+  const active = sections.find((s) => s.id === requested) ?? sections[0];
 
   const select = (id: string) => {
     const next = new URLSearchParams(params);
@@ -36,7 +40,7 @@ export default function SettingsPage() {
         {/* Sub-nav */}
         <aside className="shrink-0 lg:w-56">
           <nav className="flex gap-1 overflow-x-auto pb-1 lg:sticky lg:top-20 lg:flex-col lg:overflow-visible lg:pb-0">
-            {SECTIONS.map((s) => {
+            {sections.map((s) => {
               const isActive = s.id === active.id;
               return (
                 <button

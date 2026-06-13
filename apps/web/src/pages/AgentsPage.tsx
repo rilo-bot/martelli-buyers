@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAgentsStore } from '@/stores/agentsStore';
+import { usePermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +76,7 @@ export default function AgentsPage() {
   const updateAgent = useAgentsStore((s) => s.updateAgent);
   const deleteAgent = useAgentsStore((s) => s.deleteAgent);
   const togglePreferred = useAgentsStore((s) => s.togglePreferred);
+  const { can } = usePermissions();
 
   const [search, setSearch] = useState('');
   const [geoFilter, setGeoFilter] = useState('');
@@ -196,10 +198,12 @@ export default function AgentsPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Agent Database</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage your agent network with geographic segmentation and preferred tagging.</p>
         </div>
-        <Button onClick={openAdd} className="shadow-md shadow-primary/25 h-9">
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          Add Agent
-        </Button>
+        {can('agents:create') && (
+          <Button onClick={openAdd} className="shadow-md shadow-primary/25 h-9">
+            <Plus className="mr-2 h-3.5 w-3.5" />
+            Add Agent
+          </Button>
+        )}
       </div>
 
       {/* Stats row — summary + geo breakdown */}

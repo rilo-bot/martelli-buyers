@@ -4,6 +4,7 @@ import { useClientsStore } from '@/stores/clientsStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useLeadsStore } from '@/stores/leadsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +35,7 @@ export default function ClientsPage() {
   const deals = useDealsStore((s) => s.deals);
   const leads = useLeadsStore((s) => s.leads);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const { can } = usePermissions();
 
   const [search, setSearch] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -123,9 +125,11 @@ export default function ClientsPage() {
         title="Clients"
         subtitle="All buyer clients, linked to their leads and active deals."
         actions={
-          <Button onClick={() => setShowAddDialog(true)} className="h-9 shadow-sm shadow-primary/20">
-            <Plus className="mr-2 h-4 w-4" /> Add Client
-          </Button>
+          can('clients:create') && (
+            <Button onClick={() => setShowAddDialog(true)} className="h-9 shadow-sm shadow-primary/20">
+              <Plus className="mr-2 h-4 w-4" /> Add Client
+            </Button>
+          )
         }
       />
 

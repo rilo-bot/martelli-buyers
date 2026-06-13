@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,8 @@ export default function DealsPage() {
   const addDeal = useDealsStore((s) => s.addDeal);
   const clients = useClientsStore((s) => s.clients);
   const addDealToClient = useClientsStore((s) => s.addDealToClient);
+  const { can } = usePermissions();
+  const canCreate = can('journeys:create');
   const currentUser = useAuthStore((s) => s.currentUser);
 
   const [search, setSearch] = useState('');
@@ -128,10 +131,12 @@ export default function DealsPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Buyer Journeys</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage every buyer journey from qualification to settlement.</p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} className="shadow-md shadow-primary/25 h-9">
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          New Buyer Journey
-        </Button>
+        {canCreate && (
+          <Button onClick={() => setShowAddDialog(true)} className="shadow-md shadow-primary/25 h-9">
+            <Plus className="mr-2 h-3.5 w-3.5" />
+            New Buyer Journey
+          </Button>
+        )}
       </div>
 
       {/* Stage pipeline — visual bar */}
@@ -198,7 +203,7 @@ export default function DealsPage() {
           <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
             {stageFilter ? 'Try a different stage filter.' : 'Create your first buyer journey or convert a qualified lead.'}
           </p>
-          {!stageFilter && (
+          {!stageFilter && canCreate && (
             <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => setShowAddDialog(true)}>
               <Plus className="mr-2 h-4 w-4" />Create your first buyer journey
             </Button>

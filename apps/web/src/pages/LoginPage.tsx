@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,12 +18,19 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const requestOtp = useAuthStore((s) => s.requestOtp);
   const verifyOtp = useAuthStore((s) => s.verifyOtp);
+  const currentUser = useAuthStore((s) => s.currentUser);
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // If a session is already (or becomes) valid — e.g. a background reconnect
+  // restored it after the API restarted — skip the login form entirely.
+  useEffect(() => {
+    if (currentUser) navigate('/dashboard', { replace: true });
+  }, [currentUser, navigate]);
 
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,30 +289,11 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* Divider */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-[11px] text-muted-foreground/60 tracking-wide">or</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          {/* Sign up link */}
-          <div className="rounded-xl border border-border bg-muted/40 px-6 py-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">New to Martelli?</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Create your team workspace</p>
-            </div>
-            <Link
-              to="/signup"
-              className={cn(
-                'inline-flex items-center gap-1.5 text-sm font-semibold text-primary',
-                'hover:gap-2.5 transition-all duration-150'
-              )}
-            >
-              Get started
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
+          {/* Invite-only: no public signup. New users are added by an admin and
+              receive an invite link by email. */}
+          <p className="text-center text-[11px] text-muted-foreground/60">
+            Access is invite-only. Need an account? Ask your administrator.
+          </p>
         </div>
       </div>
     </div>

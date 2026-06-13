@@ -31,12 +31,20 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
 /** Core fetch wrapper: sends cookies, JSON-encodes the body, throws ApiError on failure. */
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(apiUrl(path), {
-    method,
-    credentials: 'include',
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(apiUrl(path), {
+      method,
+      credentials: 'include',
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    // fetch only rejects when the server is unreachable (down/restarting, DNS,
+    // offline). Surface as a status-0 ApiError so callers can tell this apart
+    // from a real 401 — a restart must not look like being signed out.
+    throw new ApiError(0, 'Could not reach the server. Check your connection and try again.')
+  }
 
   if (!res.ok) {
     let message = res.statusText
@@ -56,7 +64,12 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
 
 /** GET a binary response (e.g. a generated PDF) as a Blob, sending cookies. */
 export async function fetchBlob(path: string): Promise<Blob> {
-  const res = await fetch(apiUrl(path), { method: 'GET', credentials: 'include' })
+  let res: Response
+  try {
+    res = await fetch(apiUrl(path), { method: 'GET', credentials: 'include' })
+  } catch {
+    throw new ApiError(0, 'Could not reach the server. Check your connection and try again.')
+  }
   if (!res.ok) {
     let message = res.statusText
     try {

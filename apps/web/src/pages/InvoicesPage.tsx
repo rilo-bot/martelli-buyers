@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useInvoicesStore } from '@/stores/invoicesStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useConfigStore } from '@/stores/configStore';
+import { usePermissions } from '@/lib/permissions';
 import { downloadInvoicePdf } from '@/lib/documents';
 import type { Invoice, InvoiceStatus } from '@/types';
 
@@ -44,6 +45,8 @@ export default function InvoicesPage() {
   const remindInvoice = useInvoicesStore((s) => s.remindInvoice);
   const deals = useDealsStore((s) => s.deals);
   const hasEmail = useConfigStore((s) => s.hasEmail);
+  const { can } = usePermissions();
+  const canSend = can('invoices:send');
 
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -180,7 +183,7 @@ export default function InvoicesPage() {
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Download PDF" onClick={() => handleDownload(inv)}>
                             <Download className="h-3.5 w-3.5" />
                           </Button>
-                          {hasEmail && inv.status !== 'paid' && (
+                          {hasEmail && canSend && inv.status !== 'paid' && (
                             <Button variant="ghost" size="icon" className="h-7 w-7" title={st === 'draft' ? 'Email invoice' : 'Send reminder'}
                               disabled={busyId === inv.id} onClick={() => handleEmailOrRemind(inv)}>
                               {busyId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : st === 'draft' ? <Mail className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
