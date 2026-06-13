@@ -1,4 +1,5 @@
 import { request, fetchBlob, triggerDownload } from './api'
+import type { Invoice } from '@/types'
 
 /** Download a generated PDF from the server to the user's device. */
 async function downloadPdf(path: string, filename: string): Promise<void> {
@@ -14,6 +15,11 @@ export function downloadInvoicePdf(id: string, invoiceNumber?: string): Promise<
 
 export function emailInvoice(id: string): Promise<{ ok: boolean; status: string }> {
   return request('POST', `/api/documents/invoice/${id}/email`)
+}
+
+/** Re-email an outstanding invoice as a reminder; returns the updated invoice. */
+export function remindInvoice(id: string): Promise<Invoice> {
+  return request('POST', `/api/documents/invoice/${id}/remind`)
 }
 
 /* ── Due diligence ────────────────────────────────────────────────────── */

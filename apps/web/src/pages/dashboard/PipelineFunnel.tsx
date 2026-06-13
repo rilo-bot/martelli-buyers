@@ -31,7 +31,7 @@ export function PipelineFunnel({ stages }: { stages: FunnelStage[] }) {
               // Funnel depth → progressively lighter blue.
               const opacity = 1 - i * 0.11;
               return (
-                <Link key={st.stage} to="/deals" className="group block">
+                <Link key={st.stage} to="/journeys" className="group block">
                   <div className="mb-1 flex items-center justify-between text-[12px]">
                     <span className="font-medium text-foreground transition-colors group-hover:text-primary">{st.label}</span>
                     <span className="tabular-nums text-muted-foreground">

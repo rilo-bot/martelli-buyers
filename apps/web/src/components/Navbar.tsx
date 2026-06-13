@@ -14,7 +14,7 @@ const navLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/clients', label: 'Clients', icon: UserCheck },
-  { to: '/deals', label: 'Deals', icon: FileText },
+  { to: '/journeys', label: 'Buyer Journeys', icon: FileText },
   { to: '/properties', label: 'Properties', icon: Home },
   { to: '/agents', label: 'Agents', icon: Star },
   { to: '/emails', label: 'Emails', icon: Mail },

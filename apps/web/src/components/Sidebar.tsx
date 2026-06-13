@@ -4,7 +4,7 @@ import { useThemeStore } from '@/stores/themeStore';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
-  Home, Star, Mail, ShieldCheck, UserCheck, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
+  Home, Star, Mail, ShieldCheck, UserCheck, Receipt, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,8 @@ const navGroups: NavGroup[] = [
     links: [
       { to: '/leads', label: 'Leads', icon: Users },
       { to: '/clients', label: 'Clients', icon: UserCheck },
-      { to: '/deals', label: 'Campaigns', icon: FileText },
+      { to: '/journeys', label: 'Buyer Journeys', icon: FileText },
+      { to: '/invoices', label: 'Invoices', icon: Receipt },
     ],
   },
   {

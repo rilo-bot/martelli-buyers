@@ -213,6 +213,62 @@ const DealSchema = new Schema(
   baseOpts,
 );
 
+const OfferSchema = new Schema(
+  {
+    dealId: { type: String, default: '', index: true },
+    propertyId: { type: String, default: '' },
+    amount: { type: Number, default: 0 },
+    depositAmount: { type: Number, default: 0 },
+    dateSubmitted: { type: String, default: '' },
+    conditions: { type: String, default: '' },
+    status: {
+      type: String,
+      enum: ['draft', 'submitted', 'negotiating', 'accepted', 'declined', 'withdrawn'],
+      default: 'draft',
+    },
+    counterOffer: { type: Number, default: 0 },
+    outcome: { type: String, default: '' },
+    fileUrls: { type: [String], default: [] },
+    notes: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+const TaskSchema = new Schema(
+  {
+    dealId: { type: String, default: '', index: true },
+    propertyId: { type: String, default: '' },
+    title: { type: String, default: '' },
+    type: {
+      type: String,
+      enum: ['call', 'viewing', 'lim', 'builders_report', 'finance', 'agreement', 'other'],
+      default: 'other',
+    },
+    assignedTo: { type: String, default: '' },
+    dueDate: { type: String, default: '' },
+    completed: { type: Boolean, default: false },
+    completedAt: { type: String, default: '' },
+    priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
+    notes: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+const PurchaseSchema = new Schema(
+  {
+    dealId: { type: String, default: '', index: true },
+    propertyId: { type: String, default: '' },
+    purchasePrice: { type: Number, default: 0 },
+    depositPaid: { type: Number, default: 0 },
+    unconditionalDate: { type: String, default: '' },
+    settlementDate: { type: String, default: '' },
+    status: { type: String, enum: ['pending', 'unconditional', 'settled'], default: 'pending' },
+    solicitor: { type: String, default: '' },
+    notes: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
 const PropertySchema = new Schema(
   {
     dealId: { type: String, default: '' },
@@ -227,8 +283,8 @@ const PropertySchema = new Schema(
     propertyType: { type: String, default: '' },
     status: {
       type: String,
-      enum: ['active', 'shortlisted', 'inspected', 'passed', 'offer_made', 'purchased'],
-      default: 'active',
+      enum: ['suggested', 'interested', 'viewed', 'shortlisted', 'rejected', 'offer_placed', 'purchased'],
+      default: 'suggested',
     },
     notes: { type: String, default: '' },
     clientVisibleNotes: { type: String, default: '' },
@@ -329,6 +385,9 @@ const InvoiceSchema = new Schema(
     dueDate: { type: String, default: '' },
     paidDate: { type: String, default: '' },
     description: { type: String, default: '' },
+    // Overdue-reminder tracking (manual button + automated scheduler).
+    lastReminderAt: { type: String, default: '' },
+    reminderCount: { type: Number, default: 0 },
   },
   baseOpts,
 );
@@ -351,6 +410,24 @@ const XeroConnectionSchema = new Schema(
     importedClients: { type: Number, default: 0 },
     linkedInvoices: { type: Number, default: 0 },
     importError: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+// Append-only event log for the Buyer Journey timeline + audit trail. Written
+// server-side only (never a CRUD resource); read via /api/timeline.
+const AuditEventSchema = new Schema(
+  {
+    entityType: { type: String, default: '' },
+    entityId: { type: String, default: '', index: true },
+    dealId: { type: String, default: '', index: true },
+    action: { type: String, default: '' },
+    field: { type: String, default: '' },
+    fromValue: { type: String, default: '' },
+    toValue: { type: String, default: '' },
+    actorId: { type: String, default: '' },
+    actorName: { type: String, default: '' },
+    at: { type: String, default: '' },
   },
   baseOpts,
 );
@@ -426,6 +503,9 @@ export const OtpToken = model('OtpToken', OtpTokenSchema);
 export const Lead = model('Lead', LeadSchema);
 export const Deal = model('Deal', DealSchema);
 export const Client = model('Client', ClientSchema);
+export const Offer = model('Offer', OfferSchema);
+export const Task = model('Task', TaskSchema);
+export const Purchase = model('Purchase', PurchaseSchema);
 export const Property = model('Property', PropertySchema);
 export const OffMarketProperty = model('OffMarketProperty', OffMarketPropertySchema);
 export const Agent = model('Agent', AgentSchema);
@@ -439,6 +519,8 @@ export const QualificationStage = model('QualificationStage', QualificationStage
 export const ReferralPartner = model('ReferralPartner', ReferralPartnerSchema);
 // Singleton — not a CRUD resource (no entry in RESOURCES).
 export const XeroConnection = model('XeroConnection', XeroConnectionSchema);
+// Append-only audit/timeline log — not a CRUD resource (read-only via /api/timeline).
+export const AuditEvent = model('AuditEvent', AuditEventSchema);
 
 export type AnyModel = mongoose.Model<any>;
 
@@ -447,6 +529,9 @@ export const RESOURCES: Record<string, AnyModel> = {
   leads: Lead,
   deals: Deal,
   clients: Client,
+  offers: Offer,
+  tasks: Task,
+  purchases: Purchase,
   properties: Property,
   'off-market': OffMarketProperty,
   agents: Agent,

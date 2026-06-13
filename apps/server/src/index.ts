@@ -6,6 +6,7 @@ import cors from 'cors';
 import { env, hasEmail, hasAi, hasS3, hasXero } from './env';
 import { connectDb } from './db';
 import { seedDefaults } from './seed';
+import { startInvoiceReminderScheduler } from './lib/invoiceReminders';
 import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
 import { aiRouter } from './routes/ai';
@@ -14,6 +15,7 @@ import { documentsRouter } from './routes/documents';
 import { signRouter } from './routes/sign';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
+import { timelineRouter } from './routes/timeline';
 import { xeroRouter } from './routes/xero';
 import { xeroWebhookHandler } from './routes/xeroWebhook';
 import { requireAuth } from './middleware/auth';
@@ -98,6 +100,9 @@ app.use('/api/xero', xeroRouter);
 // generic CRUD router so /leads/:id/win resolves to this handler.
 app.use('/api/leads', leadsRouter);
 
+// Read-only Buyer Journey timeline / audit events.
+app.use('/api/timeline', timelineRouter);
+
 // Generic CRUD for every domain resource.
 for (const [resource, model] of Object.entries(RESOURCES)) {
   app.use(`/api/${resource}`, crudRouter(resource, model));
@@ -108,6 +113,7 @@ app.use(errorHandler);
 async function start() {
   await connectDb();
   await seedDefaults();
+  startInvoiceReminderScheduler();
   app.listen(env.PORT, () => {
     console.log(`[server] listening on http://localhost:${env.PORT}`);
     console.log(`[server] CORS origin: ${env.CLIENT_ORIGIN}`);

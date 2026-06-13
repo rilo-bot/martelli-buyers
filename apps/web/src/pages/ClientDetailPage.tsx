@@ -153,12 +153,12 @@ function CampaignsListSection({ deals }: { deals: Deal[] }) {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
-            Campaigns
+            Buyer Journeys
             <span className="text-muted-foreground font-normal text-sm">({deals.length})</span>
           </CardTitle>
           {deals.length > 0 && (
             <Button asChild variant="ghost" size="sm" className="text-xs h-7">
-              <Link to="/deals">View all campaigns</Link>
+              <Link to="/journeys">View all journeys</Link>
             </Button>
           )}
         </div>
@@ -199,9 +199,9 @@ function CampaignsListSection({ deals }: { deals: Deal[] }) {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/8 border border-dashed border-primary/30 mb-3">
               <FileText className="h-6 w-6 text-primary/40" />
             </div>
-            <p className="text-sm font-medium">No campaigns yet</p>
+            <p className="text-sm font-medium">No buyer journeys yet</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Campaigns are created when a lead is marked as Won.
+              Buyer journeys are created when a lead is marked as Won.
             </p>
           </div>
         ) : filtered.length === 0 ? (
@@ -218,7 +218,7 @@ function CampaignsListSection({ deals }: { deals: Deal[] }) {
         ) : (
           <div className="rounded-lg border border-border/60 overflow-hidden">
             <div className="hidden sm:grid grid-cols-[1fr_120px_130px_36px] gap-3 px-4 py-2 bg-muted/40 border-b border-border/60">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Campaign</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Journey</span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Budget</span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Stage</span>
               <span />
@@ -227,7 +227,7 @@ function CampaignsListSection({ deals }: { deals: Deal[] }) {
               {filtered.map((deal) => (
                 <Link
                   key={deal.id}
-                  to={`/deals/${deal.id}`}
+                  to={`/journeys/${deal.id}`}
                   className="grid grid-cols-1 sm:grid-cols-[1fr_120px_130px_36px] gap-x-3 gap-y-1 px-4 py-3 hover:bg-muted/30 transition-colors group items-center"
                 >
                   <div className="min-w-0">
@@ -605,13 +605,13 @@ export default function ClientDetailPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="border-border/60">
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Total Campaigns</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Total Journeys</p>
             <p className="text-2xl font-bold mt-1 tabular-nums">{clientDeals.length}</p>
           </CardContent>
         </Card>
         <Card className="border-border/60">
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Active Campaigns</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Active Journeys</p>
             <p className="text-2xl font-bold mt-1 tabular-nums">{activeDeals.length}</p>
           </CardContent>
         </Card>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../middleware/error';
 import { keyFromUrl, deleteObject, hasS3 } from '../lib/s3';
 import { syncClientToXero, syncInvoiceToXero } from '../lib/xeroSync';
+import { recordEvent } from '../lib/audit';
 import {
   type AnyModel,
   Property,
@@ -14,6 +15,9 @@ import {
   Lead,
   Deal,
   Client,
+  Offer,
+  Task,
+  Purchase,
 } from '../models';
 
 // Fields the server owns — never accept them from the client on write.
@@ -44,11 +48,20 @@ async function deleteMedia(urls: string[]): Promise<void> {
  */
 const CASCADES: Record<string, (id: string) => Promise<void>> = {
   async deals(id) {
-    // Reclaim S3 media for every property on the deal before they're removed.
-    const props = await Property.find({ dealId: id }).select('photos').lean();
-    await deleteMedia(props.flatMap((p: { photos?: string[] }) => p.photos ?? []));
+    // Reclaim S3 media for every property + offer on the deal before removal.
+    const [props, offers] = await Promise.all([
+      Property.find({ dealId: id }).select('photos').lean(),
+      Offer.find({ dealId: id }).select('fileUrls').lean(),
+    ]);
+    await deleteMedia([
+      ...props.flatMap((p: { photos?: string[] }) => p.photos ?? []),
+      ...offers.flatMap((o: { fileUrls?: string[] }) => o.fileUrls ?? []),
+    ]);
     await Promise.all([
       Property.deleteMany({ dealId: id }),
+      Offer.deleteMany({ dealId: id }),
+      Task.deleteMany({ dealId: id }),
+      Purchase.deleteMany({ dealId: id }),
       Invoice.deleteMany({ dealId: id }),
       DueDiligence.deleteMany({ dealId: id }),
       EmailCampaign.deleteMany({ dealId: id }),
@@ -64,6 +77,10 @@ const CASCADES: Record<string, (id: string) => Promise<void>> = {
       Lead.updateMany({ clientId: id }, { $set: { clientId: '' } }),
       Deal.updateMany({ clientId: id }, { $set: { clientId: '' } }),
     ]);
+  },
+  async offers(id) {
+    const offer = await Offer.findById(id).select('fileUrls').lean();
+    await deleteMedia(((offer as { fileUrls?: string[] })?.fileUrls) ?? []);
   },
   async leads(id) {
     await Promise.all([
@@ -142,6 +159,74 @@ const AFTER_UPDATE: Record<
   invoices: (_id, _body, doc) => syncInvoiceToXero(doc),
 };
 
+// Resources whose changes are recorded on the Buyer Journey timeline.
+const AUDITED = new Set(['deals', 'offers', 'tasks', 'purchases']);
+
+/** Record a create event. Actor name is resolved by the /api/timeline read route. */
+async function auditCreate(resource: string, doc: Doc, actorId: string): Promise<void> {
+  const actor = { id: actorId, name: '' };
+  if (resource === 'offers') {
+    await recordEvent({
+      entityType: 'offer', entityId: String(doc._id), dealId: doc.get('dealId'),
+      action: 'offer_created', toValue: doc.get('status'), actor,
+    });
+  } else if (resource === 'tasks') {
+    await recordEvent({
+      entityType: 'task', entityId: String(doc._id), dealId: doc.get('dealId'),
+      action: 'task_created', toValue: doc.get('title'), actor,
+    });
+  } else if (resource === 'purchases') {
+    await recordEvent({
+      entityType: 'purchase', entityId: String(doc._id), dealId: doc.get('dealId'),
+      action: 'purchase_created', toValue: doc.get('status'), actor,
+    });
+  }
+}
+
+/** Record from→to transitions on an update (deal stage/agreement, offer/purchase status, task completion). */
+async function auditUpdate(resource: string, before: Doc, after: Doc, actorId: string): Promise<void> {
+  const actor = { id: actorId, name: '' };
+  if (resource === 'deals') {
+    const id = String(after._id);
+    if (after.get('stage') !== before.get('stage')) {
+      await recordEvent({
+        entityType: 'deal', entityId: id, dealId: id, action: 'stage_changed', field: 'stage',
+        fromValue: before.get('stage'), toValue: after.get('stage'), actor,
+      });
+    }
+    if (after.get('agreementStatus') !== before.get('agreementStatus')) {
+      await recordEvent({
+        entityType: 'deal', entityId: id, dealId: id, action: 'agreement_status_changed',
+        field: 'agreementStatus', fromValue: before.get('agreementStatus'),
+        toValue: after.get('agreementStatus'), actor,
+      });
+    }
+  } else if (resource === 'offers') {
+    if (after.get('status') !== before.get('status')) {
+      await recordEvent({
+        entityType: 'offer', entityId: String(after._id), dealId: after.get('dealId'),
+        action: 'offer_status_changed', field: 'status', fromValue: before.get('status'),
+        toValue: after.get('status'), actor,
+      });
+    }
+  } else if (resource === 'tasks') {
+    if (!before.get('completed') && after.get('completed')) {
+      await recordEvent({
+        entityType: 'task', entityId: String(after._id), dealId: after.get('dealId'),
+        action: 'task_completed', toValue: after.get('title'), actor,
+      });
+    }
+  } else if (resource === 'purchases') {
+    if (after.get('status') !== before.get('status')) {
+      await recordEvent({
+        entityType: 'purchase', entityId: String(after._id), dealId: after.get('dealId'),
+        action: 'purchase_status_changed', field: 'status', fromValue: before.get('status'),
+        toValue: after.get('status'), actor,
+      });
+    }
+  }
+}
+
 /** Build a REST CRUD router for one Mongoose model. */
 export function crudRouter(resource: string, modelRef: AnyModel): Router {
   const router = Router();
@@ -170,6 +255,7 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
     '/',
     asyncHandler(async (req, res) => {
       const doc = await modelRef.create(sanitize(req.body ?? {}));
+      if (AUDITED.has(resource)) await auditCreate(resource, doc, req.session.userId ?? '');
       const afterCreate = AFTER_CREATE[resource];
       if (afterCreate) {
         await afterCreate(doc);
@@ -186,6 +272,8 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
     '/:id',
     asyncHandler(async (req, res) => {
       const patch = sanitize(req.body ?? {});
+      // Capture the pre-update doc when this resource records timeline events.
+      const before = AUDITED.has(resource) ? await modelRef.findById(req.params.id) : null;
       const doc = await modelRef.findByIdAndUpdate(req.params.id, patch, {
         new: true,
         runValidators: true,
@@ -194,6 +282,7 @@ export function crudRouter(resource: string, modelRef: AnyModel): Router {
         res.status(404).json({ error: 'Not found' });
         return;
       }
+      if (before) await auditUpdate(resource, before, doc, req.session.userId ?? '');
       const afterUpdate = AFTER_UPDATE[resource];
       if (afterUpdate) {
         await afterUpdate(req.params.id, patch, doc);

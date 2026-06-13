@@ -19,11 +19,12 @@ import { cn } from '@/lib/utils';
 import { isVideoUrl } from '@/lib/upload';
 
 const PROP_STATUS_CONFIG: Record<string, { pill: string; dot: string }> = {
-  active: { pill: 'bg-primary/8 text-primary border-primary/20', dot: 'bg-primary' },
-  shortlisted: { pill: 'bg-amber-500/8 text-amber-700 dark:text-amber-400 border-amber-500/20', dot: 'bg-amber-500' },
-  inspected: { pill: 'bg-violet-500/8 text-violet-700 dark:text-violet-400 border-violet-500/20', dot: 'bg-violet-500' },
-  passed: { pill: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' },
-  offer_made: { pill: 'bg-orange-500/8 text-orange-700 dark:text-orange-400 border-orange-500/20', dot: 'bg-orange-500' },
+  suggested: { pill: 'bg-primary/8 text-primary border-primary/20', dot: 'bg-primary' },
+  interested: { pill: 'bg-cyan-500/8 text-cyan-700 dark:text-cyan-400 border-cyan-500/20', dot: 'bg-cyan-500' },
+  viewed: { pill: 'bg-amber-500/8 text-amber-700 dark:text-amber-400 border-amber-500/20', dot: 'bg-amber-500' },
+  shortlisted: { pill: 'bg-violet-500/8 text-violet-700 dark:text-violet-400 border-violet-500/20', dot: 'bg-violet-500' },
+  rejected: { pill: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' },
+  offer_placed: { pill: 'bg-orange-500/8 text-orange-700 dark:text-orange-400 border-orange-500/20', dot: 'bg-orange-500' },
   purchased: { pill: 'bg-emerald-500/8 text-emerald-700 dark:text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-500' },
 };
 
@@ -140,17 +141,17 @@ export default function PropertiesPage() {
               title={search ? 'No matching properties' : 'No deal properties yet'}
               description={search
                 ? 'Try a different address or suburb.'
-                : 'Properties are added when you track them against a deal. Visit a deal to add properties.'}
+                : 'Properties are added when you track them against a buyer journey. Open a journey to add properties.'}
               action={!search && (
                 <Button asChild variant="outline">
-                  <Link to="/deals"><ArrowRight className="mr-2 h-4 w-4" />Go to Deals</Link>
+                  <Link to="/journeys"><ArrowRight className="mr-2 h-4 w-4" />Go to Buyer Journeys</Link>
                 </Button>
               )}
             />
           ) : (
             <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" step={0.04}>
               {filteredProperties.map((prop) => {
-                const config = PROP_STATUS_CONFIG[prop.status] ?? PROP_STATUS_CONFIG['active'];
+                const config = PROP_STATUS_CONFIG[prop.status] ?? PROP_STATUS_CONFIG['suggested'];
                 const cover = (prop.photos ?? []).find((u) => !isVideoUrl(u));
                 return (
                   <StaggerItem key={prop.id}>

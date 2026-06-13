@@ -1,4 +1,4 @@
-import { QualificationStage } from './models';
+import { QualificationStage, Property } from './models';
 
 // Mirrors the prototype's DEFAULT_STAGES so a fresh DB starts with a sensible
 // buyers-agency pipeline. Runs once when the collection is empty.
@@ -53,7 +53,27 @@ const DEFAULT_STAGES = [
   },
 ];
 
+// Remap legacy property statuses to the new Buyer-Journey set. Idempotent —
+// only matches the old values, so it's a no-op once everything is migrated.
+const PROPERTY_STATUS_MIGRATION: Record<string, string> = {
+  active: 'suggested',
+  inspected: 'viewed',
+  passed: 'rejected',
+  offer_made: 'offer_placed',
+};
+
+async function migratePropertyStatuses(): Promise<void> {
+  let migrated = 0;
+  for (const [from, to] of Object.entries(PROPERTY_STATUS_MIGRATION)) {
+    const res = await Property.updateMany({ status: from }, { $set: { status: to } });
+    migrated += res.modifiedCount ?? 0;
+  }
+  if (migrated > 0) console.log(`[seed] migrated ${migrated} property statuses to the new set`);
+}
+
 export async function seedDefaults(): Promise<void> {
+  await migratePropertyStatuses();
+
   const count = await QualificationStage.estimatedDocumentCount();
   if (count > 0) return;
   await QualificationStage.insertMany(DEFAULT_STAGES);

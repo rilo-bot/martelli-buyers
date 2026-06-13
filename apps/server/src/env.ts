@@ -38,6 +38,14 @@ export const env = {
     // Optional CDN/custom domain; defaults to the bucket's regional URL.
     publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '',
   },
+  REMINDERS: {
+    // Automated overdue-invoice reminders (only run when email is configured).
+    // Days between reminders for one invoice; max reminders per invoice; how
+    // often the scheduler scans.
+    intervalDays: Number(process.env.INVOICE_REMINDER_INTERVAL_DAYS ?? 3),
+    max: Number(process.env.INVOICE_REMINDER_MAX ?? 3),
+    scanHours: Number(process.env.INVOICE_REMINDER_SCAN_HOURS ?? 12),
+  },
   XERO: {
     // OAuth 2.0 app credentials. Until both are set, "Send to Xero" stays
     // gated ("Not configured") in the UI.

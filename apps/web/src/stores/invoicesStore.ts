@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { resource } from '@/lib/api';
-import { emailInvoice as emailInvoiceApi } from '@/lib/documents';
+import { emailInvoice as emailInvoiceApi, remindInvoice as remindInvoiceApi } from '@/lib/documents';
 import type { Invoice, InvoiceStatus } from '@/types';
 
 const api = resource<Invoice>('invoices');
@@ -16,6 +16,8 @@ interface InvoicesState {
   updateStatus: (id: string, status: InvoiceStatus) => Promise<void>;
   getInvoicesForDeal: (dealId: string) => Invoice[];
   emailInvoice: (invoiceId: string) => Promise<void>;
+  /** Re-email an outstanding invoice as a reminder and sync the updated copy. */
+  remindInvoice: (invoiceId: string) => Promise<void>;
   /** Replace an invoice in state with an authoritative server copy (e.g. after a Xero sync). */
   replaceInvoice: (invoice: Invoice) => void;
 }
@@ -54,6 +56,11 @@ export const useInvoicesStore = create<InvoicesState>()((set, get) => ({
   updateStatus: (id, status) => get().updateInvoice(id, { status }),
 
   getInvoicesForDeal: (dealId) => get().invoices.filter((inv) => inv.dealId === dealId),
+
+  remindInvoice: async (invoiceId) => {
+    const updated = await remindInvoiceApi(invoiceId);
+    set((s) => ({ invoices: s.invoices.map((inv) => (inv.id === invoiceId ? updated : inv)) }));
+  },
 
   replaceInvoice: (invoice) =>
     set((s) => ({ invoices: s.invoices.map((inv) => (inv.id === invoice.id ? invoice : inv)) })),

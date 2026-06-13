@@ -2,6 +2,10 @@ import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useLeadsStore } from '@/stores/leadsStore';
 import { useDealsStore } from '@/stores/dealsStore';
+import { useOffersStore } from '@/stores/offersStore';
+import { useTasksStore } from '@/stores/tasksStore';
+import { usePurchasesStore } from '@/stores/purchasesStore';
+import { useUsersStore } from '@/stores/usersStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useOffMarketStore } from '@/stores/offMarketStore';
@@ -24,6 +28,10 @@ export function useBootstrapData() {
     const fetchers = [
       useLeadsStore.getState().fetch,
       useDealsStore.getState().fetch,
+      useOffersStore.getState().fetch,
+      useTasksStore.getState().fetch,
+      usePurchasesStore.getState().fetch,
+      useUsersStore.getState().fetch,
       useClientsStore.getState().fetch,
       usePropertiesStore.getState().fetch,
       useOffMarketStore.getState().fetch,

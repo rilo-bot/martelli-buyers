@@ -125,12 +125,12 @@ export default function DealsPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="section-eyebrow mb-1.5">Engagements</p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Campaigns</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage all active buyer campaigns from qualification to settlement.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Buyer Journeys</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage every buyer journey from qualification to settlement.</p>
         </div>
         <Button onClick={() => setShowAddDialog(true)} className="shadow-md shadow-primary/25 h-9">
           <Plus className="mr-2 h-3.5 w-3.5" />
-          New Campaign
+          New Buyer Journey
         </Button>
       </div>
 
@@ -175,7 +175,7 @@ export default function DealsPage() {
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search campaigns..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-10" />
+          <Input placeholder="Search journeys..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-10" />
         </div>
         <Select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} className="w-44 h-10">
           <option value="">All stages</option>
@@ -193,14 +193,14 @@ export default function DealsPage() {
             <FileText className="h-8 w-8 text-primary/40" />
           </div>
           <h3 className="text-lg font-bold">
-            {stageFilter ? `No ${STAGE_LABELS[stageFilter as DealStage]} campaigns` : 'No campaigns yet'}
+            {stageFilter ? `No ${STAGE_LABELS[stageFilter as DealStage]} journeys` : 'No buyer journeys yet'}
           </h3>
           <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
-            {stageFilter ? 'Try a different stage filter.' : 'Create your first buyer campaign or convert a qualified lead.'}
+            {stageFilter ? 'Try a different stage filter.' : 'Create your first buyer journey or convert a qualified lead.'}
           </p>
           {!stageFilter && (
             <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => setShowAddDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />Create your first campaign
+              <Plus className="mr-2 h-4 w-4" />Create your first buyer journey
             </Button>
           )}
         </div>
@@ -210,7 +210,7 @@ export default function DealsPage() {
             const linkedClient = getClientForDeal(deal.id);
             const initials = deal.clientName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
             return (
-              <Link key={deal.id} to={`/deals/${deal.id}`}>
+              <Link key={deal.id} to={`/journeys/${deal.id}`}>
                 <Card className="group border-border/70 card-interactive h-full bg-card">
                   <CardHeader className="pb-3 px-5 pt-5">
                     <div className="flex items-start justify-between gap-2">
@@ -279,11 +279,11 @@ export default function DealsPage() {
         </div>
       )}
 
-      {/* Add Campaign Dialog */}
+      {/* Add Buyer Journey Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New Campaign</DialogTitle>
+            <DialogTitle>Create New Buyer Journey</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {clients.length > 0 && (
@@ -353,7 +353,7 @@ export default function DealsPage() {
             <DialogFooter>
               <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
               <Button type="submit" disabled={!form.clientName.trim() || !form.clientEmail.trim()} className="shadow-sm shadow-primary/20">
-                <Plus className="mr-2 h-4 w-4" />Create Campaign
+                <Plus className="mr-2 h-4 w-4" />Create Buyer Journey
               </Button>
             </DialogFooter>
           </form>

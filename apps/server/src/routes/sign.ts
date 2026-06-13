@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Deal } from '../models';
 import { asyncHandler } from '../middleware/error';
 import { buildAgreementPdf } from '../lib/pdf/agreement';
+import { recordEvent } from '../lib/audit';
 import { hasS3 } from '../env';
 
 /**
@@ -96,6 +97,11 @@ signRouter.post(
     }
 
     await deal.save();
+    await recordEvent({
+      entityType: 'deal', entityId: deal.id, dealId: deal.id,
+      action: 'agreement_signed', field: 'agreementStatus', fromValue: 'sent', toValue: 'signed',
+      actor: { id: '', name: signerName },
+    });
     res.json({ ok: true, signerName: deal.agreementSignerName, signedAt: deal.agreementSignedAt });
   }),
 );

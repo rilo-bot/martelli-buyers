@@ -83,7 +83,7 @@ export function useDashboardData(): DashboardData {
 
     const activeDeals = deals.filter((d) => d.stage !== 'complete');
     const newLeads = leads.filter((l) => l.status === 'new' || l.status === 'contacted');
-    const shortlisted = properties.filter((p) => p.status === 'shortlisted' || p.status === 'inspected');
+    const shortlisted = properties.filter((p) => p.status === 'shortlisted' || p.status === 'viewed');
     const totalPaid = paid.reduce((s, i) => s + i.total, 0);
 
     const dl = countNew(leadDates);
@@ -95,13 +95,13 @@ export function useDashboardData(): DashboardData {
     const deltaLabel = (n: number, unit = '') => (n > 0 ? `+${n}${unit} this week` : n < 0 ? `${n}${unit} this week` : 'No change this week');
 
     const kpis: KpiDatum[] = [
-      { key: 'campaigns', label: 'Active Campaigns', value: activeDeals.length, icon: FileText, to: '/deals',
+      { key: 'campaigns', label: 'Active Journeys', value: activeDeals.length, icon: FileText, to: '/journeys',
         spark: weeklySeries(dealDates, now), delta: dd.thisWk - dd.lastWk, deltaLabel: deltaLabel(dd.thisWk - dd.lastWk) },
       { key: 'leads', label: 'New Leads', value: newLeads.length, icon: Users, to: '/leads',
         spark: weeklySeries(leadDates, now), delta: dl.thisWk - dl.lastWk, deltaLabel: deltaLabel(dl.thisWk - dl.lastWk) },
       { key: 'properties', label: 'Properties', value: shortlisted.length, icon: Home, to: '/properties',
         spark: weeklySeries(propDates, now), delta: dp.thisWk - dp.lastWk, deltaLabel: deltaLabel(dp.thisWk - dp.lastWk) },
-      { key: 'revenue', label: 'Revenue', value: totalPaid, format: money, icon: DollarSign, to: '/deals',
+      { key: 'revenue', label: 'Revenue', value: totalPaid, format: money, icon: DollarSign, to: '/journeys',
         spark: weeklySum(paidEntries, now), delta: revThis - revLast,
         deltaLabel: revThis > 0 ? `+${money(revThis)} this week` : 'No payments this week' },
     ];
@@ -112,12 +112,15 @@ export function useDashboardData(): DashboardData {
     const overdueInv = invoices.filter((i) => i.status === 'overdue' || (i.status === 'sent' && i.dueDate && ms(i.dueDate) < now));
     const overdueTotal = overdueInv.reduce((s, i) => s + i.total, 0);
     const unsignedDeals = deals.filter((d) => d.agreementStatus === 'sent');
+    // Clients we've signed but never raised an invoice for.
+    const uninvoiced = deals.filter((d) => d.agreementStatus === 'signed' && !invoices.some((i) => i.dealId === d.id));
 
     const attention: AttentionItem[] = [
       idleLeads.length && { key: 'follow', label: 'Leads to follow up', count: idleLeads.length, sub: 'idle 3+ days', icon: Clock, to: '/leads' },
-      stalledDeals.length && { key: 'stalled', label: 'Stalled campaigns', count: stalledDeals.length, sub: 'no update 7+ days', icon: AlertTriangle, to: '/deals' },
-      overdueInv.length && { key: 'overdue', label: 'Overdue invoices', count: overdueInv.length, sub: money(overdueTotal), icon: Receipt, to: '/deals' },
-      unsignedDeals.length && { key: 'agreements', label: 'Agreements awaiting signature', count: unsignedDeals.length, sub: 'sent, not signed', icon: FileSignature, to: '/deals' },
+      stalledDeals.length && { key: 'stalled', label: 'Stalled journeys', count: stalledDeals.length, sub: 'no update 7+ days', icon: AlertTriangle, to: '/journeys' },
+      overdueInv.length && { key: 'overdue', label: 'Overdue invoices', count: overdueInv.length, sub: money(overdueTotal), icon: Receipt, to: '/invoices' },
+      uninvoiced.length && { key: 'uninvoiced', label: 'Signed clients not invoiced', count: uninvoiced.length, sub: 'no invoice raised', icon: DollarSign, to: '/invoices' },
+      unsignedDeals.length && { key: 'agreements', label: 'Agreements awaiting signature', count: unsignedDeals.length, sub: 'sent, not signed', icon: FileSignature, to: '/journeys' },
     ].filter(Boolean) as AttentionItem[];
 
     // ── Pipeline funnel (active stages, value-weighted) ──
@@ -149,10 +152,10 @@ export function useDashboardData(): DashboardData {
       if (l.status === 'won') events.push({ id: `lw-${l.id}`, icon: Trophy, text: `Lead won · ${l.firstName} ${l.lastName}`, sub: money(l.budget), ts: ms(l.updatedAt), to: `/leads/${l.id}` });
     }
     for (const d of deals) {
-      events.push({ id: `dc-${d.id}`, icon: ArrowRightLeft, text: `Campaign · ${d.clientName}`, sub: STAGE_LABELS[d.stage], ts: ms(d.updatedAt), to: `/deals/${d.id}` });
+      events.push({ id: `dc-${d.id}`, icon: ArrowRightLeft, text: `Journey · ${d.clientName}`, sub: STAGE_LABELS[d.stage], ts: ms(d.updatedAt), to: `/journeys/${d.id}` });
     }
     for (const inv of paid) {
-      events.push({ id: `ip-${inv.id}`, icon: DollarSign, text: `Invoice paid · ${inv.invoiceNumber || 'Invoice'}`, sub: money(inv.total), ts: ms(inv.paidDate || inv.updatedAt), to: '/deals' });
+      events.push({ id: `ip-${inv.id}`, icon: DollarSign, text: `Invoice paid · ${inv.invoiceNumber || 'Invoice'}`, sub: money(inv.total), ts: ms(inv.paidDate || inv.updatedAt), to: '/journeys' });
     }
     const activity = events.filter((e) => e.ts > 0).sort((a, b) => b.ts - a.ts).slice(0, 8);
 

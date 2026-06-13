@@ -23,6 +23,7 @@ import PropertiesPage from '@/pages/PropertiesPage';
 import PropertyDetailPage from '@/pages/PropertyDetailPage';
 import AgentsPage from '@/pages/AgentsPage';
 import EmailsPage from '@/pages/EmailsPage';
+import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignAgreementPage from '@/pages/SignAgreementPage';
@@ -94,6 +95,10 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
+          {/* "Buyer Journeys" is the canonical name; /deals kept for back-compat
+              (old links/bookmarks) — both render the same pages. */}
+          <Route path="/journeys" element={<DealsPage />} />
+          <Route path="/journeys/:id" element={<DealDetailPage />} />
           <Route path="/deals" element={<DealsPage />} />
           <Route path="/deals/:id" element={<DealDetailPage />} />
           <Route path="/clients" element={<ClientsPage />} />
@@ -102,6 +107,7 @@ export default function App() {
           <Route path="/properties/:id" element={<PropertyDetailPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/emails" element={<EmailsPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/due-diligence" element={<DueDiligencePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

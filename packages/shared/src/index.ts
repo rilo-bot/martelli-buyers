@@ -10,12 +10,16 @@
 export type UserRole = 'admin' | 'staff' | 'client' | 'agent';
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'agreement_sent' | 'active' | 'won' | 'lost';
 export type DealStage = 'qualification' | 'search' | 'shortlisting' | 'due_diligence' | 'offer' | 'settlement' | 'complete';
-export type PropertyStatus = 'active' | 'shortlisted' | 'inspected' | 'passed' | 'offer_made' | 'purchased';
+export type PropertyStatus = 'suggested' | 'interested' | 'viewed' | 'shortlisted' | 'rejected' | 'offer_placed' | 'purchased';
 export type AgentGeo = 'East' | 'West' | 'North' | 'Central';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
 export type EmailTemplateCategory = 'welcome' | 'dd_request' | 'status_update' | 'requirement_blast' | 'thank_you' | 'post_settlement' | 'other';
 export type ChecklistItemStatus = 'pending' | 'completed' | 'na';
 export type ConsentStatus = 'pending' | 'granted' | 'declined';
+export type OfferStatus = 'draft' | 'submitted' | 'negotiating' | 'accepted' | 'declined' | 'withdrawn';
+export type TaskType = 'call' | 'viewing' | 'lim' | 'builders_report' | 'finance' | 'agreement' | 'other';
+export type TaskPriority = 'low' | 'normal' | 'high';
+export type PurchaseStatus = 'pending' | 'unconditional' | 'settled';
 
 export interface User {
   id: string;
@@ -122,6 +126,73 @@ export interface Deal {
   assignedTo: string;
   aiConsentStatus: ConsentStatus;
   aiConsentDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A recorded change on a Buyer Journey or its children, for the timeline + audit trail. */
+export interface AuditEvent {
+  id: string;
+  entityType: string;
+  entityId: string;
+  dealId: string;
+  action: string;
+  field: string;
+  fromValue: string;
+  toValue: string;
+  actorId: string;
+  actorName: string;
+  at: string;
+  createdAt: string;
+}
+
+/** An offer placed on a property within a Buyer Journey (deal). */
+export interface Offer {
+  id: string;
+  dealId: string;
+  propertyId: string;
+  amount: number;
+  depositAmount: number;
+  dateSubmitted: string;
+  conditions: string;
+  status: OfferStatus;
+  counterOffer: number;
+  outcome: string;
+  fileUrls: string[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A to-do on a Buyer Journey (call client, arrange viewing, request LIM, etc.). */
+export interface Task {
+  id: string;
+  dealId: string;
+  propertyId: string;
+  title: string;
+  type: TaskType;
+  assignedTo: string;
+  dueDate: string;
+  completed: boolean;
+  completedAt: string;
+  priority: TaskPriority;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The final purchase that closes a Buyer Journey. */
+export interface Purchase {
+  id: string;
+  dealId: string;
+  propertyId: string;
+  purchasePrice: number;
+  depositPaid: number;
+  unconditionalDate: string;
+  settlementDate: string;
+  status: PurchaseStatus;
+  solicitor: string;
+  notes: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -233,6 +304,9 @@ export interface Invoice {
   dueDate: string;
   paidDate: string;
   description: string;
+  /** ISO timestamp of the last reminder sent, and how many have been sent. */
+  lastReminderAt: string;
+  reminderCount: number;
   createdAt: string;
   updatedAt: string;
 }

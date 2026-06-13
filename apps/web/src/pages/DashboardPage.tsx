@@ -39,7 +39,7 @@ export default function DashboardPage() {
               <Link to="/leads?new=1"><Plus className="mr-1.5 h-3.5 w-3.5" />New Lead</Link>
             </Button>
             <Button asChild size="sm" className="h-9 shadow-sm">
-              <Link to="/deals?new=1"><Plus className="mr-1.5 h-3.5 w-3.5" />New Campaign</Link>
+              <Link to="/journeys?new=1"><Plus className="mr-1.5 h-3.5 w-3.5" />New Buyer Journey</Link>
             </Button>
           </>
         }

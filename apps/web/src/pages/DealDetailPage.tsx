@@ -26,8 +26,16 @@ import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
 import { useConfigStore } from '@/stores/configStore';
 import { useXeroStore } from '@/stores/xeroStore';
+import { useOffersStore } from '@/stores/offersStore';
+import { useTasksStore } from '@/stores/tasksStore';
+import { usePurchasesStore } from '@/stores/purchasesStore';
 import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement } from '@/lib/documents';
 import { pushInvoiceToXero, refreshInvoiceFromXero } from '@/lib/xero';
+import { OffersTab } from '@/pages/deal/OffersTab';
+import { TasksTab } from '@/pages/deal/TasksTab';
+import { PurchaseTab } from '@/pages/deal/PurchaseTab';
+import { TimelineTab } from '@/pages/deal/TimelineTab';
+import { ComparablesTab } from '@/pages/deal/ComparablesTab';
 import { ExternalLink } from 'lucide-react';
 
 const STAGE_OPTIONS: DealStage[] = ['qualification', 'search', 'shortlisting', 'due_diligence', 'offer', 'settlement', 'complete'];
@@ -35,23 +43,25 @@ const STAGE_LABELS: Record<DealStage, string> = {
   qualification: 'Qualification', search: 'Search', shortlisting: 'Shortlisting',
   due_diligence: 'Due Diligence', offer: 'Offer', settlement: 'Settlement', complete: 'Complete',
 };
-const PROPERTY_STATUS_OPTIONS: PropertyStatus[] = ['active', 'shortlisted', 'inspected', 'passed', 'offer_made', 'purchased'];
+const PROPERTY_STATUS_OPTIONS: PropertyStatus[] = ['suggested', 'interested', 'viewed', 'shortlisted', 'rejected', 'offer_placed', 'purchased'];
 
 const PROPERTY_STATUS_LABELS: Record<PropertyStatus, string> = {
-  active: 'Active',
+  suggested: 'Suggested',
+  interested: 'Interested',
+  viewed: 'Viewed',
   shortlisted: 'Shortlisted',
-  inspected: 'Inspected',
-  passed: 'Passed',
-  offer_made: 'Offer Made',
+  rejected: 'Rejected',
+  offer_placed: 'Offer Placed',
   purchased: 'Purchased',
 };
 
 const PROPERTY_STATUS_BADGE: Record<PropertyStatus, string> = {
-  active: 'bg-primary/10 text-primary border-primary/20',
+  suggested: 'bg-primary/10 text-primary border-primary/20',
+  interested: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-800/40',
+  viewed: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/40',
   shortlisted: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800/40',
-  inspected: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/40',
-  passed: 'bg-muted text-muted-foreground border-border',
-  offer_made: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800/40',
+  rejected: 'bg-muted text-muted-foreground border-border',
+  offer_placed: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800/40',
   purchased: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/40',
 };
 
@@ -120,6 +130,12 @@ export default function DealDetailPage() {
   // Derived — safe to compute before guard because id/deals are always available
   const deal = useMemo(() => deals.find((d) => d.id === id), [deals, id]);
   const dealProperties = useMemo(() => properties.filter((p) => p.dealId === id), [properties, id]);
+  const offers = useOffersStore((s) => s.offers);
+  const dealOffers = useMemo(() => offers.filter((o) => o.dealId === id), [offers, id]);
+  const tasks = useTasksStore((s) => s.tasks);
+  const openTaskCount = useMemo(() => tasks.filter((t) => t.dealId === id && !t.completed).length, [tasks, id]);
+  const purchases = usePurchasesStore((s) => s.purchases);
+  const hasPurchase = useMemo(() => purchases.some((p) => p.dealId === id), [purchases, id]);
   const dealInvoices = useMemo(() => invoices.filter((inv) => inv.dealId === id), [invoices, id]);
   const dealComments = useMemo(() => comments.filter((c) => c.dealId === id && !c.propertyId), [comments, id]);
   const dealSummaries = useMemo(() => summaries.filter((s) => s.dealId === id), [summaries, id]);
@@ -153,8 +169,8 @@ export default function DealDetailPage() {
   }), [deal, currentUser]);
 
   // ── Early returns AFTER all hooks ────────────────────────────────────
-  if (!id) return <Navigate to="/deals" replace />;
-  if (!deal) return <Navigate to="/deals" replace />;
+  if (!id) return <Navigate to="/journeys" replace />;
+  if (!deal) return <Navigate to="/journeys" replace />;
 
   const linkedClient = deal.clientId ? clients.find((c) => c.id === deal.clientId) : null;
 
@@ -172,7 +188,7 @@ export default function DealDetailPage() {
       carparks: Number(propForm.carparks) || 1,
       landSize: Number(propForm.landSize) || 0,
       propertyType: propForm.propertyType.trim(),
-      status: 'active',
+      status: 'suggested',
       notes: propForm.notes.trim(),
       clientVisibleNotes: '',
       isClientVisible: true,
@@ -214,7 +230,7 @@ export default function DealDetailPage() {
         carparks: om.carparks,
         landSize: 0,
         propertyType: om.propertyType,
-        status: 'active',
+        status: 'suggested',
         notes: om.notes,
         clientVisibleNotes: '',
         isClientVisible: true,
@@ -255,6 +271,8 @@ export default function DealDetailPage() {
       dueDate: invForm.dueDate,
       paidDate: '',
       description: invForm.description,
+      lastReminderAt: '',
+      reminderCount: 0,
     });
     addInvoiceToDeal(id, invoice.id);
     setInvForm({ type: 'engagement', description: '', amount: '', dueDate: '' });
@@ -390,10 +408,10 @@ export default function DealDetailPage() {
       {/* Header */}
       <div className="flex items-start gap-4">
         <Button asChild variant="ghost" size="icon" className="-ml-2 mt-1">
-          <Link to="/deals"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link to="/journeys"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Campaign</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Buyer Journey</p>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{deal.clientName}</h1>
             <span className={cn('text-xs px-2.5 py-1 rounded-full font-medium', STAGE_PILL_STYLES[deal.stage])}>
@@ -454,9 +472,14 @@ export default function DealDetailPage() {
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="properties">Properties ({dealProperties.length})</TabsTrigger>
+          <TabsTrigger value="offers">Offers ({dealOffers.length})</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks ({openTaskCount})</TabsTrigger>
+          <TabsTrigger value="comparables">Comparables</TabsTrigger>
           <TabsTrigger value="invoices">Invoices ({dealInvoices.length})</TabsTrigger>
+          <TabsTrigger value="purchase">Purchase{hasPurchase ? ' ✓' : ''}</TabsTrigger>
           <TabsTrigger value="comments">Comments ({dealComments.length})</TabsTrigger>
           <TabsTrigger value="ai">AI Summaries ({dealSummaries.length})</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="emails">
             <Mail className="h-3.5 w-3.5 mr-1" />
             Emails
@@ -710,7 +733,7 @@ export default function DealDetailPage() {
 
           <Dialog open={showAddProperty} onOpenChange={(o) => { setShowAddProperty(o); if (!o) { setAddPropMode('new'); setOmSearch(''); } }}>
             <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Add Property to Campaign</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Add Property to Journey</DialogTitle></DialogHeader>
 
               {/* Mode toggle: enter a new property, or reuse one from the off-market database. */}
               <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
@@ -845,6 +868,21 @@ export default function DealDetailPage() {
               )}
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* OFFERS */}
+        <TabsContent value="offers">
+          <OffersTab dealId={id} properties={dealProperties} />
+        </TabsContent>
+
+        {/* TASKS */}
+        <TabsContent value="tasks">
+          <TasksTab dealId={id} properties={dealProperties} />
+        </TabsContent>
+
+        {/* COMPARABLES */}
+        <TabsContent value="comparables">
+          <ComparablesTab dealId={id} properties={dealProperties} />
         </TabsContent>
 
         {/* INVOICES */}
@@ -995,10 +1033,15 @@ export default function DealDetailPage() {
           </Dialog>
         </TabsContent>
 
+        {/* PURCHASE */}
+        <TabsContent value="purchase">
+          <PurchaseTab dealId={id} properties={dealProperties} stage={deal.stage} />
+        </TabsContent>
+
         {/* COMMENTS */}
         <TabsContent value="comments">
           <div className="space-y-4">
-            <h2 className="text-base font-semibold">Campaign Comments</h2>
+            <h2 className="text-base font-semibold">Journey Comments</h2>
             <form onSubmit={handleAddComment} className="space-y-2">
               <Textarea
                 value={commentText}
@@ -1175,6 +1218,11 @@ export default function DealDetailPage() {
               </form>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* TIMELINE */}
+        <TabsContent value="timeline">
+          <TimelineTab dealId={id} />
         </TabsContent>
 
         {/* EMAILS TAB */}

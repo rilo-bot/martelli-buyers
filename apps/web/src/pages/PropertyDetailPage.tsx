@@ -23,14 +23,15 @@ import { uploadFile, deleteUpload, isVideoUrl } from '@/lib/upload';
 import { toast } from 'sonner';
 import type { PropertyStatus } from '@/types';
 
-const STATUS_OPTIONS: PropertyStatus[] = ['active', 'shortlisted', 'inspected', 'passed', 'offer_made', 'purchased'];
+const STATUS_OPTIONS: PropertyStatus[] = ['suggested', 'interested', 'viewed', 'shortlisted', 'rejected', 'offer_placed', 'purchased'];
 
 const STATUS_CONFIG: Record<PropertyStatus, string> = {
-  active: 'bg-primary/10 text-primary border-primary/25',
-  shortlisted: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25',
-  inspected: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/25',
-  passed: 'bg-muted text-muted-foreground border-border',
-  offer_made: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/25',
+  suggested: 'bg-primary/10 text-primary border-primary/25',
+  interested: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/25',
+  viewed: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25',
+  shortlisted: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/25',
+  rejected: 'bg-muted text-muted-foreground border-border',
+  offer_placed: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/25',
   purchased: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25',
 };
 
@@ -164,7 +165,7 @@ export default function PropertyDetailPage() {
     try {
       await deleteProperty(id);
       toast.success('Property deleted.');
-      navigate(deal ? `/deals/${deal.id}` : '/properties');
+      navigate(deal ? `/journeys/${deal.id}` : '/properties');
     } catch {
       setDeleting(false);
       toast.error('Failed to delete property.');
@@ -187,7 +188,7 @@ export default function PropertyDetailPage() {
       {/* Header */}
       <div className="flex items-start gap-4">
         <Button asChild variant="ghost" size="icon" className="-ml-2 mt-1 shrink-0">
-          <Link to={deal ? `/deals/${deal.id}` : '/properties'}><ArrowLeft className="h-4 w-4" /></Link>
+          <Link to={deal ? `/journeys/${deal.id}` : '/properties'}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -202,8 +203,8 @@ export default function PropertyDetailPage() {
             {property.priceGuide && <span className="flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5" />{property.priceGuide}</span>}
           </div>
           {deal && (
-            <Link to={`/deals/${deal.id}`} className="text-xs text-primary hover:underline mt-1.5 inline-block">
-              Part of campaign: {deal.clientName}
+            <Link to={`/journeys/${deal.id}`} className="text-xs text-primary hover:underline mt-1.5 inline-block">
+              Part of journey: {deal.clientName}
             </Link>
           )}
         </div>

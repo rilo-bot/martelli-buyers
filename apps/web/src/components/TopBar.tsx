@@ -8,18 +8,20 @@ import { cn } from '@/lib/utils';
 const SECTION_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
   leads: 'Leads',
-  deals: 'Campaigns',
+  deals: 'Buyer Journeys',
+  journeys: 'Buyer Journeys',
   clients: 'Clients',
   properties: 'Properties',
   agents: 'Agents',
   emails: 'Emails',
+  invoices: 'Invoices',
   'due-diligence': 'Due Diligence',
   settings: 'Settings',
 };
 
 const CREATE_LINKS = [
   { label: 'New lead', to: '/leads?new=1' },
-  { label: 'New campaign', to: '/deals?new=1' },
+  { label: 'New buyer journey', to: '/journeys?new=1' },
   { label: 'New client', to: '/clients?new=1' },
   { label: 'New agent', to: '/agents?new=1' },
 ];
