@@ -15,9 +15,25 @@ const signSchema = z.object({
 
 const deleteSchema = z.object({ url: z.string().url() });
 
-// Only images and videos are accepted for property media.
+// Documents accepted for DD evidence (LIM reports, titles, building reports).
+const DOC_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+]);
+
+// Images/videos for property media; documents for DD evidence.
 function isAllowed(contentType: string): boolean {
-  return contentType.startsWith('image/') || contentType.startsWith('video/');
+  return (
+    contentType.startsWith('image/') ||
+    contentType.startsWith('video/') ||
+    DOC_TYPES.has(contentType)
+  );
 }
 
 /** Safe file extension from a filename, falling back to the content-type subtype. */
@@ -38,7 +54,7 @@ uploadsRouter.post(
       return;
     }
     if (!isAllowed(contentType)) {
-      res.status(400).json({ error: 'Only image and video files are allowed.' });
+      res.status(400).json({ error: 'Only image, video and document files are allowed.' });
       return;
     }
     const key = `${scope}/${scopeId ?? 'misc'}/${randomUUID()}.${extFor(filename, contentType)}`;

@@ -2,6 +2,24 @@ import { request } from '@/lib/api';
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
+const MAX_DOC_BYTES = 25 * 1024 * 1024; // 25 MB
+
+// Document MIME types accepted for DD evidence (LIM reports, titles, etc.).
+const DOC_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+]);
+
+/** True when the file is an accepted document type (not image/video). */
+export function isDocType(file: File): boolean {
+  return DOC_TYPES.has(file.type);
+}
 
 export interface UploadOptions {
   scope?: string;
@@ -19,12 +37,14 @@ interface SignResponse {
 function validate(file: File): void {
   const isImage = file.type.startsWith('image/');
   const isVideo = file.type.startsWith('video/');
-  if (!isImage && !isVideo) {
-    throw new Error('Only image and video files are allowed.');
+  const isDoc = isDocType(file);
+  if (!isImage && !isVideo && !isDoc) {
+    throw new Error('Only image, video and document (PDF, Word, Excel) files are allowed.');
   }
-  const cap = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  const cap = isVideo ? MAX_VIDEO_BYTES : isDoc ? MAX_DOC_BYTES : MAX_IMAGE_BYTES;
   if (file.size > cap) {
-    throw new Error(`File is too large (max ${isVideo ? '200MB' : '15MB'}).`);
+    const label = isVideo ? '200MB' : isDoc ? '25MB' : '15MB';
+    throw new Error(`File is too large (max ${label}).`);
   }
 }
 

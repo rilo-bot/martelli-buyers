@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfigStore } from '@/stores/configStore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,19 +15,17 @@ import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import {
-  Plus, Search, AlertCircle, CheckCircle, Clock, ExternalLink,
+  Plus, Search, AlertCircle, ExternalLink, Upload, Loader2, StickyNote,
   FileText, ArrowLeft, Trash2, Link as LinkIcon, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { downloadDdReport } from '@/lib/documents';
-import type { ChecklistItemStatus } from '@/types';
+import { uploadFile } from '@/lib/upload';
+import type { EvidenceItem } from '@/types';
 
-const STATUS_ICONS: Record<ChecklistItemStatus, React.ReactNode> = {
-  pending: <Clock className="h-4 w-4 text-muted-foreground" />,
-  completed: <CheckCircle className="h-4 w-4 text-emerald-500" />,
-  na: <span className="text-xs text-muted-foreground font-semibold">N/A</span>,
-};
+const ACCEPT_EVIDENCE = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt';
+const isImageUrl = (url: string) => /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|$)/i.test(url);
 
 export default function DueDiligencePage() {
   const [searchParams] = useSearchParams();
@@ -43,6 +42,7 @@ export default function DueDiligencePage() {
   const generateDefaultChecklist = useDueDiligenceStore((s) => s.generateDefaultChecklist);
   const properties = usePropertiesStore((s) => s.properties);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const hasS3 = useConfigStore((s) => s.hasS3);
 
   const [search, setSearch] = useState('');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
@@ -50,9 +50,13 @@ export default function DueDiligencePage() {
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [showAddComp, setShowAddComp] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [createForm, setCreateForm] = useState({ propertyId: defaultPropertyId, dealId: '', address: '' });
-  const [evidenceForm, setEvidenceForm] = useState({ label: '', url: '', type: 'link' as 'link' | 'screenshot' | 'document' });
+  const [evidenceForm, setEvidenceForm] = useState({ label: '', url: '' });
   const [compForm, setCompForm] = useState({
     address: '', suburb: '', salePrice: '', saleDate: '',
     bedrooms: '3', bathrooms: '2', landSize: '', notes: '', sourceUrl: '',
@@ -93,19 +97,52 @@ export default function DueDiligencePage() {
     setSelectedRecordId(newRecord.id);
   };
 
-  const handleAddEvidence = (e: React.FormEvent) => {
+  const pushEvidence = (item: Omit<EvidenceItem, 'id' | 'addedAt'>) =>
+    addEvidence(selectedRecordId!, { ...item, id: crypto.randomUUID(), addedAt: new Date().toISOString() });
+
+  // External-link evidence (council maps, listing pages, etc.).
+  const handleAddLink = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRecordId || !evidenceForm.label.trim() || !evidenceForm.url.trim()) return;
-    addEvidence(selectedRecordId, {
-      id: crypto.randomUUID(),
-      label: evidenceForm.label.trim(),
+    if (!selectedRecordId || !evidenceForm.url.trim()) return;
+    pushEvidence({
+      label: evidenceForm.label.trim() || evidenceForm.url.trim(),
       url: evidenceForm.url.trim(),
-      type: evidenceForm.type,
-      addedAt: new Date().toISOString(),
+      type: 'link',
     });
-    setEvidenceForm({ label: '', url: '', type: 'link' });
+    setEvidenceForm({ label: '', url: '' });
     setShowAddEvidence(false);
   };
+
+  // Real file upload → S3 → stored as evidence (image = screenshot, else document).
+  const handleEvidenceFile = async (file: File) => {
+    if (!selectedRecordId) return;
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      const url = await uploadFile(file, { scope: 'dd-evidence', scopeId: selectedRecordId, onProgress: setUploadPct });
+      await pushEvidence({
+        label: evidenceForm.label.trim() || file.name,
+        url,
+        type: file.type.startsWith('image/') ? 'screenshot' : 'document',
+      });
+      toast.success('Evidence uploaded.');
+      setEvidenceForm({ label: '', url: '' });
+      setShowAddEvidence(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const toggleNotes = (itemId: string) =>
+    setExpandedNotes((prev) => {
+      const next = new Set(prev);
+      next.has(itemId) ? next.delete(itemId) : next.add(itemId);
+      return next;
+    });
 
   const handleAddComp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,11 +179,13 @@ export default function DueDiligencePage() {
     }
   };
 
-  const completedItems = useMemo(
-    () => selectedRecord?.checklistItems.filter((i) => i.status === 'completed').length ?? 0,
+  // "Resolved" = Completed or N/A — matches the server's stage-gate definition.
+  const resolvedItems = useMemo(
+    () => selectedRecord?.checklistItems.filter((i) => i.status === 'completed' || i.status === 'na').length ?? 0,
     [selectedRecord]
   );
   const totalItems = useMemo(() => selectedRecord?.checklistItems.length ?? 0, [selectedRecord]);
+  const ddComplete = totalItems > 0 && resolvedItems === totalItems;
 
   // ---- Detail view ----
   if (selectedRecord) {
@@ -172,11 +211,20 @@ export default function DueDiligencePage() {
           </Button>
         </div>
 
-        {selectedRecord.reportGenerated && (
+        {ddComplete ? (
           <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <CheckCircle className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">DD report ready. Use “Download PDF Report” to fetch the latest copy.</span>
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-medium">Due diligence complete — this journey can advance past the Due Diligence stage.</span>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800 px-4 py-3">
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-medium">
+                {totalItems - resolvedItems} checklist item(s) still unresolved — the linked journey is blocked from advancing past Due Diligence.
+              </span>
             </div>
           </div>
         )}
@@ -184,7 +232,7 @@ export default function DueDiligencePage() {
         <Tabs defaultValue="checklist">
           <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="checklist">
-              Audit Checklist ({completedItems}/{totalItems})
+              Audit Checklist ({resolvedItems}/{totalItems})
             </TabsTrigger>
             <TabsTrigger value="hazards">Hazard Maps</TabsTrigger>
             <TabsTrigger value="evidence">Evidence ({selectedRecord.evidenceLinks.length})</TabsTrigger>
@@ -196,74 +244,102 @@ export default function DueDiligencePage() {
           <TabsContent value="checklist" className="mt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Internal Audit Checklist</h2>
+                <div>
+                  <h2 className="text-base font-semibold">Internal Audit Checklist</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Tick each item Complete, or mark N/A if it doesn’t apply.</p>
+                </div>
                 <div className="flex items-center gap-3">
                   <div className="w-32 bg-muted rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-primary h-full rounded-full transition-all duration-500"
-                      style={{ width: `${totalItems ? (completedItems / totalItems) * 100 : 0}%` }}
+                      className={cn('h-full rounded-full transition-all duration-500', ddComplete ? 'bg-emerald-500' : 'bg-primary')}
+                      style={{ width: `${totalItems ? (resolvedItems / totalItems) * 100 : 0}%` }}
                     />
                   </div>
-                  <span className="text-sm text-muted-foreground font-medium">{completedItems}/{totalItems}</span>
+                  <span className="text-sm text-muted-foreground font-medium">{resolvedItems}/{totalItems} resolved</span>
                 </div>
               </div>
               <div className="space-y-2">
-                {selectedRecord.checklistItems.map((item) => (
-                  <Card
-                    key={item.id}
-                    className={cn(
-                      'transition-all border',
-                      item.status === 'completed'
-                        ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10'
-                        : 'border-border/70'
-                    )}
-                  >
-                    <CardContent className="pt-3 pb-3">
-                      <div className="flex items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateChecklistItem(
-                              selectedRecord.id,
-                              item.id,
-                              item.status === 'completed' ? 'pending' : 'completed',
-                              undefined,
-                              currentUser?.name
-                            )
-                          }
-                          className="mt-0.5 shrink-0"
-                        >
-                          {STATUS_ICONS[item.status]}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn('text-sm font-medium', item.status === 'completed' && 'line-through text-muted-foreground')}>
-                            {item.label}
-                          </p>
-                          {item.completedBy && item.status === 'completed' && (
-                            <p className="text-xs text-muted-foreground mt-0.5">Completed by {item.completedBy}</p>
-                          )}
+                {selectedRecord.checklistItems.map((item) => {
+                  const done = item.status === 'completed';
+                  const na = item.status === 'na';
+                  const notesOpen = expandedNotes.has(item.id);
+                  return (
+                    <Card
+                      key={item.id}
+                      className={cn(
+                        'transition-all border',
+                        done ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10' : 'border-border/70',
+                        na && 'opacity-70',
+                      )}
+                    >
+                      <CardContent className="pt-3 pb-3">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={done}
+                            disabled={na}
+                            onChange={() =>
+                              updateChecklistItem(selectedRecord.id, item.id, done ? 'pending' : 'completed', undefined, currentUser?.name)
+                            }
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-emerald-500 disabled:opacity-40"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className={cn('text-sm font-medium', (done || na) && 'line-through text-muted-foreground')}>
+                              {item.label}
+                              {na && <Badge variant="secondary" className="ml-2 align-middle text-[10px]">N/A</Badge>}
+                            </p>
+                            {done && (item.completedBy || item.completedAt) && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Completed{item.completedBy ? ` by ${item.completedBy}` : ''}
+                                {item.completedAt ? ` · ${new Date(item.completedAt).toLocaleDateString('en-NZ')}` : ''}
+                              </p>
+                            )}
+                            {notesOpen && (
+                              <Textarea
+                                defaultValue={item.notes}
+                                onBlur={(e) => {
+                                  if (e.target.value !== item.notes) {
+                                    updateChecklistItem(selectedRecord.id, item.id, item.status, e.target.value, item.completedBy);
+                                  }
+                                }}
+                                rows={2}
+                                placeholder="Findings / notes for this item…"
+                                className="mt-2 text-sm"
+                              />
+                            )}
+                            {!notesOpen && item.notes && (
+                              <p className="mt-1 text-xs text-muted-foreground italic truncate">{item.notes}</p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className={cn('h-7 w-7', notesOpen ? 'text-primary' : 'text-muted-foreground')}
+                              title="Notes"
+                              onClick={() => toggleNotes(item.id)}
+                            >
+                              <StickyNote className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={na ? 'secondary' : 'ghost'}
+                              size="sm"
+                              className="h-7 px-2 text-[11px] font-semibold"
+                              title={na ? 'Clear N/A' : 'Mark not applicable'}
+                              onClick={() =>
+                                updateChecklistItem(selectedRecord.id, item.id, na ? 'pending' : 'na', undefined, currentUser?.name)
+                              }
+                            >
+                              N/A
+                            </Button>
+                          </div>
                         </div>
-                        <Select
-                          value={item.status}
-                          onChange={(e) =>
-                            updateChecklistItem(
-                              selectedRecord.id,
-                              item.id,
-                              e.target.value as ChecklistItemStatus,
-                              undefined,
-                              currentUser?.name
-                            )
-                          }
-                          className="h-7 text-xs w-28"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="completed">Completed</option>
-                          <option value="na">N/A</option>
-                        </Select>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </TabsContent>
@@ -381,60 +457,108 @@ export default function DueDiligencePage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {selectedRecord.evidenceLinks.map((ev) => (
-                    <Card key={ev.id} className="border-border/70 hover:shadow-sm transition-all">
-                      <CardContent className="pt-3 pb-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                              <LinkIcon className="h-4 w-4 text-primary" />
+                  {selectedRecord.evidenceLinks.map((ev) => {
+                    const isImg = ev.type === 'screenshot' || isImageUrl(ev.url);
+                    return (
+                      <Card key={ev.id} className="border-border/70 hover:shadow-sm transition-all">
+                        <CardContent className="pt-3 pb-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {isImg ? (
+                                <a href={ev.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                  <img src={ev.url} alt={ev.label} className="h-9 w-9 rounded-lg object-cover border border-border" />
+                                </a>
+                              ) : (
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                                  {ev.type === 'link' ? <LinkIcon className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{ev.label}</p>
+                                <a href={ev.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block">{ev.url}</a>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{ev.label}</p>
-                              <a href={ev.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block">{ev.url}</a>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge variant="secondary" className="text-[10px] px-2 py-0.5">{ev.type}</Badge>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 hover:text-destructive" onClick={() => removeEvidence(selectedRecord.id, ev.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5">{ev.type}</Badge>
-                            <Button size="sm" variant="ghost" className="h-7 px-2 hover:text-destructive" onClick={() => removeEvidence(selectedRecord.id, ev.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            <Dialog open={showAddEvidence} onOpenChange={setShowAddEvidence}>
+            <Dialog open={showAddEvidence} onOpenChange={(o) => { if (!uploading) setShowAddEvidence(o); }}>
               <DialogContent>
                 <DialogHeader><DialogTitle>Add Evidence</DialogTitle></DialogHeader>
-                <form onSubmit={handleAddEvidence} className="space-y-4">
+                <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="evLabel">Label *</Label>
-                    <Input id="evLabel" value={evidenceForm.label} onChange={(e) => setEvidenceForm((f) => ({ ...f, label: e.target.value }))} placeholder="Flood map screenshot - January 2025" />
+                    <Label htmlFor="evLabel">Label <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Input id="evLabel" value={evidenceForm.label} onChange={(e) => setEvidenceForm((f) => ({ ...f, label: e.target.value }))} placeholder="Defaults to the file name / link" />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="evUrl">URL *</Label>
-                    <Input id="evUrl" value={evidenceForm.url} onChange={(e) => setEvidenceForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://..." />
+
+                  {/* Upload a file */}
+                  <div className="rounded-xl border border-dashed border-border p-4 text-center">
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept={ACCEPT_EVIDENCE}
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEvidenceFile(f); }}
+                    />
+                    <Upload className="mx-auto h-7 w-7 text-primary/50" />
+                    <p className="mt-2 text-sm font-medium">Upload an image or document</p>
+                    <p className="text-xs text-muted-foreground">PNG, JPG, PDF, Word, Excel — up to 25MB</p>
+                    {uploading ? (
+                      <div className="mt-3 space-y-1.5">
+                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                          <div className="bg-primary h-full rounded-full transition-all" style={{ width: `${uploadPct}%` }} />
+                        </div>
+                        <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Uploading… {uploadPct}%
+                        </p>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-3"
+                        disabled={!hasS3}
+                        onClick={() => fileRef.current?.click()}
+                      >
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />Choose file
+                      </Button>
+                    )}
+                    {!hasS3 && <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">File storage isn’t configured — use an external link below.</p>}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="evType">Type</Label>
-                    <Select id="evType" value={evidenceForm.type} onChange={(e) => setEvidenceForm((f) => ({ ...f, type: e.target.value as 'link' | 'screenshot' | 'document' }))}>
-                      <option value="link">Link</option>
-                      <option value="screenshot">Screenshot</option>
-                      <option value="document">Document</option>
-                    </Select>
+
+                  {/* Or add an external link */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-[11px] text-muted-foreground">or add a link</span>
+                    <div className="flex-1 h-px bg-border" />
                   </div>
-                  <DialogFooter>
-                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                    <Button type="submit" disabled={!evidenceForm.label.trim() || !evidenceForm.url.trim()} className="shadow-sm shadow-primary/20">
-                      <Plus className="mr-2 h-4 w-4" />Add
+                  <form onSubmit={handleAddLink} className="flex gap-2">
+                    <Input
+                      value={evidenceForm.url}
+                      onChange={(e) => setEvidenceForm((f) => ({ ...f, url: e.target.value }))}
+                      placeholder="https://gis.aucklandcouncil.govt.nz/..."
+                      disabled={uploading}
+                    />
+                    <Button type="submit" variant="outline" disabled={!evidenceForm.url.trim() || uploading}>
+                      <LinkIcon className="mr-1.5 h-3.5 w-3.5" />Add link
                     </Button>
+                  </form>
+
+                  <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="ghost" disabled={uploading}>Close</Button></DialogClose>
                   </DialogFooter>
-                </form>
+                </div>
               </DialogContent>
             </Dialog>
           </TabsContent>

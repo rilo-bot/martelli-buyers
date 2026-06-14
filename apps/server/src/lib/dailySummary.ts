@@ -236,19 +236,25 @@ export async function getDailySummary(
   const briefing = await generateBriefing(auth, snapshot);
   const generatedAt = new Date().toISOString();
 
-  await DailySummary.findOneAndUpdate(
-    { userId, date },
-    {
-      userId,
-      date,
-      role: auth.role ?? '',
-      headline: briefing.headline,
-      insights: briefing.insights,
-      focus: briefing.focus,
-      generatedAt,
-    },
-    { upsert: true, setDefaultsOnInsert: true },
-  );
+  try {
+    await DailySummary.findOneAndUpdate(
+      { userId, date },
+      {
+        userId,
+        date,
+        role: auth.role ?? '',
+        headline: briefing.headline,
+        insights: briefing.insights,
+        focus: briefing.focus,
+        generatedAt,
+      },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+  } catch (err) {
+    // A concurrent first-load for the same user/day can collide on the unique
+    // (userId, date) index — harmless, the row now exists. Other errors rethrow.
+    if (!(err instanceof Error && err.message.includes('E11000'))) throw err;
+  }
 
   return { date, role: auth.role ?? '', ...briefing, generatedAt, cached: false };
 }

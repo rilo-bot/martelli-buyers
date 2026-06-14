@@ -1,8 +1,20 @@
 import { create } from 'zustand';
 import { resource } from '@/lib/api';
+import { deleteUpload } from '@/lib/upload';
 import type { DueDiligence, EvidenceItem, ComparableSale, DDChecklistItem, ChecklistItemStatus } from '@/types';
 
 const api = resource<DueDiligence>('due-diligence');
+
+/** A checklist item counts as resolved once it's Completed or marked N/A. */
+const isResolved = (status: ChecklistItemStatus) => status === 'completed' || status === 'na';
+
+export interface DealDdStatus {
+  total: number;
+  resolved: number;
+  /** True iff ≥1 linked DD record exists and every item across them is resolved. */
+  complete: boolean;
+  recordCount: number;
+}
 
 const DEFAULT_CHECKLIST: Omit<DDChecklistItem, 'completedBy' | 'completedAt'>[] = [
   { id: 'dd-1', label: 'Auckland Council flood map reviewed', status: 'pending', notes: '' },
@@ -38,6 +50,8 @@ interface DueDiligenceState {
   updateChecklistItem: (ddId: string, itemId: string, status: ChecklistItemStatus, notes?: string, completedBy?: string) => Promise<void>;
   generateDefaultChecklist: () => DDChecklistItem[];
   getRecordForProperty: (propertyId: string) => DueDiligence | undefined;
+  /** Aggregate DD completion for a buyer journey — mirrors the server stage gate. */
+  dealDdStatus: (dealId: string) => DealDdStatus;
 }
 
 export const useDueDiligenceStore = create<DueDiligenceState>()((set, get) => ({
@@ -80,6 +94,9 @@ export const useDueDiligenceStore = create<DueDiligenceState>()((set, get) => ({
   removeEvidence: (ddId, evidenceId) => {
     const record = get().records.find((r) => r.id === ddId);
     if (!record) return Promise.resolve();
+    const target = record.evidenceLinks.find((e) => e.id === evidenceId);
+    // Best-effort reclaim of the S3 object for uploaded (non-link) evidence.
+    if (target && target.type !== 'link') deleteUpload(target.url).catch(() => {});
     return get().updateRecord(ddId, {
       evidenceLinks: record.evidenceLinks.filter((e) => e.id !== evidenceId),
     });
@@ -129,4 +146,17 @@ export const useDueDiligenceStore = create<DueDiligenceState>()((set, get) => ({
     DEFAULT_CHECKLIST.map((item) => ({ ...item, completedBy: '', completedAt: '' })),
 
   getRecordForProperty: (propertyId) => get().records.find((r) => r.propertyId === propertyId),
+
+  dealDdStatus: (dealId) => {
+    const recs = get().records.filter((r) => r.dealId === dealId);
+    let total = 0;
+    let resolved = 0;
+    for (const r of recs) {
+      for (const item of r.checklistItems) {
+        total += 1;
+        if (isResolved(item.status)) resolved += 1;
+      }
+    }
+    return { total, resolved, recordCount: recs.length, complete: recs.length > 0 && resolved === total };
+  },
 }));

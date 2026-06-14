@@ -42,10 +42,11 @@ export function DailyBriefing() {
             )}
           </div>
 
-          {/* Headline */}
+          {/* Headline — only show an error if we have no prior briefing to keep
+              showing (a failed refresh leaves the last good one in place). */}
           {loading ? (
             <Skeleton className="mt-1.5 h-5 w-3/4" />
-          ) : status === 'error' ? (
+          ) : status === 'error' && !summary ? (
             <p className="mt-1 flex items-center gap-1.5 text-sm text-foreground">
               <AlertCircle className="h-4 w-4 text-warning" />
               {error || 'Could not load your daily briefing.'}

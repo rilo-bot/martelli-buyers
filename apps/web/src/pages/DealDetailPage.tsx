@@ -9,6 +9,7 @@ import { useCommentsStore } from '@/stores/commentsStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAgentsStore } from '@/stores/agentsStore';
+import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -102,6 +103,7 @@ export default function DealDetailPage() {
   const toggleActionItem = useAISummariesStore((s) => s.toggleActionItem);
   const currentUser = useAuthStore((s) => s.currentUser);
   const agents = useAgentsStore((s) => s.agents);
+  const dealDdStatus = useDueDiligenceStore((s) => s.dealDdStatus);
 
   const [showAddProperty, setShowAddProperty] = useState(false);
   const [addPropMode, setAddPropMode] = useState<'new' | 'offmarket'>('new');
@@ -130,6 +132,9 @@ export default function DealDetailPage() {
   // Derived — safe to compute before guard because id/deals are always available
   const deal = useMemo(() => deals.find((d) => d.id === id), [deals, id]);
   const dealProperties = useMemo(() => properties.filter((p) => p.dealId === id), [properties, id]);
+  // DD completion for this journey — subscribe to records so the chip stays live.
+  const ddRecords = useDueDiligenceStore((s) => s.records);
+  const ddStatus = useMemo(() => dealDdStatus(id ?? ''), [ddRecords, dealDdStatus, id]);
   const offers = useOffersStore((s) => s.offers);
   const dealOffers = useMemo(() => offers.filter((o) => o.dealId === id), [offers, id]);
   const tasks = useTasksStore((s) => s.tasks);
@@ -248,6 +253,25 @@ export default function DealDetailPage() {
       toast.error('Failed to link off-market property.');
     } finally {
       setLinkingOmId(null);
+    }
+  };
+
+  // Stage gate: a journey can't cross past Due Diligence until DD is complete.
+  const handleStageChange = async (next: DealStage) => {
+    const ddIdx = STAGE_OPTIONS.indexOf('due_diligence');
+    const crossing = STAGE_OPTIONS.indexOf(deal.stage) <= ddIdx && STAGE_OPTIONS.indexOf(next) > ddIdx;
+    if (crossing && !ddStatus.complete) {
+      toast.error(
+        ddStatus.recordCount === 0
+          ? 'Create and complete a due diligence record before advancing past the Due Diligence stage.'
+          : `Complete due diligence first — ${ddStatus.total - ddStatus.resolved} checklist item(s) still unresolved.`,
+      );
+      return;
+    }
+    try {
+      await updateDeal(deal.id, { stage: next });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the stage.');
     }
   };
 
@@ -444,7 +468,7 @@ export default function DealDetailPage() {
           </Button>
           <Select
             value={deal.stage}
-            onChange={(e) => updateDeal(id, { stage: e.target.value as DealStage })}
+            onChange={(e) => handleStageChange(e.target.value as DealStage)}
             className="w-36 text-sm"
           >
             {STAGE_OPTIONS.map((s) => (
@@ -453,6 +477,33 @@ export default function DealDetailPage() {
           </Select>
         </div>
       </div>
+
+      {/* DD gate status — shown until the journey is past Due Diligence */}
+      {STAGE_OPTIONS.indexOf(deal.stage) <= STAGE_OPTIONS.indexOf('due_diligence') && (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs',
+            ddStatus.complete
+              ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-400'
+              : 'border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400',
+          )}
+        >
+          {ddStatus.complete ? <CheckCircle className="h-3.5 w-3.5 shrink-0" /> : <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
+          <span className="font-medium">
+            Due diligence:{' '}
+            {ddStatus.recordCount === 0
+              ? 'no record yet'
+              : `${ddStatus.resolved}/${ddStatus.total} resolved${ddStatus.complete ? ' · complete' : ' · incomplete'}`}
+          </span>
+          <span className="opacity-70">— required to advance past the Due Diligence stage.</span>
+          <Link
+            to={dealProperties[0] ? `/due-diligence?propertyId=${dealProperties[0].id}` : '/due-diligence'}
+            className="ml-auto font-semibold underline-offset-2 hover:underline"
+          >
+            {ddStatus.recordCount === 0 ? 'Create DD record' : 'Open due diligence'}
+          </Link>
+        </div>
+      )}
 
       {/* Stage progress bar */}
       <div className="flex items-center gap-1">

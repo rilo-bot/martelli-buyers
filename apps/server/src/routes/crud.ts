@@ -50,14 +50,16 @@ async function deleteMedia(urls: string[]): Promise<void> {
  */
 const CASCADES: Record<string, (id: string) => Promise<void>> = {
   async deals(id) {
-    // Reclaim S3 media for every property + offer on the deal before removal.
-    const [props, offers] = await Promise.all([
+    // Reclaim S3 media for every property + offer + DD record on the deal.
+    const [props, offers, dds] = await Promise.all([
       Property.find({ dealId: id }).select('photos').lean(),
       Offer.find({ dealId: id }).select('fileUrls').lean(),
+      DueDiligence.find({ dealId: id }).select('evidenceLinks').lean(),
     ]);
     await deleteMedia([
       ...props.flatMap((p: { photos?: string[] }) => p.photos ?? []),
       ...offers.flatMap((o: { fileUrls?: string[] }) => o.fileUrls ?? []),
+      ...ddEvidenceUrls(dds),
     ]);
     await Promise.all([
       Property.deleteMany({ dealId: id }),
@@ -100,9 +102,13 @@ const CASCADES: Record<string, (id: string) => Promise<void>> = {
     ]);
   },
   async properties(id) {
-    const prop = await Property.findById(id).select('photos dealId offMarketPropertyId').lean();
+    const [prop, dds] = await Promise.all([
+      Property.findById(id).select('photos dealId offMarketPropertyId').lean(),
+      DueDiligence.find({ propertyId: id }).select('evidenceLinks').lean(),
+    ]);
+    // Reclaim the property photos + any DD evidence files before removal.
+    await deleteMedia([...(((prop as { photos?: string[] })?.photos) ?? []), ...ddEvidenceUrls(dds)]);
     if (prop) {
-      await deleteMedia(((prop as { photos?: string[] }).photos) ?? []);
       // If this property was sourced from the off-market database, release the link.
       const omId = (prop as { offMarketPropertyId?: string }).offMarketPropertyId;
       const dealId = (prop as { dealId?: string }).dealId;
@@ -115,7 +121,16 @@ const CASCADES: Record<string, (id: string) => Promise<void>> = {
       ClientComment.deleteMany({ propertyId: id }),
     ]);
   },
+  async 'due-diligence'(id) {
+    const dd = await DueDiligence.findById(id).select('evidenceLinks').lean();
+    await deleteMedia(ddEvidenceUrls(dd ? [dd] : []));
+  },
 };
+
+/** Collect the uploaded-evidence URLs across DD records (external links are skipped by keyFromUrl). */
+function ddEvidenceUrls(dds: Array<{ evidenceLinks?: Array<{ url?: string }> }>): string[] {
+  return dds.flatMap((d) => (d.evidenceLinks ?? []).map((e) => e.url ?? '').filter(Boolean));
+}
 
 type Doc = InstanceType<AnyModel>;
 
@@ -234,6 +249,35 @@ const MODULE_ACTIONS: Record<string, Set<string>> = Object.fromEntries(
   PERMISSION_MODULES.map((m) => [m.key, new Set<string>(m.actions)]),
 );
 
+/* ───────────────────── Buyer-journey stage gating ──────────────────────── */
+
+const DEAL_STAGES = ['qualification', 'search', 'shortlisting', 'due_diligence', 'offer', 'settlement', 'complete'];
+const DD_INDEX = DEAL_STAGES.indexOf('due_diligence');
+
+/** A deal's DD is "complete" iff ≥1 linked record exists and every item is resolved (completed/na). */
+async function isDealDdComplete(dealId: string): Promise<boolean> {
+  const records = await DueDiligence.find({ dealId }).select('checklistItems').lean();
+  if (records.length === 0) return false;
+  return records.every((r: { checklistItems?: Array<{ status?: string }> }) =>
+    (r.checklistItems ?? []).every((i) => i.status === 'completed' || i.status === 'na'),
+  );
+}
+
+/**
+ * Block a buyer journey from crossing past the Due Diligence stage until DD is
+ * complete. Only enforced at the crossing (so moving within post-DD stages, or
+ * legacy data already past DD, isn't trapped). Returns an error string or null.
+ */
+async function validateDealStage(before: Doc, patch: Record<string, unknown>): Promise<string | null> {
+  if (typeof patch.stage !== 'string') return null;
+  const beforeIdx = DEAL_STAGES.indexOf(before.get('stage'));
+  const nextIdx = DEAL_STAGES.indexOf(patch.stage);
+  if (beforeIdx <= DD_INDEX && nextIdx > DD_INDEX && !(await isDealDdComplete(String(before._id)))) {
+    return 'Complete due diligence before advancing past the Due Diligence stage — every checklist item must be Completed or N/A on a linked DD record.';
+  }
+  return null;
+}
+
 /**
  * Resolve the permission string a CRUD action requires for a module. Modules
  * that don't define a write action (e.g. `settings` has only view/manage)
@@ -298,6 +342,14 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
       const patch = sanitize(req.body ?? {});
       // Capture the pre-update doc when this resource records timeline events.
       const before = AUDITED.has(resource) ? await modelRef.findById(req.params.id) : null;
+      // Buyer-journey stage gate: enforce DD completion before crossing past it.
+      if (resource === 'deals' && before) {
+        const stageErr = await validateDealStage(before, patch);
+        if (stageErr) {
+          res.status(400).json({ error: stageErr });
+          return;
+        }
+      }
       const doc = await modelRef.findByIdAndUpdate(req.params.id, patch, {
         new: true,
         runValidators: true,

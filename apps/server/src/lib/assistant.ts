@@ -52,9 +52,9 @@ or deal — always link to it as [Buyer Journeys](/journeys).
    It holds the brief, budget, fee (fixed or percentage), preferred suburbs and
    property requirements.
 5. **Properties** ([Properties](/properties)) are added against a buyer journey
-   and move through statuses: active → shortlisted → inspected → passed →
-   offer_made → purchased. Properties can be marked client-visible to share with
-   the buyer.
+   and move through statuses: suggested → interested → viewed → shortlisted →
+   offer_placed → purchased (or rejected). Properties can be marked
+   client-visible to share with the buyer.
 6. **Due Diligence** ([Due Diligence](/due-diligence)) captures flood maps,
    natural hazards, council records, evidence links, comparable sales and a
    checklist, and can generate a DD report PDF.
