@@ -27,6 +27,8 @@ interface AuthState {
   verifyOtp: (email: string, code: string) => Promise<AuthResult>;
   /** Open an invite link: auto-login with the token and load the user. */
   acceptInvite: (token: string) => Promise<AuthResult>;
+  /** Update your own profile (name and/or avatar) and refresh currentUser. */
+  updateProfile: (patch: { name?: string; avatarUrl?: string }) => Promise<AuthResult>;
   logout: () => Promise<void>;
 }
 
@@ -131,6 +133,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return { ok: true };
     } catch (err) {
       return { ok: false, error: errMessage(err, 'This invite link is invalid or has expired.') };
+    }
+  },
+
+  updateProfile: async (patch) => {
+    try {
+      // PATCH /me returns the full enriched user (permissions/isSuperAdmin), so
+      // replacing currentUser keeps RBAC intact.
+      const user = await request<User>('PATCH', '/api/auth/me', patch);
+      set({ currentUser: user });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: errMessage(err, 'Could not save your profile.') };
     }
   },
 

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Home, Loader2, Trophy, Trash2, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -190,10 +190,11 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
         </Card>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{purchase ? 'Edit Purchase' : 'Record Purchase'}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent size="lg">
+          <SheetHeader><SheetTitle>{purchase ? 'Edit Purchase' : 'Record Purchase'}</SheetTitle></SheetHeader>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="pu-prop">Purchased property</Label>
               <Select id="pu-prop" value={form.propertyId} onChange={(e) => setForm((f) => ({ ...f, propertyId: e.target.value }))} className="h-10 w-full">
@@ -237,15 +238,16 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
               <Label htmlFor="pu-notes">Notes</Label>
               <Textarea id="pu-notes" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={saving}>
                 {saving ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Saving…</> : purchase ? 'Save Changes' : 'Record Purchase'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

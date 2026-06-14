@@ -12,15 +12,15 @@ interface ChatMessage {
 }
 
 const STARTERS = [
-  'How do I qualify a lead?',
-  "What's the campaign workflow?",
+  'What needs my attention today?',
+  'How many leads are open right now?',
+  'Which buyer journeys are stalled?',
   'How do I send an invoice to Xero?',
-  'How does the e-sign agreement work?',
 ];
 
 const GREETING =
-  "Hi! I'm the Martelli Assistant. Ask me how to do anything in the CRM — " +
-  'qualifying leads, running campaigns, due diligence, invoicing, and more.';
+  "Hi! I'm the Martelli Assistant. Ask me how to use the CRM, or about your own " +
+  'data — open leads, stalled journeys, overdue invoices, and more.';
 
 /**
  * Floating in-app guide. Streams how-to answers from /api/ai/assistant and
@@ -138,7 +138,7 @@ export function Assistant() {
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground">Martelli Assistant</p>
-                <p className="text-[11px] text-muted-foreground">How-to guide · always here to help</p>
+                <p className="text-[11px] text-muted-foreground">Guidance + your portal data</p>
               </div>
             </div>
 

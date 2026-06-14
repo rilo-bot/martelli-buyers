@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -209,10 +210,10 @@ export function LeadSettings() {
       </CardContent>
 
       {/* Add / Edit stage dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>{editingId ? 'Edit Stage' : 'Add Stage'}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent size="sm">
+          <SheetHeader><SheetTitle>{editingId ? 'Edit Stage' : 'Add Stage'}</SheetTitle></SheetHeader>
+          <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="stage-label">Stage name *</Label>
               <Input id="stage-label" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="e.g. Discovery Call" autoFocus />
@@ -232,15 +233,15 @@ export function LeadSettings() {
                 </span>
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+          </SheetBody>
+          <SheetFooter>
+            <SheetClose asChild><Button variant="ghost">Cancel</Button></SheetClose>
             <Button onClick={handleSave} disabled={!form.label.trim()}>
               <CheckCircle className="mr-2 h-4 w-4" />{editingId ? 'Save Changes' : 'Add Stage'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete stage confirm */}
       <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>

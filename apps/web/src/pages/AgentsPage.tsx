@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Plus, Search, Users, Star, Phone, Mail, MapPin, Edit, Clock, Trash2, Loader2 } from 'lucide-react';
 import { Stagger, StaggerItem, CountUp } from '@/components/motion';
 import { cn } from '@/lib/utils';
@@ -437,13 +438,14 @@ export default function AgentsPage() {
         </Stagger>
       )}
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!saving) setShowAddDialog(open); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editId ? 'Edit Agent' : 'Add Agent'}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Add/Edit drawer */}
+      <Sheet open={showAddDialog} onOpenChange={(open) => { if (!saving) setShowAddDialog(open); }}>
+        <SheetContent size="lg">
+          <SheetHeader>
+            <SheetTitle>{editId ? 'Edit Agent' : 'Add Agent'}</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="agentFN">First name *</Label>
@@ -497,17 +499,18 @@ export default function AgentsPage() {
               <Label htmlFor="agentNotes">Notes</Label>
               <Textarea id="agentNotes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost" disabled={saving}>Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost" disabled={saving}>Cancel</Button></SheetClose>
               <Button type="submit" disabled={saving || !form.firstName.trim() || !form.lastName.trim()} className="shadow-sm shadow-primary/20">
                 {saving
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
                   : <><Plus className="mr-2 h-4 w-4" />{editId ? 'Save Changes' : 'Add Agent'}</>}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Confirm Dialog */}
       <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open && !deleting) setDeleteTargetId(null); }}>

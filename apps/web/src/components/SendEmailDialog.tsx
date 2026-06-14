@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -192,10 +192,10 @@ export function SendEmailDialog({
   /* ─── Render ──────────────────────────────────────────────────────── */
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent size="xl">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-primary" />
             {step === 'pick' ? 'Choose Email Template' : 'Compose Email'}
             {contextLabel && (
@@ -203,12 +203,13 @@ export function SendEmailDialog({
                 — {contextLabel}
               </span>
             )}
-          </DialogTitle>
-        </DialogHeader>
+          </SheetTitle>
+        </SheetHeader>
 
         {/* ── Step 1: Template picker ── */}
         {step === 'pick' && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             {availableTemplates.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Mail className="h-10 w-10 text-muted-foreground/30 mb-3" />
@@ -287,17 +288,19 @@ export function SendEmailDialog({
               </>
             )}
 
-            <DialogFooter>
-              <DialogClose asChild>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild>
                 <Button type="button" variant="ghost">Cancel</Button>
-              </DialogClose>
-            </DialogFooter>
+              </SheetClose>
+            </SheetFooter>
           </div>
         )}
 
         {/* ── Step 2: Compose ── */}
         {step === 'compose' && (
-          <form onSubmit={handleSend} className="space-y-4">
+          <form onSubmit={handleSend} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             {/* Template badge + back */}
             <div className="flex items-center gap-2">
               <button
@@ -392,7 +395,8 @@ export function SendEmailDialog({
               </div>
             )}
 
-            <DialogFooter>
+            </SheetBody>
+            <SheetFooter>
               <Button type="button" variant="ghost" onClick={() => setStep('pick')}>
                 Back
               </Button>
@@ -400,10 +404,10 @@ export function SendEmailDialog({
                 <Mail className="mr-1.5 h-3.5 w-3.5" />
                 {sending ? 'Sending…' : 'Send Email'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

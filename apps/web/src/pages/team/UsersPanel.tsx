@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { UserPlus, Trash2, Copy } from 'lucide-react';
+import { outranksRole } from '@/types';
 import { useUsersStore } from '@/stores/usersStore';
 import { useRolesStore } from '@/stores/rolesStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -18,8 +19,16 @@ export function UsersPanel() {
   const roles = useRolesStore((s) => s.roles);
   const nameForRole = useRolesStore((s) => s.nameFor);
   const currentUser = useAuthStore((s) => s.currentUser);
-  const { can } = usePermissions();
+  const { can, isSuperAdmin } = usePermissions();
   const canManage = can('team:manage');
+  const myRole = currentUser?.role ?? '';
+
+  // Roles the signed-in user is allowed to assign (hierarchy: super admin >
+  // admin > manager > staff). Mirrors the server gate exactly.
+  const assignableRoles = useMemo(
+    () => roles.filter((r) => outranksRole(r.key, myRole, isSuperAdmin)),
+    [roles, myRole, isSuperAdmin],
+  );
 
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -30,10 +39,12 @@ export function UsersPanel() {
     if (!loaded) fetch().catch(() => {});
   }, [loaded, fetch]);
 
-  // Default the new-user role to the first available once roles load.
+  // Default the new-user role to the first role this user can actually assign.
   useEffect(() => {
-    if (roles.length && !roles.some((r) => r.key === role)) setRole(roles[0].key);
-  }, [roles, role]);
+    if (assignableRoles.length && !assignableRoles.some((r) => r.key === role)) {
+      setRole(assignableRoles[0].key);
+    }
+  }, [assignableRoles, role]);
 
   const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback);
 
@@ -95,8 +106,8 @@ export function UsersPanel() {
 
   return (
     <div className="space-y-5">
-      {/* Add user */}
-      {canManage && (
+      {/* Add user — only when the user has at least one role they may assign. */}
+      {canManage && assignableRoles.length > 0 && (
         <Card className="border-border/80 shadow-sm">
           <CardHeader className="border-b border-border/60 pb-4">
             <CardTitle className="text-base font-semibold">Add a team member</CardTitle>
@@ -123,7 +134,7 @@ export function UsersPanel() {
               <div className="space-y-1.5">
                 <Label htmlFor="new-user-role">Role</Label>
                 <Select id="new-user-role" value={role} onChange={(e) => setRole(e.target.value)}>
-                  {roles.map((r) => (
+                  {assignableRoles.map((r) => (
                     <option key={r.key} value={r.key}>{r.name || r.key}</option>
                   ))}
                 </Select>
@@ -147,6 +158,14 @@ export function UsersPanel() {
           <div className="divide-y divide-border/60">
             {users.map((u) => {
               const isSelf = u.id === currentUser?.id;
+              const targetIsSuperAdmin = Boolean(u.isSuperAdmin);
+              // Hierarchy (mirrors the server): super admin > admin > manager > staff.
+              // You can only act on a user strictly below your own level — never
+              // yourself or the super admin.
+              const canManageTarget =
+                canManage && !isSelf && !targetIsSuperAdmin && outranksRole(u.role, myRole, isSuperAdmin);
+              // Editable only if there's actually a different role you may assign.
+              const roleEditable = canManageTarget && assignableRoles.some((r) => r.key !== u.role);
               const label = u.name || u.email;
               return (
                 <div key={u.id} className="flex flex-wrap items-center gap-3 py-3">
@@ -171,16 +190,20 @@ export function UsersPanel() {
                       <Copy className="h-3.5 w-3.5" /> Invite link
                     </Button>
                   )}
-                  {/* Role: a dropdown for others, read-only for yourself (no self role change). */}
-                  {canManage && !isSelf ? (
+                  {/* Role: an editable dropdown only for users below your level with
+                      a different assignable role available; else read-only. */}
+                  {roleEditable ? (
                     <Select
                       value={u.role}
                       onChange={(e) => changeRole(u.id, e.target.value)}
                       className="h-9 w-40 shrink-0"
                     >
-                      {/* Keep an unknown role visible so it isn't silently lost. */}
-                      {!roles.some((r) => r.key === u.role) && <option value={u.role}>{u.role}</option>}
-                      {roles.map((r) => (
+                      {/* Keep the current role selectable even if it's not one you
+                          could newly assign (e.g. a higher role you can't grant). */}
+                      {!assignableRoles.some((r) => r.key === u.role) && (
+                        <option value={u.role}>{nameForRole(u.role)}</option>
+                      )}
+                      {assignableRoles.map((r) => (
                         <option key={r.key} value={r.key}>{r.name || r.key}</option>
                       ))}
                     </Select>
@@ -192,8 +215,16 @@ export function UsersPanel() {
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                      disabled={isSelf}
-                      title={isSelf ? 'You cannot remove your own account' : 'Remove user'}
+                      disabled={!canManageTarget}
+                      title={
+                        isSelf
+                          ? 'You cannot remove your own account'
+                          : targetIsSuperAdmin
+                            ? 'The super admin cannot be removed'
+                            : canManageTarget
+                              ? 'Remove user'
+                              : 'You can only remove members below your level'
+                      }
                       onClick={() => deleteUser(u.id, label)}
                     >
                       <Trash2 className="h-4 w-4" />

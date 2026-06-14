@@ -1,9 +1,16 @@
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface AvatarProps {
   className?: string;
   children?: React.ReactNode;
   style?: React.CSSProperties;
+}
+
+interface AvatarImageProps {
+  src?: string | null;
+  alt?: string;
+  className?: string;
 }
 
 interface AvatarFallbackProps {
@@ -23,6 +30,26 @@ export function Avatar({ className, children, style }: AvatarProps) {
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * Renders the photo over the fallback (Avatar is `relative overflow-hidden`).
+ * Returns null when there's no src or the image fails to load, so the sibling
+ * AvatarFallback (initials) shows through.
+ */
+export function AvatarImage({ src, alt, className }: AvatarImageProps) {
+  const [failed, setFailed] = useState(false);
+  // A new src is a fresh attempt — clear any prior load failure.
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) return null;
+  return (
+    <img
+      src={src}
+      alt={alt ?? ''}
+      onError={() => setFailed(true)}
+      className={cn('absolute inset-0 h-full w-full object-cover', className)}
+    />
   );
 }
 

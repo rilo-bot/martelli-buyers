@@ -3,43 +3,46 @@ import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
-// Lightweight Dialog matching shadcn/ui's public API surface, implemented
-// without Radix (no new dependency) so the template stays small.
+// Right-side drawer ("Sheet"), used for create/edit forms across the CRM.
 //
-// Exported names kept IDENTICAL to shadcn/ui so generated code that follows
-// standard shadcn patterns "just works":
-//   Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter,
-//   DialogTitle, DialogDescription, DialogClose
+// Mirrors the public API of ./dialog.tsx (same context model, controlled/
+// uncontrolled `open`, ESC + overlay close, body scroll-lock) so converting a
+// form is a near-mechanical Dialog* -> Sheet* rename. The one addition is
+// <SheetBody>: the scrollable region between a sticky header and sticky footer,
+// which replaces the per-dialog `max-h-[85vh] overflow-y-auto` hack.
+//
+//   Sheet, SheetTrigger, SheetContent, SheetHeader, SheetBody, SheetFooter,
+//   SheetTitle, SheetDescription, SheetClose
 // ---------------------------------------------------------------------------
 
-interface DialogContextValue {
+interface SheetContextValue {
   open: boolean
   setOpen: (open: boolean) => void
 }
 
-const DialogContext = React.createContext<DialogContextValue | null>(null)
+const SheetContext = React.createContext<SheetContextValue | null>(null)
 
-function useDialogContext(): DialogContextValue {
-  const ctx = React.useContext(DialogContext)
+function useSheetContext(): SheetContextValue {
+  const ctx = React.useContext(SheetContext)
   if (!ctx) {
-    throw new Error("Dialog subcomponents must be used inside <Dialog>")
+    throw new Error("Sheet subcomponents must be used inside <Sheet>")
   }
   return ctx
 }
 
-interface DialogProps {
+interface SheetProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   defaultOpen?: boolean
   children: React.ReactNode
 }
 
-export function Dialog({
+export function Sheet({
   open: controlledOpen,
   onOpenChange,
   defaultOpen = false,
   children,
-}: DialogProps) {
+}: SheetProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen)
   const isControlled = controlledOpen !== undefined
   const open = isControlled ? controlledOpen : uncontrolledOpen
@@ -51,19 +54,19 @@ export function Dialog({
     [isControlled, onOpenChange]
   )
   return (
-    <DialogContext.Provider value={{ open, setOpen }}>
+    <SheetContext.Provider value={{ open, setOpen }}>
       {children}
-    </DialogContext.Provider>
+    </SheetContext.Provider>
   )
 }
 
-interface DialogTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface SheetTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean
 }
 
-export const DialogTrigger = React.forwardRef<HTMLButtonElement, DialogTriggerProps>(
+export const SheetTrigger = React.forwardRef<HTMLButtonElement, SheetTriggerProps>(
   ({ asChild, onClick, children, ...props }, ref) => {
-    const { setOpen } = useDialogContext()
+    const { setOpen } = useSheetContext()
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
       onClick?.(e)
       if (!e.defaultPrevented) setOpen(true)
@@ -88,18 +91,39 @@ export const DialogTrigger = React.forwardRef<HTMLButtonElement, DialogTriggerPr
     )
   }
 )
-DialogTrigger.displayName = "DialogTrigger"
+SheetTrigger.displayName = "SheetTrigger"
 
-export function DialogContent({
+type SheetSize = "sm" | "md" | "lg" | "xl"
+
+// Mobile is full-width; the cap kicks in at the `sm` breakpoint upward.
+const SIZE_CLASS: Record<SheetSize, string> = {
+  sm: "sm:max-w-sm",   // ~24rem
+  md: "sm:max-w-md",   // ~28rem
+  lg: "sm:max-w-lg",   // ~32rem
+  xl: "sm:max-w-2xl",  // ~42rem
+}
+
+interface SheetContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  size?: SheetSize
+}
+
+export function SheetContent({
   className,
   children,
-  showClose = true,
+  size = "md",
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { showClose?: boolean }) {
-  const { open, setOpen } = useDialogContext()
+}: SheetContentProps) {
+  const { open, setOpen } = useSheetContext()
+  // Drives the slide-in: mount hidden (translate-x-full), then flip on the next
+  // frame so the transition runs. Kept internal so callers don't manage it.
+  const [shown, setShown] = React.useState(false)
 
   React.useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setShown(false)
+      return
+    }
+    const raf = requestAnimationFrame(() => setShown(true))
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false)
     }
@@ -107,6 +131,7 @@ export function DialogContent({
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
+      cancelAnimationFrame(raf)
       document.removeEventListener("keydown", handler)
       document.body.style.overflow = previousOverflow
     }
@@ -115,9 +140,11 @@ export function DialogContent({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50">
       <div
-        className="fixed inset-0 bg-background/80 backdrop-blur-sm"
+        className={cn(
+          "fixed inset-0 bg-background/50 transition-opacity duration-200"
+        )}
         onClick={() => setOpen(false)}
         aria-hidden="true"
       />
@@ -125,47 +152,36 @@ export function DialogContent({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg",
+          "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col border-l border-border bg-background shadow-xl",
+          "transition-transform duration-200 ease-out will-change-transform",
+          SIZE_CLASS[size],
+          shown ? "translate-x-0" : "translate-x-full",
           className
         )}
         {...props}
       >
         {children}
-        {showClose && (
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => setOpen(false)}
-            className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => setOpen(false)}
+          className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   )
 }
 
-export function DialogHeader({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)}
-      {...props}
-    />
-  )
-}
-
-export function DialogFooter({
+export function SheetHeader({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-2",
+        "flex shrink-0 flex-col space-y-1.5 border-b border-border px-6 py-4 pr-12 text-left",
         className
       )}
       {...props}
@@ -173,36 +189,57 @@ export function DialogFooter({
   )
 }
 
-export const DialogTitle = React.forwardRef<
+export function SheetBody({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn("flex-1 overflow-y-auto px-6 py-5", className)} {...props} />
+  )
+}
+
+export function SheetFooter({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "flex shrink-0 flex-col-reverse gap-2 border-t border-border px-6 py-4 sm:flex-row sm:justify-end sm:space-x-2 sm:space-x-reverse",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export const SheetTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
   <h2
     ref={ref}
-    className={cn(
-      "text-lg font-semibold leading-none tracking-tight",
-      className
-    )}
+    className={cn("text-lg font-semibold leading-none tracking-tight", className)}
     {...props}
   />
 ))
-DialogTitle.displayName = "DialogTitle"
+SheetTitle.displayName = "SheetTitle"
 
-export const DialogDescription = React.forwardRef<
+export const SheetDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
   <p ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
 ))
-DialogDescription.displayName = "DialogDescription"
+SheetDescription.displayName = "SheetDescription"
 
-interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface SheetCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean
 }
 
-export const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
+export const SheetClose = React.forwardRef<HTMLButtonElement, SheetCloseProps>(
   ({ asChild, onClick, children, ...props }, ref) => {
-    const { setOpen } = useDialogContext()
+    const { setOpen } = useSheetContext()
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
       onClick?.(e)
       if (!e.defaultPrevented) setOpen(false)
@@ -227,4 +264,4 @@ export const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>
     )
   }
 )
-DialogClose.displayName = "DialogClose"
+SheetClose.displayName = "SheetClose"

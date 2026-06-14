@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { usePermissions } from '@/lib/permissions';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
   Home, Star, Mail, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
@@ -346,6 +346,7 @@ export function Sidebar() {
                 >
                   {initials}
                 </AvatarFallback>
+                <AvatarImage src={currentUser?.avatarUrl} alt={currentUser?.name} />
               </Avatar>
               <div className={cn('min-w-0 flex-1 text-left transition-all duration-200', collapsed ? 'lg:hidden' : 'block')}>
                 <p className="truncate text-[12.5px] font-semibold leading-tight" style={{ color: 'hsl(var(--sidebar-text))' }}>

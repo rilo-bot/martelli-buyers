@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import {
   Plus, Search, AlertCircle, ExternalLink, Upload, Loader2, StickyNote,
   FileText, ArrowLeft, Trash2, Link as LinkIcon, ShieldCheck,
@@ -493,10 +493,10 @@ export default function DueDiligencePage() {
               )}
             </div>
 
-            <Dialog open={showAddEvidence} onOpenChange={(o) => { if (!uploading) setShowAddEvidence(o); }}>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Add Evidence</DialogTitle></DialogHeader>
-                <div className="space-y-4">
+            <Sheet open={showAddEvidence} onOpenChange={(o) => { if (!uploading) setShowAddEvidence(o); }}>
+              <SheetContent size="md">
+                <SheetHeader><SheetTitle>Add Evidence</SheetTitle></SheetHeader>
+                <SheetBody className="space-y-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="evLabel">Label <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input id="evLabel" value={evidenceForm.label} onChange={(e) => setEvidenceForm((f) => ({ ...f, label: e.target.value }))} placeholder="Defaults to the file name / link" />
@@ -555,12 +555,12 @@ export default function DueDiligencePage() {
                     </Button>
                   </form>
 
-                  <DialogFooter>
-                    <DialogClose asChild><Button type="button" variant="ghost" disabled={uploading}>Close</Button></DialogClose>
-                  </DialogFooter>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </SheetBody>
+                  <SheetFooter>
+                    <SheetClose asChild><Button type="button" variant="ghost" disabled={uploading}>Close</Button></SheetClose>
+                  </SheetFooter>
+              </SheetContent>
+            </Sheet>
           </TabsContent>
 
           {/* COMPARABLES */}
@@ -631,10 +631,11 @@ export default function DueDiligencePage() {
               )}
             </div>
 
-            <Dialog open={showAddComp} onOpenChange={setShowAddComp}>
-              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Add Comparable Sale</DialogTitle></DialogHeader>
-                <form onSubmit={handleAddComp} className="space-y-4">
+            <Sheet open={showAddComp} onOpenChange={setShowAddComp}>
+              <SheetContent size="lg">
+                <SheetHeader><SheetTitle>Add Comparable Sale</SheetTitle></SheetHeader>
+                <form onSubmit={handleAddComp} className="flex min-h-0 flex-1 flex-col">
+                  <SheetBody className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="compAddr">Address *</Label>
@@ -677,15 +678,16 @@ export default function DueDiligencePage() {
                     <Label htmlFor="compNotes">Notes</Label>
                     <Textarea id="compNotes" value={compForm.notes} onChange={(e) => setCompForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
                   </div>
-                  <DialogFooter>
-                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                  </SheetBody>
+                  <SheetFooter>
+                    <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
                     <Button type="submit" disabled={!compForm.address.trim()} className="shadow-sm shadow-primary/20">
                       <Plus className="mr-2 h-4 w-4" />Add Comparable
                     </Button>
-                  </DialogFooter>
+                  </SheetFooter>
                 </form>
-              </DialogContent>
-            </Dialog>
+              </SheetContent>
+            </Sheet>
           </TabsContent>
 
           {/* NOTES */}
@@ -797,10 +799,11 @@ export default function DueDiligencePage() {
       )}
 
       {/* Create DD Dialog */}
-      <Dialog open={showCreateDD} onOpenChange={setShowCreateDD}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>New Due Diligence Record</DialogTitle></DialogHeader>
-          <form onSubmit={handleCreateDD} className="space-y-4">
+      <Sheet open={showCreateDD} onOpenChange={setShowCreateDD}>
+        <SheetContent size="sm">
+          <SheetHeader><SheetTitle>New Due Diligence Record</SheetTitle></SheetHeader>
+          <form onSubmit={handleCreateDD} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="ddAddress">Property address *</Label>
               <Input id="ddAddress" value={createForm.address} onChange={(e) => setCreateForm((f) => ({ ...f, address: e.target.value }))} placeholder="12 Example St, Remuera" />
@@ -824,15 +827,16 @@ export default function DueDiligencePage() {
                 {properties.map((p) => <option key={p.id} value={p.id}>{p.address}</option>)}
               </Select>
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={!createForm.address.trim()} className="shadow-sm shadow-primary/20">
                 <Plus className="mr-2 h-4 w-4" />Create Record
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

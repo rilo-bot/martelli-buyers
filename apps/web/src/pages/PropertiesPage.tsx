@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageTransition, Stagger, StaggerItem, CountUp } from '@/components/motion';
@@ -282,11 +282,12 @@ export default function PropertiesPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Add Off-Market Dialog */}
-      <Dialog open={showAddOffMarket} onOpenChange={setShowAddOffMarket}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Add Off-Market Property</DialogTitle></DialogHeader>
-          <form onSubmit={handleAddOffMarket} className="space-y-4">
+      {/* Add Off-Market drawer */}
+      <Sheet open={showAddOffMarket} onOpenChange={setShowAddOffMarket}>
+        <SheetContent size="lg">
+          <SheetHeader><SheetTitle>Add Off-Market Property</SheetTitle></SheetHeader>
+          <form onSubmit={handleAddOffMarket} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="omAddress">Street address *</Label>
               <Input id="omAddress" value={omForm.address} onChange={(e) => setOmForm((f) => ({ ...f, address: e.target.value }))} placeholder="12 Example St" />
@@ -371,15 +372,16 @@ export default function PropertiesPage() {
               <Label htmlFor="omNotes">Notes</Label>
               <Textarea id="omNotes" value={omForm.notes} onChange={(e) => setOmForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={!omForm.address.trim()} className="shadow-sm shadow-primary/20">
                 <Plus className="mr-2 h-4 w-4" />Add Property
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </PageTransition>
   );
 }

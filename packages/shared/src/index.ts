@@ -63,6 +63,35 @@ export const ALWAYS_GRANTED: Permission[] = ['dashboard:view'];
 export const SYSTEM_ROLES = ['admin', 'manager', 'staff'] as const;
 export type SystemRole = (typeof SYSTEM_ROLES)[number];
 
+/**
+ * Management hierarchy among the built-in roles: super admin > admin > manager > staff.
+ * Higher rank = more authority. Custom (non-system) roles have no rank — they are
+ * assigned/managed by the super admin only. Shared by server enforcement and UI gating.
+ */
+export const ROLE_RANK: Record<string, number> = { admin: 3, manager: 2, staff: 1 };
+
+/** Hierarchy rank of a role key, or undefined for custom (non-system) roles. */
+export function roleRank(roleKey: string): number | undefined {
+  return ROLE_RANK[roleKey];
+}
+
+/**
+ * May a requester act on a given role key — i.e. manage a user who holds it, or
+ * assign it to someone? The super admin outranks everything; otherwise the
+ * requester must hold a ranked system role and strictly outrank that key.
+ * (So admin → manager/staff, manager → staff, and custom roles stay super-admin-only.)
+ */
+export function outranksRole(
+  roleKey: string,
+  requesterRole: string,
+  requesterIsSuperAdmin: boolean,
+): boolean {
+  if (requesterIsSuperAdmin) return true;
+  const rr = roleRank(requesterRole);
+  const kr = roleRank(roleKey);
+  return rr !== undefined && kr !== undefined && kr < rr;
+}
+
 const OPERATIONAL_FULL = ['leads', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence'];
 
 /** Default permission set per built-in role. Super admin always gets everything regardless. */
@@ -100,6 +129,8 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  /** Public URL of the user's profile photo; empty/absent → render initials. */
+  avatarUrl?: string;
   /** Role key — references a Role.key (built-in or custom). */
   role: string;
   /** 'invited' until they accept the invite (or log in); then 'active'. */

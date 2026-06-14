@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Plus, Search, FileText, ArrowRight, DollarSign, Home, MapPin, Users, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -284,13 +284,14 @@ export default function DealsPage() {
         </div>
       )}
 
-      {/* Add Buyer Journey Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create New Buyer Journey</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Add Buyer Journey drawer */}
+      <Sheet open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <SheetContent size="lg">
+          <SheetHeader>
+            <SheetTitle>Create New Buyer Journey</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             {clients.length > 0 && (
               <div className="space-y-1.5">
                 <Label htmlFor="clientLink">Link to existing client (optional)</Label>
@@ -355,15 +356,16 @@ export default function DealsPage() {
               <Label htmlFor="brief">Client brief</Label>
               <Textarea id="brief" value={form.brief} onChange={(e) => setForm((f) => ({ ...f, brief: e.target.value }))} placeholder="Describe the client's requirements..." rows={3} />
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={!form.clientName.trim() || !form.clientEmail.trim()} className="shadow-sm shadow-primary/20">
                 <Plus className="mr-2 h-4 w-4" />Create Buyer Journey
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

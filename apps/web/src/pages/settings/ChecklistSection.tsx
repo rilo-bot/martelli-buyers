@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Plus, Pencil, Trash, GripVertical, CheckCircle, AlertTriangle, ClipboardList, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -143,14 +144,15 @@ export function ChecklistSection({ stage }: { stage: QualificationStage }) {
       )}
 
       {/* Add/Edit checklist item dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+        <SheetContent size="sm">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-primary" />
               {editId ? 'Edit Checklist Item' : 'Add Checklist Item'}
-            </DialogTitle>
-          </DialogHeader>
+            </SheetTitle>
+          </SheetHeader>
+          <SheetBody>
           <p className="-mt-1 text-xs text-muted-foreground">For <strong className="text-foreground">{stage.label}</strong></p>
           <div className="mt-1 space-y-3">
             <div className="space-y-1.5">
@@ -170,14 +172,15 @@ export function ChecklistSection({ stage }: { stage: QualificationStage }) {
               <span className="text-xs text-muted-foreground">{form.required ? 'Required — blocks stage advance' : 'Optional — informational only'}</span>
             </div>
           </div>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+          </SheetBody>
+          <SheetFooter>
+            <SheetClose asChild><Button variant="ghost">Cancel</Button></SheetClose>
             <Button onClick={handleSave} disabled={!form.label.trim()}>
               <CheckCircle className="mr-2 h-4 w-4" />{editId ? 'Save Changes' : 'Add Item'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete checklist item confirm */}
       <Dialog open={!!deleteItemId} onOpenChange={(open) => { if (!open) setDeleteItemId(null); }}>

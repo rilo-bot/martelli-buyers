@@ -100,6 +100,8 @@ const UserSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, default: '' },
+    // Public URL of the user's profile photo (uploaded to S3). Empty → initials.
+    avatarUrl: { type: String, default: '' },
     // Role key — references a Role.key (built-in 'admin'|'manager'|'staff' or a
     // custom role). No enum: custom role keys can't be enumerated; the users
     // route validates that the key references an existing Role on write.

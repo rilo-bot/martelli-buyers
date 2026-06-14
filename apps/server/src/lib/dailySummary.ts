@@ -2,37 +2,24 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { env, hasAi } from '../env';
-import { Lead, Deal, Task, Invoice, Property, Client, Agent, DailySummary } from '../models';
-import { viewableModules, type AuthContext } from './permissions';
+import { DailySummary } from '../models';
+import { type AuthContext } from './permissions';
+import { buildSnapshot, snapshotToLines, nzDate, type PortalSnapshot } from './portalData';
 
 /**
  * Role-tailored, RBAC-scoped daily briefing for the dashboard.
  *
- * Everything here is computed from the server-side effective permissions: a
- * section of the snapshot is only gathered if the user's role can VIEW that
- * module, so the resulting summary naturally differs per role and never leaks
- * data the user couldn't otherwise see. Summaries are cached one-per-user-per
- * day (NZ date) to keep cost and latency down.
+ * The portal snapshot (lib/portalData) is computed from the server-side
+ * effective permissions, so the briefing naturally differs per role and never
+ * leaks data the user couldn't otherwise see. Summaries are cached one-per-
+ * user-per day (NZ date) to keep cost and latency down.
  */
-
-const DAY = 86_400_000;
 
 /** In-app routes the briefing is allowed to deep-link to. */
 const KNOWN_ROUTES = new Set([
   '/dashboard', '/leads', '/clients', '/journeys', '/invoices',
   '/properties', '/due-diligence', '/agents', '/emails', '/settings',
 ]);
-
-/** 'YYYY-MM-DD' in Pacific/Auckland — the firm's day boundary. */
-function nzDate(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date());
-}
-
-const ms = (iso: unknown): number => {
-  const t = new Date(String(iso ?? '')).getTime();
-  return Number.isNaN(t) ? 0 : t;
-};
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 export interface DailySummaryItem {
   text: string;
@@ -48,105 +35,10 @@ export interface DailySummaryResult {
   cached: boolean;
 }
 
-interface Snapshot {
-  /** Human-readable metric lines fed to the model. */
-  lines: string[];
-  hasData: boolean;
-}
-
-/** Gather RBAC-scoped aggregate metrics for the briefing. */
-async function buildSnapshot(auth: AuthContext): Promise<Snapshot> {
-  const can = viewableModules(auth);
-  const now = Date.now();
-  const weekAgo = now - 7 * DAY;
-  const today = nzDate();
-  const lines: string[] = [];
-  let hasData = false;
-
-  if (can.has('leads')) {
-    const leads = await Lead.find({}, { status: 1, createdAt: 1, updatedAt: 1, budget: 1 }).lean();
-    const open = leads.filter((l) => l.status === 'new' || l.status === 'contacted');
-    const idle = open.filter((l) => ms(l.createdAt) < now - 3 * DAY);
-    const won = leads.filter((l) => l.status === 'won' && ms(l.updatedAt) >= weekAgo);
-    lines.push(
-      `Leads: ${leads.length} total, ${open.length} open (new/contacted), ` +
-      `${idle.length} idle 3+ days, ${won.length} won in the last 7 days.`,
-    );
-    if (leads.length) hasData = true;
-  }
-
-  if (can.has('journeys')) {
-    const deals = await Deal.find({}, { stage: 1, updatedAt: 1, agreementStatus: 1 }).lean();
-    const active = deals.filter((d) => d.stage !== 'complete');
-    const stalled = active.filter((d) => ms(d.updatedAt) < weekAgo);
-    const awaitingSig = deals.filter((d) => d.agreementStatus === 'sent');
-    const byStage = active.reduce<Record<string, number>>((acc, d) => {
-      acc[d.stage] = (acc[d.stage] ?? 0) + 1;
-      return acc;
-    }, {});
-    const stageStr = Object.entries(byStage).map(([s, n]) => `${s}: ${n}`).join(', ') || 'none';
-    lines.push(
-      `Buyer journeys: ${active.length} active (${stageStr}), ` +
-      `${stalled.length} stalled with no update in 7+ days, ` +
-      `${awaitingSig.length} agreements sent but not yet signed.`,
-    );
-
-    const tasks = await Task.find({ completed: false }, { dueDate: 1, priority: 1 }).lean();
-    const dueOrOverdue = tasks.filter((t) => t.dueDate && t.dueDate <= today);
-    const highPriority = tasks.filter((t) => t.priority === 'high');
-    lines.push(
-      `Tasks: ${tasks.length} open, ${dueOrOverdue.length} due today or overdue, ` +
-      `${highPriority.length} high priority.`,
-    );
-    if (deals.length || tasks.length) hasData = true;
-  }
-
-  if (can.has('invoices')) {
-    const invoices = await Invoice.find({}, { status: 1, dueDate: 1, total: 1 }).lean();
-    const overdue = invoices.filter(
-      (i) => i.status === 'overdue' || (i.status === 'sent' && i.dueDate && ms(i.dueDate) < now),
-    );
-    const overdueTotal = overdue.reduce((s, i) => s + (i.total ?? 0), 0);
-    const draft = invoices.filter((i) => i.status === 'draft');
-    lines.push(
-      `Invoices: ${overdue.length} overdue (${money(overdueTotal)}), ${draft.length} in draft.`,
-    );
-    if (invoices.length) hasData = true;
-  }
-
-  if (can.has('properties')) {
-    const props = await Property.find({}, { status: 1 }).lean();
-    const shortlisted = props.filter((p) => p.status === 'shortlisted' || p.status === 'viewed');
-    const offers = props.filter((p) => p.status === 'offer_placed');
-    lines.push(
-      `Properties: ${props.length} tracked, ${shortlisted.length} shortlisted/viewed, ` +
-      `${offers.length} with an offer placed.`,
-    );
-    if (props.length) hasData = true;
-  }
-
-  if (can.has('clients')) {
-    const clients = await Client.estimatedDocumentCount();
-    lines.push(`Clients: ${clients} total.`);
-    if (clients) hasData = true;
-  }
-
-  if (can.has('agents')) {
-    const [agents, preferred] = await Promise.all([
-      Agent.estimatedDocumentCount(),
-      Agent.countDocuments({ isPreferred: true }),
-    ]);
-    lines.push(`Agents: ${agents} in the network, ${preferred} preferred.`);
-    if (agents) hasData = true;
-  }
-
-  return { lines, hasData };
-}
-
 /** Ask the model for a short, role-aware briefing from the snapshot. */
 async function generateBriefing(
   auth: AuthContext,
-  snapshot: Snapshot,
+  snapshot: PortalSnapshot,
 ): Promise<{ headline: string; insights: DailySummaryItem[]; focus: string }> {
   const openrouter = createOpenRouter({ apiKey: env.AI.apiKey });
 
@@ -173,7 +65,7 @@ async function generateBriefing(
     : 'This user works the day-to-day — emphasise their immediate follow-ups: leads to chase, tasks due, journeys needing action.';
 
   const metrics = snapshot.hasData
-    ? snapshot.lines.join('\n')
+    ? snapshotToLines(snapshot).join('\n')
     : 'There is little or no data in the CRM yet.';
 
   const { object } = await generateObject({

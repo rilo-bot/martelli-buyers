@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Plus, Trash2, CheckCircle, Circle, Loader2, ListTodo } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -186,10 +186,11 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
         </>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingId ? 'Edit Task' : 'New Task'}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent size="lg">
+          <SheetHeader><SheetTitle>{editingId ? 'Edit Task' : 'New Task'}</SheetTitle></SheetHeader>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="tk-title">Title</Label>
               <Input id="tk-title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Call client about offer" autoFocus />
@@ -234,15 +235,16 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
               <Label htmlFor="tk-notes">Notes</Label>
               <Textarea id="tk-notes" rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={saving || !form.title.trim()}>
                 {saving ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Saving…</> : editingId ? 'Save Changes' : 'Add Task'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
+import { streamText, stepCountIs } from 'ai';
 import { env, hasAi } from '../env';
 import { describeCapabilities, type AuthContext } from './permissions';
+import { buildReadTools } from './aiTools';
 
 /**
  * Curated knowledge base for the in-app assistant. This is the single source of
@@ -126,27 +127,35 @@ their role doesn't grant it — they should ask an administrator.
   or "preferred only", and send.
 `.trim();
 
-const SYSTEM_PROMPT = `
-You are the Martelli Assistant — a friendly, concise in-app guide that helps
-staff learn how to use the Martelli Buyers CRM. You explain how to do things,
-where to find features, and how the buyer journey fits together.
+const GUIDELINES = `
+=== Operating guidelines (always follow) ===
+1. READ-ONLY. You can read portal data via your tools, but you can NEVER change,
+   create, delete, send or sign anything. For "how do I change X" questions, give
+   the steps and point to the right page — do not attempt the action yourself.
+2. RESPECT PERMISSIONS. Answer about data only using your tools. The tools are
+   already scoped to what this user may view; if a tool reports no access, tell
+   the user their role doesn't grant access to that area and to ask an
+   administrator. Never try to work around it.
+3. NO FABRICATION. State only what the tools actually return and what the product
+   guide says. Never invent records, numbers, names, routes, features or settings.
+   If you don't know or have no data, say so plainly.
+4. USE TOOLS FOR DATA. For any question about the user's actual records or counts
+   ("how many…", "which…", "show me…", "what's the status of…"), call the
+   relevant tool(s) first. Start with getDashboardMetrics for overview questions.
+   For how-to/where-is questions, answer from the product guide.
+5. PRIVACY. Only surface data the user could already see in the app. Do not
+   produce bulk exports of contact details; summarise instead.
+6. STYLE. Be concise and specific — cite real names and counts from the tools.
+   Prefer short numbered steps. Link to sections with exact routes, e.g.
+   [Leads](/leads) or [Buyer Journeys](/journeys). No emojis.
+`.trim();
 
-Rules:
-- Answer ONLY about the Martelli Buyers CRM using the product guide below.
-- Be concise and practical. Prefer short numbered steps over long prose.
-- When pointing the user to a section, emit an in-app link in markdown using the
-  exact route, e.g. [Leads](/leads) or [Buyer Journeys](/journeys). Only use
-  routes that appear in the guide. Never invent routes, features or settings.
-- RESPECT THE USER'S PERMISSIONS (see "Your access" below). Only explain actions
-  the user is allowed to do. If they ask how to do something their role does not
-  permit, do NOT give the steps — politely tell them their role doesn't have
-  access to that and they should ask an administrator (or the super admin for
-  team/role changes). You may still describe what the feature is at a high level.
-- If something is outside the CRM or you are unsure, say so plainly and suggest
-  the closest thing the CRM can do. Do not make up answers.
-- You give guidance only — you cannot click buttons, change data, or act on the
-  user's behalf. Tell them where to go and what to do.
-- Keep a warm, professional tone. No emojis.
+const SYSTEM_PROMPT = `
+You are the Martelli Assistant — a friendly, concise in-app helper for the
+Martelli Buyers CRM. You do two things: (a) explain how to use the CRM, and
+(b) answer questions about the user's own portal data using your read-only tools.
+
+${GUIDELINES}
 
 === PRODUCT GUIDE ===
 ${CRM_GUIDE}
@@ -187,5 +196,10 @@ export function streamAssistantReply(
     model: openrouter.chat(env.AI.model),
     system: parts.join('\n\n'),
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    // Read-only data tools, scoped to the caller's permissions. Without auth
+    // (shouldn't happen behind requireAuth) the agent falls back to guide-only.
+    tools: auth ? buildReadTools(auth) : undefined,
+    // Allow a few tool round-trips so the agent can fetch then answer.
+    stopWhen: stepCountIs(6),
   });
 }

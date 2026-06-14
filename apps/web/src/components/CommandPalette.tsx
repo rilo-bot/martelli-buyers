@@ -70,22 +70,32 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0 overflow-hidden gap-0 top-[20%] translate-y-0">
-        <div className="flex items-center gap-2.5 border-b border-border px-4">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+      <DialogContent
+        showClose={false}
+        className="w-full max-w-xl gap-0 overflow-hidden rounded-xl border-border p-0 shadow-2xl"
+      >
+        {/* Search row */}
+        <div className="flex items-center gap-3 border-b border-border px-4">
+          <Search className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search or jump to…"
-            className="flex-1 bg-transparent py-3.5 text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent py-4 text-[15px] outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">ESC</kbd>
+          <kbd className="hidden h-5 shrink-0 items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+            ESC
+          </kbd>
         </div>
-        <div className="max-h-[320px] overflow-y-auto py-2">
+
+        {/* Results */}
+        <div className="max-h-[60vh] overflow-y-auto p-2">
           {results.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-muted-foreground">No results.</p>
+            <p className="px-3 py-10 text-center text-sm text-muted-foreground">
+              No results for “{query}”.
+            </p>
           ) : (
             results.map((item, idx) => {
               const showGroup = item.group !== lastGroup;
@@ -93,27 +103,47 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               return (
                 <div key={item.to}>
                   {showGroup && (
-                    <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{item.group}</p>
+                    <p className={cn(
+                      'px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground',
+                      idx === 0 ? 'pt-1' : 'pt-3',
+                    )}>
+                      {item.group}
+                    </p>
                   )}
                   <button
                     type="button"
                     onMouseEnter={() => setActive(idx)}
                     onClick={() => select(item)}
                     className={cn(
-                      'flex w-full items-center gap-3 px-4 py-2 text-sm transition-colors',
-                      idx === active ? 'bg-primary/8 text-foreground' : 'text-muted-foreground',
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+                      idx === active ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted',
                     )}
                   >
-                    <item.icon className={cn('h-4 w-4 shrink-0', idx === active ? 'text-primary' : '')} />
-                    <span className="flex-1 text-left">{item.label}</span>
-                    {idx === active && <CornerDownLeft className="h-3.5 w-3.5 opacity-60" />}
+                    <item.icon className={cn('h-[18px] w-[18px] shrink-0', idx === active ? 'text-primary' : 'text-muted-foreground')} />
+                    <span className="flex-1 text-left font-medium">{item.label}</span>
+                    {idx === active && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-primary/70" />}
                   </button>
                 </div>
               );
             })
           )}
         </div>
+
+        {/* Footer hints */}
+        <div className="flex items-center gap-4 border-t border-border bg-muted/30 px-4 py-2.5 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5"><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
+          <span className="flex items-center gap-1.5"><Kbd>↵</Kbd> open</span>
+          <span className="flex items-center gap-1.5"><Kbd>esc</Kbd> close</span>
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-card px-1 text-[10px] font-medium text-muted-foreground">
+      {children}
+    </kbd>
   );
 }

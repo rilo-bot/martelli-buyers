@@ -18,6 +18,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
 } from '@/components/ui/dialog';
 import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose,
+} from '@/components/ui/sheet';
+import {
   Plus, Search, Users, Phone, Mail, Building2, FileText, ChevronRight, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -271,13 +274,14 @@ export default function ClientsPage() {
         </Stagger>
       )}
 
-      {/* Add Client Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(o) => { if (!submitting) setShowAddDialog(o); }}>
-        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Client</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Add Client drawer */}
+      <Sheet open={showAddDialog} onOpenChange={(o) => { if (!submitting) setShowAddDialog(o); }}>
+        <SheetContent size="lg">
+          <SheetHeader>
+            <SheetTitle>Add New Client</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="firstName">First name *</Label>
@@ -310,10 +314,11 @@ export default function ClientsPage() {
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Background, preferences, referral details..." rows={3} />
             </div>
-            <DialogFooter>
-              <DialogClose asChild>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild>
                 <Button type="button" variant="ghost" disabled={submitting}>Cancel</Button>
-              </DialogClose>
+              </SheetClose>
               <Button type="submit" disabled={!canSubmit || submitting} className="shadow-sm shadow-primary/20">
                 {submitting ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding…</>
@@ -321,10 +326,10 @@ export default function ClientsPage() {
                   <><Plus className="mr-2 h-4 w-4" /> Add Client</>
                 )}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Confirm Dialog */}
       <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open && !deleting) setDeleteTargetId(null); }}>

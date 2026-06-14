@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
+import { outranksRole } from '@rilo/shared';
 import { User, Role } from '../models';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission } from '../lib/permissions';
@@ -43,7 +44,9 @@ usersRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     const users = await User.find().sort({ createdAt: 1 });
-    res.json(users.map((u) => u.toJSON()));
+    // Tag the env super admin so the client can lock that row (the flag is
+    // computed from the env email, never persisted on the document).
+    res.json(users.map((u) => ({ ...u.toJSON(), isSuperAdmin: isSuperAdminEmail(u.get('email')) })));
   }),
 );
 
@@ -56,6 +59,11 @@ usersRouter.post(
     const normalized = email.trim().toLowerCase();
     if (!(await roleExists(role))) {
       res.status(400).json({ error: 'Unknown role.' });
+      return;
+    }
+    // Hierarchy: you can only invite users with a role below your own level.
+    if (!outranksRole(role, String(req.auth?.user?.get?.('role') ?? ''), Boolean(req.auth?.isSuperAdmin))) {
+      res.status(403).json({ error: 'You can only invite users with a role below your own role level.' });
       return;
     }
     if (await User.exists({ email: normalized })) {
@@ -115,9 +123,28 @@ usersRouter.patch(
       return;
     }
     if (patch.role !== undefined) {
+      // The super admin's role is a fixed invariant — nobody can reassign it,
+      // not even the super admin themselves (their access comes from the env).
+      if (isSuperAdminEmail(user.get('email'))) {
+        res.status(400).json({ error: "The super admin's role cannot be changed." });
+        return;
+      }
       // Nobody changes their own role — not even an admin.
       if (String(user._id) === req.session.userId) {
         res.status(400).json({ error: 'You cannot change your own role.' });
+        return;
+      }
+      // Hierarchy: super admin > admin > manager > staff. You may only manage a
+      // user below your level, and only assign a role below your level — so the
+      // super admin owns admins, admins own manager/staff, managers own staff.
+      const isSuper = Boolean(req.auth?.isSuperAdmin);
+      const reqRole = String(req.auth?.user?.get?.('role') ?? '');
+      if (!outranksRole(String(user.get('role')), reqRole, isSuper)) {
+        res.status(403).json({ error: 'You can only manage team members below your own role level.' });
+        return;
+      }
+      if (!outranksRole(patch.role, reqRole, isSuper)) {
+        res.status(403).json({ error: 'You can only assign roles below your own role level.' });
         return;
       }
       if (!(await roleExists(patch.role))) {
@@ -148,6 +175,11 @@ usersRouter.delete(
     }
     if (String(user._id) === req.session.userId) {
       res.status(400).json({ error: 'You cannot delete your own account.' });
+      return;
+    }
+    // Hierarchy: you can only remove team members below your own role level.
+    if (!outranksRole(String(user.get('role')), String(req.auth?.user?.get?.('role') ?? ''), Boolean(req.auth?.isSuperAdmin))) {
+      res.status(403).json({ error: 'You can only remove team members below your own role level.' });
       return;
     }
     await user.deleteOne();

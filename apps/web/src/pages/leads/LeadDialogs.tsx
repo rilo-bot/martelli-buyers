@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,10 +68,11 @@ export function AddLeadDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Add New Lead</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent size="lg">
+        <SheetHeader><SheetTitle>Add New Lead</SheetTitle></SheetHeader>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <SheetBody className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="firstName">First name *</Label>
@@ -145,15 +146,16 @@ export function AddLeadDialog({
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Qualification notes..." rows={3} />
           </div>
-          <DialogFooter>
-            <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+          </SheetBody>
+          <SheetFooter>
+            <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
             <Button type="submit" disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()}>
               <Plus className="mr-2 h-4 w-4" /> Add Lead
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -192,13 +194,14 @@ export function WonDialog({
   };
 
   return (
-    <Dialog open={!!lead} onOpenChange={(o) => { if (!submitting) onOpenChange(o); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={!!lead} onOpenChange={(o) => { if (!submitting) onOpenChange(o); }}>
+      <SheetContent size="md">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-primary" /> Mark Lead as Won
-          </DialogTitle>
-        </DialogHeader>
+          </SheetTitle>
+        </SheetHeader>
+        <SheetBody>
         {lead && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -243,8 +246,9 @@ export function WonDialog({
             </div>
           </div>
         )}
-        <DialogFooter>
-          <DialogClose asChild><Button variant="ghost" disabled={submitting}>Cancel</Button></DialogClose>
+        </SheetBody>
+        <SheetFooter>
+          <SheetClose asChild><Button variant="ghost" disabled={submitting}>Cancel</Button></SheetClose>
           <Button
             onClick={handleConfirm}
             disabled={submitting || (form.clientMode === 'existing' && !form.existingClientId)}
@@ -255,8 +259,8 @@ export function WonDialog({
               <><CheckCircle className="mr-2 h-4 w-4" /> Confirm — Mark as Won</>
             )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

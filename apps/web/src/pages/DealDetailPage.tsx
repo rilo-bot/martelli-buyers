@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw, Download, Copy, FileSignature, Building2, Search, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -782,11 +783,12 @@ export default function DealDetailPage() {
             )}
           </div>
 
-          <Dialog open={showAddProperty} onOpenChange={(o) => { setShowAddProperty(o); if (!o) { setAddPropMode('new'); setOmSearch(''); } }}>
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Add Property to Journey</DialogTitle></DialogHeader>
+          <Sheet open={showAddProperty} onOpenChange={(o) => { setShowAddProperty(o); if (!o) { setAddPropMode('new'); setOmSearch(''); } }}>
+            <SheetContent size="lg">
+              <SheetHeader><SheetTitle>Add Property to Journey</SheetTitle></SheetHeader>
 
               {/* Mode toggle: enter a new property, or reuse one from the off-market database. */}
+              <div className="shrink-0 px-6 pt-4">
               <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
                 {([
                   { key: 'new', label: 'New property', icon: Plus },
@@ -805,9 +807,11 @@ export default function DealDetailPage() {
                   </button>
                 ))}
               </div>
+              </div>
 
               {addPropMode === 'offmarket' ? (
-                <div className="space-y-3">
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <SheetBody className="space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input value={omSearch} onChange={(e) => setOmSearch(e.target.value)} placeholder="Search off-market by address or suburb..." className="pl-9" />
@@ -853,12 +857,14 @@ export default function DealDetailPage() {
                       ))}
                     </div>
                   )}
-                  <DialogFooter>
-                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                  </DialogFooter>
+                  </SheetBody>
+                  <SheetFooter>
+                    <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
+                  </SheetFooter>
                 </div>
               ) : (
-              <form onSubmit={handleAddProperty} className="space-y-4">
+              <form onSubmit={handleAddProperty} className="flex min-h-0 flex-1 flex-col">
+                <SheetBody className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="propAddress">Street address *</Label>
                   <Input id="propAddress" value={propForm.address} onChange={(e) => setPropForm((f) => ({ ...f, address: e.target.value }))} placeholder="12 Example St" />
@@ -909,16 +915,17 @@ export default function DealDetailPage() {
                   <input type="checkbox" checked={propForm.isOffMarket} onChange={(e) => setPropForm((f) => ({ ...f, isOffMarket: e.target.checked }))} className="rounded" />
                   Off-market property
                 </label>
-                <DialogFooter>
-                  <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                </SheetBody>
+                <SheetFooter>
+                  <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
                   <Button type="submit" disabled={!propForm.address.trim()}>
                     <Plus className="mr-2 h-4 w-4" />Add Property
                   </Button>
-                </DialogFooter>
+                </SheetFooter>
               </form>
               )}
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         {/* OFFERS */}
@@ -1049,10 +1056,11 @@ export default function DealDetailPage() {
             )}
           </div>
 
-          <Dialog open={showAddInvoice} onOpenChange={setShowAddInvoice}>
-            <DialogContent className="max-w-sm">
-              <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
-              <form onSubmit={handleAddInvoice} className="space-y-4">
+          <Sheet open={showAddInvoice} onOpenChange={setShowAddInvoice}>
+            <SheetContent size="sm">
+              <SheetHeader><SheetTitle>Create Invoice</SheetTitle></SheetHeader>
+              <form onSubmit={handleAddInvoice} className="flex min-h-0 flex-1 flex-col">
+                <SheetBody className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="invType">Invoice type</Label>
                   <Select id="invType" value={invForm.type} onChange={(e) => setInvForm((f) => ({ ...f, type: e.target.value as 'engagement' | 'milestone' | 'final' }))}>
@@ -1073,15 +1081,16 @@ export default function DealDetailPage() {
                   <Label htmlFor="invDue">Due date *</Label>
                   <Input id="invDue" type="date" value={invForm.dueDate} onChange={(e) => setInvForm((f) => ({ ...f, dueDate: e.target.value }))} />
                 </div>
-                <DialogFooter>
-                  <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                </SheetBody>
+                <SheetFooter>
+                  <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
                   <Button type="submit" disabled={!invForm.amount || !invForm.dueDate}>
                     <Plus className="mr-2 h-4 w-4" />Create
                   </Button>
-                </DialogFooter>
+                </SheetFooter>
               </form>
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         {/* PURCHASE */}
@@ -1227,10 +1236,11 @@ export default function DealDetailPage() {
             )}
           </div>
 
-          <Dialog open={showAISummary} onOpenChange={setShowAISummary}>
-            <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Generate AI Summary</DialogTitle></DialogHeader>
-              <form onSubmit={handleGenerateSummary} className="space-y-4">
+          <Sheet open={showAISummary} onOpenChange={setShowAISummary}>
+            <SheetContent size="lg">
+              <SheetHeader><SheetTitle>Generate AI Summary</SheetTitle></SheetHeader>
+              <form onSubmit={handleGenerateSummary} className="flex min-h-0 flex-1 flex-col">
+                <SheetBody className="space-y-4">
                 {aiConsentError && (
                   <Card className="border-destructive/30 bg-destructive/5">
                     <CardContent className="pt-3 pb-3">
@@ -1259,16 +1269,17 @@ export default function DealDetailPage() {
                   <Label htmlFor="aiTranscript">Transcript / Notes</Label>
                   <Textarea id="aiTranscript" value={aiForm.transcript} onChange={(e) => setAiForm((f) => ({ ...f, transcript: e.target.value }))} rows={5} placeholder="Paste transcript or key discussion points here..." />
                 </div>
-                <DialogFooter>
-                  <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                </SheetBody>
+                <SheetFooter>
+                  <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
                   <Button type="submit" disabled={!aiForm.title.trim() || isGenerating}>
                     <Binary className="mr-2 h-4 w-4" />
                     {isGenerating ? 'Generating...' : 'Generate Summary'}
                   </Button>
-                </DialogFooter>
+                </SheetFooter>
               </form>
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         {/* TIMELINE */}

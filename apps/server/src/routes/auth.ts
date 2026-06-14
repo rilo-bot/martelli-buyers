@@ -42,6 +42,14 @@ const acceptSchema = z.object({
   token: z.string().min(10),
 });
 
+// Self-service profile edit — a user may change their own name + avatar only.
+// (Role/email/status are managed elsewhere under team:manage.)
+const updateMeSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(120).optional(),
+  // Accept a storage URL or '' to clear the photo.
+  avatarUrl: z.string().trim().max(2000).url().or(z.literal('')).optional(),
+});
+
 /**
  * POST /api/auth/request-otp — email a one-time sign-in code. Self-signup is
  * disabled: a code is only sent to an email that already has an account. The
@@ -165,6 +173,19 @@ authRouter.get(
   '/me',
   requireAuth,
   asyncHandler(async (req, res) => {
+    res.json(await buildSessionUser(req.user));
+  }),
+);
+
+/** PATCH /api/auth/me — update your own profile (name + avatar). */
+authRouter.patch(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const patch = updateMeSchema.parse(req.body ?? {});
+    if (patch.name !== undefined) req.user.set('name', patch.name);
+    if (patch.avatarUrl !== undefined) req.user.set('avatarUrl', patch.avatarUrl);
+    await req.user.save();
     res.json(await buildSessionUser(req.user));
   }),
 );

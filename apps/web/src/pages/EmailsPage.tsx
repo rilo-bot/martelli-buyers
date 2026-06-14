@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Plus, Search, Mail, Send, Edit, Star, Sparkles, AlertTriangle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -429,12 +430,13 @@ export default function EmailsPage() {
       </Tabs>
 
       {/* Add/Edit Template Dialog */}
-      <Dialog open={showAddTemplate} onOpenChange={setShowAddTemplate}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editTemplateId ? 'Edit Template' : 'New Email Template'}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSaveTemplate} className="space-y-4">
+      <Sheet open={showAddTemplate} onOpenChange={setShowAddTemplate}>
+        <SheetContent size="xl">
+          <SheetHeader>
+            <SheetTitle>{editTemplateId ? 'Edit Template' : 'New Email Template'}</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleSaveTemplate} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="tplName">Template name *</Label>
@@ -462,31 +464,33 @@ export default function EmailsPage() {
               <Input id="tplVars" value={templateForm.variables} onChange={(e) => setTemplateForm((f) => ({ ...f, variables: e.target.value }))} placeholder="clientName, consultantName, budget" />
               <p className="text-xs text-muted-foreground">List variable names used in subject/body (without curly braces)</p>
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={!templateForm.name.trim() || !templateForm.subject.trim()} className="shadow-sm shadow-primary/20">
                 <Plus className="mr-2 h-4 w-4" />{editTemplateId ? 'Save Changes' : 'Create Template'}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Agent Blast Dialog */}
-      <Dialog open={showBlastDialog} onOpenChange={setShowBlastDialog}>
-        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      <Sheet open={showBlastDialog} onOpenChange={setShowBlastDialog}>
+        <SheetContent size="xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Send className="h-3.5 w-3.5" />
               </span>
               Send Agent Requirement Blast
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               Personalised per agent — each recipient&apos;s name is filled in automatically. Review the message before sending.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSendBlast} className="space-y-5">
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={handleSendBlast} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-5">
             {/* Step 1 — Source */}
             <div className="space-y-3">
               <p className="section-eyebrow">1 · Source</p>
@@ -624,8 +628,9 @@ export default function EmailsPage() {
               </div>
             </div>
 
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button
                 type="submit"
                 disabled={!blastForm.templateId || !blastForm.subject.trim() || recipients.length === 0 || blasting}
@@ -634,10 +639,10 @@ export default function EmailsPage() {
                 <Send className="mr-2 h-4 w-4" />
                 {blasting ? 'Sending…' : `Send to ${recipients.length} Agent${recipients.length === 1 ? '' : 's'}`}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Preview Dialog */}
       <Dialog open={!!previewId} onOpenChange={(open) => { if (!open) setPreviewId(null); }}>
