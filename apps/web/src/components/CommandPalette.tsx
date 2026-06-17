@@ -36,11 +36,17 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const LISTBOX_ID = 'command-palette-listbox';
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return ITEMS;
-    return ITEMS.filter((i) => (i.label + ' ' + (i.keywords ?? '')).toLowerCase().includes(q));
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return ITEMS;
+    // Every token must appear somewhere in label/keywords (order-independent).
+    return ITEMS.filter((i) => {
+      const haystack = (i.label + ' ' + (i.keywords ?? '')).toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
+    });
   }, [query]);
 
   useEffect(() => {
@@ -54,6 +60,12 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   }, [open]);
 
   useEffect(() => { setActive(0); }, [query]);
+
+  // Keep the highlighted row scrolled into view during keyboard navigation.
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
 
   const select = (item: CommandItem) => {
     onOpenChange(false);
@@ -83,6 +95,12 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search or jump to…"
+            role="combobox"
+            aria-expanded
+            aria-controls={LISTBOX_ID}
+            aria-activedescendant={results[active] ? `cmd-opt-${active}` : undefined}
+            aria-autocomplete="list"
+            aria-label="Search or jump to a page"
             className="flex-1 bg-transparent py-4 text-[15px] outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden h-5 shrink-0 items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
@@ -91,7 +109,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         </div>
 
         {/* Results */}
-        <div className="max-h-[60vh] overflow-y-auto p-2">
+        <div ref={listRef} id={LISTBOX_ID} role="listbox" aria-label="Results" className="max-h-[60vh] overflow-y-auto p-2">
           {results.length === 0 ? (
             <p className="px-3 py-10 text-center text-sm text-muted-foreground">
               No results for “{query}”.
@@ -112,6 +130,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   )}
                   <button
                     type="button"
+                    role="option"
+                    id={`cmd-opt-${idx}`}
+                    data-index={idx}
+                    aria-selected={idx === active}
                     onMouseEnter={() => setActive(idx)}
                     onClick={() => select(item)}
                     className={cn(

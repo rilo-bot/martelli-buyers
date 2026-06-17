@@ -29,6 +29,7 @@ import DueDiligencePage from '@/pages/DueDiligencePage';
 import TeamPage from '@/pages/TeamPage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignAgreementPage from '@/pages/SignAgreementPage';
+import NotFoundPage from '@/pages/NotFoundPage';
 import { RequirePermission } from '@/components/RequirePermission';
 
 // Apply persisted theme before first render to avoid flash
@@ -122,8 +123,11 @@ export default function App() {
             }
           />
           <Route path="/settings" element={<SettingsPage />} />
+          {/* Authenticated catch-all: show a real 404 inside the shell instead of
+              bouncing signed-in users to the login screen. Unauthenticated users
+              still get redirected to /login by ProtectedRoute. */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
       <Toaster richColors position="top-right" />
     </>

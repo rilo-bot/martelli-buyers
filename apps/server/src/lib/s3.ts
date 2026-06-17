@@ -20,6 +20,16 @@ function baseUrl(): string {
   return `https://${env.S3.bucket}.s3.${env.S3.region}.amazonaws.com`;
 }
 
+/**
+ * Place a logical key under the bucket's public-read prefix (if one is
+ * configured). All keys we intend to serve publicly must go through this so the
+ * stored object actually matches the bucket policy's public GET grant.
+ */
+export function publicKey(key: string): string {
+  const prefix = env.S3.publicPrefix;
+  return prefix ? `${prefix}/${key}` : key;
+}
+
 /** Permanent public URL for a stored object (bucket policy grants public read). */
 export function publicUrl(key: string): string {
   return `${baseUrl()}/${key.split('/').map(encodeURIComponent).join('/')}`;

@@ -38,3 +38,19 @@ export function downloadAgreementPdf(dealId: string): Promise<void> {
 export function sendAgreement(dealId: string): Promise<{ ok: boolean; signUrl: string; emailed: boolean }> {
   return request('POST', `/api/documents/agreement/${dealId}/send`)
 }
+
+export interface AgreementContent {
+  /** Effective text (override if set, otherwise the generated default). */
+  feeText: string
+  termsText: string
+  clauses: string
+  /** Generated defaults, for "reset to default" in the editor. */
+  defaults: { feeText: string; termsText: string }
+  /** True once signed — the agreement should no longer be edited. */
+  locked: boolean
+}
+
+/** Fetch the editable agreement text for the admin editor. */
+export function getAgreementContent(dealId: string): Promise<AgreementContent> {
+  return request('GET', `/api/documents/agreement/${dealId}/content`)
+}

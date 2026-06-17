@@ -3,10 +3,11 @@ import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import helmet from 'helmet';
 import cors from 'cors';
-import { env, hasEmail, hasAi, hasS3, hasXero } from './env';
+import { env, hasEmail, hasAi, hasS3, hasXero, hasOutlook } from './env';
 import { connectDb } from './db';
 import { seedDefaults } from './seed';
 import { startInvoiceReminderScheduler } from './lib/invoiceReminders';
+import { startOutlookSyncScheduler } from './lib/outlookSync';
 import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
 import { aiRouter } from './routes/ai';
@@ -18,6 +19,7 @@ import { leadsRouter } from './routes/leads';
 import { timelineRouter } from './routes/timeline';
 import { xeroRouter } from './routes/xero';
 import { xeroWebhookHandler } from './routes/xeroWebhook';
+import { outlookRouter } from './routes/outlook';
 import { usersRouter } from './routes/users';
 import { rolesRouter } from './routes/roles';
 import { requireAuth } from './middleware/auth';
@@ -71,7 +73,7 @@ app.use('/api', requireAuth);
 
 // Server capability flags for the UI (which integrations are configured).
 app.get('/api/config', (_req, res) =>
-  res.json({ hasEmail, hasAi, hasS3, hasXero }),
+  res.json({ hasEmail, hasAi, hasS3, hasXero, hasOutlook }),
 );
 
 // User management (GET list is open for assignment dropdowns; writes need
@@ -88,11 +90,18 @@ app.use('/api/ai', aiRouter);
 // Direct-to-S3 file uploads (presigned URLs).
 app.use('/api/uploads', uploadsRouter);
 
-// Generated documents (invoice / DD report / agreement PDFs + send).
+// Generated documents (invoice / DD report / agreement PDFs + send). These are
+// deep action paths (/invoice/:id.pdf, /agreement/:id/send, …). The generic
+// CRUD loop below also mounts the `documents` catalogue resource at
+// /api/documents — its root + /:id routes fall through past this router, so the
+// two coexist under one namespace without colliding.
 app.use('/api/documents', documentsRouter);
 
 // Xero OAuth connect/callback + invoice push/refresh (org-wide connection).
 app.use('/api/xero', xeroRouter);
+
+// Outlook (Microsoft Graph) OAuth connect/callback + email sync (org-wide mailbox).
+app.use('/api/outlook', outlookRouter);
 
 // Lead-specific actions (e.g. atomic "mark won" conversion). Mounted before the
 // generic CRUD router so /leads/:id/win resolves to this handler.
@@ -112,6 +121,7 @@ async function start() {
   await connectDb();
   await seedDefaults();
   startInvoiceReminderScheduler();
+  startOutlookSyncScheduler();
   app.listen(env.PORT, () => {
     console.log(`[server] listening on http://localhost:${env.PORT}`);
     console.log(`[server] CORS origin: ${env.CLIENT_ORIGIN}`);

@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Plus, Paperclip, Trash2, FileText, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -66,6 +68,8 @@ export function OffersTab({ dealId, properties }: { dealId: string; properties: 
   const [form, setForm] = useState<OfferForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const openCreate = () => {
@@ -131,11 +135,16 @@ export function OffersTab({ dealId, properties }: { dealId: string; properties: 
   };
 
   const handleDelete = async (id: string) => {
+    if (deleting) return;
+    setDeleting(true);
     try {
       await deleteOffer(id);
       toast.success('Offer deleted.');
+      setConfirmDeleteId(null);
     } catch {
       toast.error('Failed to delete offer.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -157,12 +166,13 @@ export function OffersTab({ dealId, properties }: { dealId: string; properties: 
 
       {dealOffers.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/8 border border-dashed border-primary/30 mb-3">
-              <FileText className="h-6 w-6 text-primary/40" />
-            </div>
-            <p className="text-sm font-medium">No offers yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Record an offer placed on a property in this journey.</p>
+          <CardContent className="p-0">
+            <EmptyState
+              compact
+              icon={FileText}
+              title="No offers yet"
+              description="Record an offer placed on a property in this journey."
+            />
           </CardContent>
         </Card>
       ) : (
@@ -206,7 +216,7 @@ export function OffersTab({ dealId, properties }: { dealId: string; properties: 
                   <div className="flex items-center gap-1 shrink-0">
                     <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openEdit(o)}>Edit</Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDelete(o.id)} aria-label="Delete offer">
+                      onClick={() => setConfirmDeleteId(o.id)} aria-label="Delete offer">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -297,6 +307,23 @@ export function OffersTab({ dealId, properties }: { dealId: string; properties: 
           </form>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={!!confirmDeleteId} onOpenChange={(o) => { if (!o && !deleting) setConfirmDeleteId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete offer?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the offer, including its amount, conditions and attachments. This can’t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="ghost" disabled={deleting}>Cancel</Button></DialogClose>
+            <Button variant="destructive" loading={deleting} onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}>
+              {deleting ? 'Deleting…' : 'Delete offer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

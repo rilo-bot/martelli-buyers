@@ -20,6 +20,7 @@ import {
   Offer,
   Task,
   Purchase,
+  Document,
 } from '../models';
 
 // Fields the server owns — never accept them from the client on write.
@@ -42,6 +43,23 @@ async function deleteMedia(urls: string[]): Promise<void> {
       if (key) await deleteObject(key).catch(() => {});
     }),
   );
+}
+
+/**
+ * Delete every catalogued Document matching `filter`, reclaiming each file's S3
+ * object first. Used to clean up a parent entity's attachments on cascade.
+ */
+async function reclaimDocs(filter: Record<string, unknown>): Promise<void> {
+  const docs = await Document.find(filter).select('url storageKey').lean();
+  if (hasS3) {
+    await Promise.all(
+      docs.map(async (d: { storageKey?: string; url?: string }) => {
+        const key = d.storageKey || keyFromUrl(d.url ?? '');
+        if (key) await deleteObject(key).catch(() => {});
+      }),
+    );
+  }
+  await Document.deleteMany(filter);
 }
 
 /**
@@ -74,22 +92,28 @@ const CASCADES: Record<string, (id: string) => Promise<void>> = {
       Client.updateMany({ dealIds: id }, { $pull: { dealIds: id } }),
       // Drop this deal from any off-market property's reuse list.
       OffMarketProperty.updateMany({ usedInDealIds: id }, { $pull: { usedInDealIds: id } }),
+      // Reclaim every catalogued document scoped to this journey (deal, plus its
+      // properties/offers/DD records, which all denormalise dealId).
+      reclaimDocs({ dealId: id }),
     ]);
   },
   async clients(id) {
     await Promise.all([
       Lead.updateMany({ clientId: id }, { $set: { clientId: '' } }),
       Deal.updateMany({ clientId: id }, { $set: { clientId: '' } }),
+      reclaimDocs({ entityType: 'client', entityId: id }),
     ]);
   },
   async offers(id) {
     const offer = await Offer.findById(id).select('fileUrls').lean();
     await deleteMedia(((offer as { fileUrls?: string[] })?.fileUrls) ?? []);
+    await reclaimDocs({ entityType: 'offer', entityId: id });
   },
   async leads(id) {
     await Promise.all([
       Deal.updateMany({ leadId: id }, { $set: { leadId: '' } }),
       Client.updateMany({ leadIds: id }, { $pull: { leadIds: id } }),
+      reclaimDocs({ entityType: 'lead', entityId: id }),
     ]);
   },
   async agents(id) {
@@ -119,11 +143,20 @@ const CASCADES: Record<string, (id: string) => Promise<void>> = {
     await Promise.all([
       DueDiligence.deleteMany({ propertyId: id }),
       ClientComment.deleteMany({ propertyId: id }),
+      reclaimDocs({ entityType: 'property', entityId: id }),
     ]);
   },
   async 'due-diligence'(id) {
     const dd = await DueDiligence.findById(id).select('evidenceLinks').lean();
     await deleteMedia(ddEvidenceUrls(dd ? [dd] : []));
+    await reclaimDocs({ entityType: 'dueDiligence', entityId: id });
+  },
+  // Deleting a catalogued document reclaims its own S3 object.
+  async documents(id) {
+    const doc = await Document.findById(id).select('url storageKey').lean();
+    if (!doc || !hasS3) return;
+    const key = (doc as { storageKey?: string }).storageKey || keyFromUrl((doc as { url?: string }).url ?? '');
+    if (key) await deleteObject(key).catch(() => {});
   },
 };
 
@@ -174,6 +207,27 @@ const AFTER_UPDATE: Record<
   },
   // Editing an invoice updates the matching Xero draft.
   invoices: (_id, _body, doc) => syncInvoiceToXero(doc),
+  // Manually (un)tagging a synced email: stamp linkSource + record a timeline
+  // event when linked to a deal (mirrors the auto-link in outlookSync). The
+  // generic PATCH has already written clientId/dealId from the body.
+  async 'email-messages'(_id, body, doc) {
+    if (!('clientId' in body) && !('dealId' in body)) return;
+    const dealId = doc.get('dealId');
+    const linked = Boolean(doc.get('clientId') || dealId);
+    // Empty link → untagged ('' ); non-empty → a manual tag.
+    doc.set('linkSource', linked ? 'manual' : '');
+    doc.set('linkedAt', linked ? new Date().toISOString() : '');
+    await doc.save();
+    if (linked && dealId) {
+      await recordEvent({
+        entityType: 'email',
+        entityId: String(doc._id),
+        dealId,
+        action: 'email_linked',
+        toValue: doc.get('subject') || '(no subject)',
+      });
+    }
+  },
 };
 
 // Resources whose changes are recorded on the Buyer Journey timeline.

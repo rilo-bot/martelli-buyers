@@ -17,6 +17,31 @@ interface DealLike {
   preferredSuburbs: string[];
   agreementSignerName?: string;
   agreementSignedAt?: string;
+  agreementSignatureImage?: string;
+  agreementFeeText?: string;
+  agreementTermsText?: string;
+  agreementClauses?: string;
+}
+
+/** Default "Fee for Service" paragraph, derived from the deal's fee. */
+export function defaultFeeText(deal: DealLike): string {
+  return `The buyer agrees to engage Martelli Buyers Agents to search for and negotiate the purchase of a property meeting the requirements above. The fee for this service is ${feeText(deal)}.`;
+}
+
+/** Default "Terms" paragraph (static REAA boilerplate). */
+export const DEFAULT_TERMS =
+  'This agreement is governed by the Real Estate Agents Act 2008. The buyer acknowledges receipt of the REA Approved Guide to buyer agency agreements and confirms they have been advised they may seek independent legal advice before signing. The agency will act in the buyer’s best interests at all times.';
+
+/** Decode a 'data:image/png;base64,...' URL into a Buffer, or null if invalid. */
+function decodePngDataUrl(dataUrl?: string): Buffer | null {
+  if (!dataUrl) return null;
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) return null;
+  try {
+    return Buffer.from(match[1], 'base64');
+  } catch {
+    return null;
+  }
 }
 
 function feeText(deal: DealLike): string {
@@ -51,10 +76,18 @@ export async function buildAgreementPdf(deal: DealLike, opts: { signed: boolean 
   }
 
   heading(doc, 'Fee for Service');
-  paragraph(doc, `The buyer agrees to engage Martelli Buyers Agents to search for and negotiate the purchase of a property meeting the requirements above. The fee for this service is ${feeText(deal)}.`);
+  paragraph(doc, deal.agreementFeeText?.trim() || defaultFeeText(deal));
 
   heading(doc, 'Terms');
-  paragraph(doc, 'This agreement is governed by the Real Estate Agents Act 2008. The buyer acknowledges receipt of the REA Approved Guide to buyer agency agreements and confirms they have been advised they may seek independent legal advice before signing. The agency will act in the buyer’s best interests at all times.');
+  paragraph(doc, deal.agreementTermsText?.trim() || DEFAULT_TERMS);
+
+  // Optional admin-authored extra clauses. Blank lines separate paragraphs.
+  if (deal.agreementClauses?.trim()) {
+    heading(doc, 'Additional Terms');
+    for (const para of deal.agreementClauses.split(/\n{2,}/)) {
+      if (para.trim()) paragraph(doc, para.trim());
+    }
+  }
 
   doc.moveDown(1);
   rule(doc, ACCENT);
@@ -62,6 +95,21 @@ export async function buildAgreementPdf(deal: DealLike, opts: { signed: boolean 
 
   heading(doc, 'Signature');
   if (opts.signed && deal.agreementSignerName) {
+    // If the buyer drew a signature, stamp the image above the typed name;
+    // otherwise the typed name itself stands as the signature.
+    const sig = decodePngDataUrl(deal.agreementSignatureImage);
+    if (sig) {
+      try {
+        doc.image(sig, PAGE_MARGIN, doc.y, { fit: [220, 70] });
+        doc.moveDown(0.3);
+        doc.y += 70;
+        doc.strokeColor(MUTED).lineWidth(0.5)
+          .moveTo(PAGE_MARGIN, doc.y).lineTo(PAGE_MARGIN + 220, doc.y).stroke();
+        doc.moveDown(0.4);
+      } catch {
+        /* corrupt image — fall through to the name-only block below */
+      }
+    }
     doc.font('Helvetica-Bold').fontSize(13).fillColor(ACCENT).text(deal.agreementSignerName);
     doc.font('Helvetica').fontSize(9).fillColor(MUTED)
       .text(`Signed electronically on ${niceDate(deal.agreementSignedAt || '')}`)

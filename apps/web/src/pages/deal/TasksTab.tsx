@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Plus, Trash2, CheckCircle, Circle, Loader2, ListTodo } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -69,6 +71,8 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskForm>(emptyForm(currentUser?.id ?? ''));
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const propertyLabel = (id: string) => properties.find((p) => p.id === id)?.address || '';
 
@@ -113,11 +117,16 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
   };
 
   const handleDelete = async (id: string) => {
+    if (deleting) return;
+    setDeleting(true);
     try {
       await deleteTask(id);
       toast.success('Task deleted.');
+      setConfirmDeleteId(null);
     } catch {
       toast.error('Failed to delete task.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -144,7 +153,7 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openEdit(t)}>Edit</Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(t.id)} aria-label="Delete task">
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(t.id)} aria-label="Delete task">
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -160,12 +169,13 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
 
       {dealTasks.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/8 border border-dashed border-primary/30 mb-3">
-              <ListTodo className="h-6 w-6 text-primary/40" />
-            </div>
-            <p className="text-sm font-medium">No tasks yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Track the next actions for this journey — calls, viewings, LIM requests…</p>
+          <CardContent className="p-0">
+            <EmptyState
+              compact
+              icon={ListTodo}
+              title="No tasks yet"
+              description="Track the next actions for this journey — calls, viewings, LIM requests…"
+            />
           </CardContent>
         </Card>
       ) : (
@@ -245,6 +255,21 @@ export function TasksTab({ dealId, properties }: { dealId: string; properties: P
           </form>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={!!confirmDeleteId} onOpenChange={(o) => { if (!o && !deleting) setConfirmDeleteId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete task?</DialogTitle>
+            <DialogDescription>This permanently removes the task. This can’t be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="ghost" disabled={deleting}>Cancel</Button></DialogClose>
+            <Button variant="destructive" loading={deleting} onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}>
+              {deleting ? 'Deleting…' : 'Delete task'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

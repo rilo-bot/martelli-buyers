@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Search, Plus, ChevronRight } from 'lucide-react';
 import { CommandPalette } from '@/components/CommandPalette';
 import { StatusPill } from '@/components/ui/status-pill';
 import { usePermissions } from '@/lib/permissions';
+import { useBreadcrumbStore } from '@/stores/breadcrumbStore';
+import { useMenu } from '@/lib/useMenu';
 import { cn } from '@/lib/utils';
 
 const SECTION_TITLES: Record<string, string> = {
@@ -34,8 +36,9 @@ export function TopBar() {
   const { can } = usePermissions();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
-  const newRef = useRef<HTMLDivElement>(null);
+  const { triggerRef: newTriggerRef, menuRef: newMenuRef } = useMenu(newOpen, () => setNewOpen(false));
   const createLinks = CREATE_LINKS.filter((l) => can(l.perm));
+  const detailTitle = useBreadcrumbStore((s) => s.detailTitle);
 
   // Global ⌘K / Ctrl+K to open the command palette.
   useEffect(() => {
@@ -49,21 +52,13 @@ export function TopBar() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Close the "New" menu on outside click.
-  useEffect(() => {
-    if (!newOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (newRef.current && !newRef.current.contains(e.target as Node)) setNewOpen(false);
-    };
-    window.addEventListener('mousedown', onClick);
-    return () => window.removeEventListener('mousedown', onClick);
-  }, [newOpen]);
-
   const segments = location.pathname.split('/').filter(Boolean);
   const section = segments[0] ?? 'dashboard';
   const sectionTitle = SECTION_TITLES[section] ?? section.charAt(0).toUpperCase() + section.slice(1);
   const isDetail = segments.length > 1;
   const sectionPath = `/${section}`;
+  // Prefer the record name supplied by the detail page; fall back to "Detail".
+  const detailCrumb = detailTitle ?? 'Detail';
 
   return (
     <>
@@ -77,7 +72,7 @@ export function TopBar() {
             <>
               <Link to={sectionPath} className="text-muted-foreground hover:text-foreground transition-colors">{sectionTitle}</Link>
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-              <span className="font-medium text-foreground truncate">Detail</span>
+              <span className="font-medium text-foreground truncate" aria-current="page">{detailCrumb}</span>
             </>
           ) : (
             <span className="font-semibold text-foreground">{sectionTitle}</span>
@@ -102,23 +97,32 @@ export function TopBar() {
 
         {/* Quick create */}
         {createLinks.length > 0 && (
-        <div className="relative" ref={newRef}>
+        <div className="relative">
           <button
+            ref={newTriggerRef}
             type="button"
             onClick={() => setNewOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={newOpen}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             New
           </button>
           {newOpen && (
-            <div className="absolute right-0 top-11 z-40 w-44 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg">
+            <div
+              ref={newMenuRef}
+              role="menu"
+              aria-label="Create new"
+              className="absolute right-0 top-11 z-40 w-44 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
+            >
               {createLinks.map((l) => (
                 <button
                   key={l.to}
                   type="button"
+                  role="menuitem"
                   onClick={() => { setNewOpen(false); navigate(l.to); }}
-                  className={cn('flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted')}
+                  className={cn('flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none')}
                 >
                   <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                   {l.label}
@@ -129,6 +133,30 @@ export function TopBar() {
         </div>
         )}
       </header>
+
+      {/* Mobile action bar — keeps search + create reachable below lg, where the
+          desktop header is hidden. Sits under the Sidebar's mobile logo bar. */}
+      <div className="lg:hidden sticky top-14 z-20 flex items-center gap-2 border-b border-border bg-[hsl(var(--sidebar-bg))] px-4 py-2">
+        <button
+          type="button"
+          onClick={() => setCmdOpen(true)}
+          className="flex h-9 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground"
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">Search…</span>
+        </button>
+        {createLinks.length > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate(createLinks[0].to)}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+          >
+            <Plus className="h-4 w-4" />
+            New
+          </button>
+        )}
+      </div>
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
     </>

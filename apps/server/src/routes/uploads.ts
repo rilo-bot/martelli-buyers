@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { presignUpload, publicUrl, keyFromUrl, deleteObject, hasS3 } from '../lib/s3';
+import { presignUpload, publicUrl, publicKey, keyFromUrl, deleteObject, hasS3 } from '../lib/s3';
 import { asyncHandler } from '../middleware/error';
 
 export const uploadsRouter = Router();
@@ -57,7 +57,7 @@ uploadsRouter.post(
       res.status(400).json({ error: 'Only image, video and document files are allowed.' });
       return;
     }
-    const key = `${scope}/${scopeId ?? 'misc'}/${randomUUID()}.${extFor(filename, contentType)}`;
+    const key = publicKey(`${scope}/${scopeId ?? 'misc'}/${randomUUID()}.${extFor(filename, contentType)}`);
     const uploadUrl = await presignUpload({ key, contentType });
     res.json({ uploadUrl, publicUrl: publicUrl(key), key });
   }),

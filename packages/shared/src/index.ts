@@ -14,12 +14,18 @@ export type PropertyStatus = 'suggested' | 'interested' | 'viewed' | 'shortliste
 export type AgentGeo = 'East' | 'West' | 'North' | 'Central';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
 export type EmailTemplateCategory = 'welcome' | 'dd_request' | 'status_update' | 'requirement_blast' | 'thank_you' | 'post_settlement' | 'other';
+/** Who an email template is addressed to. Drives recipient pre-selection in the Send Email dialog. */
+export type EmailRecipientType = 'client' | 'agent';
 export type ChecklistItemStatus = 'pending' | 'completed' | 'na';
 export type ConsentStatus = 'pending' | 'granted' | 'declined';
 export type OfferStatus = 'draft' | 'submitted' | 'negotiating' | 'accepted' | 'declined' | 'withdrawn';
 export type TaskType = 'call' | 'viewing' | 'lim' | 'builders_report' | 'finance' | 'agreement' | 'other';
 export type TaskPriority = 'low' | 'normal' | 'high';
 export type PurchaseStatus = 'pending' | 'unconditional' | 'settled';
+/** The kind of record a Document is attached to (polymorphic link). '' / 'other' = unattached. */
+export type DocumentEntityType = 'deal' | 'client' | 'property' | 'lead' | 'offer' | 'dueDiligence' | 'invoice' | 'agent' | 'other';
+/** Coarse classification used to filter the document library. */
+export type DocumentCategory = 'agreement' | 'invoice' | 'dd_report' | 'id_verification' | 'lim' | 'building_report' | 'contract' | 'photo' | 'other';
 
 /* ───────────────────────── RBAC: permissions + roles ─────────────────────
  * Permissions are "<module>:<action>" strings. The catalog below is the single
@@ -47,6 +53,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'agents', label: 'Agents', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'emails', label: 'Emails', actions: ['view', 'create', 'edit', 'delete', 'send'] },
   { key: 'dueDiligence', label: 'Due Diligence', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'documents', label: 'Documents', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'settings', label: 'Settings', actions: ['view', 'manage'] },
   { key: 'team', label: 'Team & Roles', actions: ['view', 'manage'] },
 ];
@@ -92,7 +99,7 @@ export function outranksRole(
   return rr !== undefined && kr !== undefined && kr < rr;
 }
 
-const OPERATIONAL_FULL = ['leads', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence'];
+const OPERATIONAL_FULL = ['leads', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence', 'documents'];
 
 /** Default permission set per built-in role. Super admin always gets everything regardless. */
 export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
@@ -235,6 +242,10 @@ export interface Deal {
   agreementSignerName: string;
   agreementSignedAt: string;
   agreementSignerIp: string;
+  agreementSignatureImage: string;
+  agreementFeeText: string;
+  agreementTermsText: string;
+  agreementClauses: string;
   invoiceIds: string[];
   assignedTo: string;
   aiConsentStatus: ConsentStatus;
@@ -378,12 +389,31 @@ export interface EmailTemplate {
   id: string;
   name: string;
   category: EmailTemplateCategory;
+  /**
+   * Intended audience for this template. Determines whether the Send Email
+   * dialog pre-selects the client or an agent as recipient. Optional for
+   * backwards-compatibility with templates seeded before this field existed —
+   * use {@link emailTemplateAudience} to resolve the effective audience.
+   */
+  recipientType?: EmailRecipientType;
   subject: string;
   body: string;
   isActive: boolean;
   variables: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Resolve the effective audience of an email template. Falls back to inferring
+ * from the category for legacy templates that predate the explicit
+ * `recipientType` field (only `requirement_blast` is agent-directed).
+ */
+export function emailTemplateAudience(
+  tpl: Pick<EmailTemplate, 'recipientType' | 'category'>,
+): EmailRecipientType {
+  if (tpl.recipientType) return tpl.recipientType;
+  return tpl.category === 'requirement_blast' ? 'agent' : 'client';
 }
 
 export interface EmailCampaign {
@@ -518,6 +548,39 @@ export interface ActionItem {
   completed: boolean;
 }
 
+/**
+ * A catalogued file. The bytes live in S3 (uploaded via /api/uploads/sign);
+ * this record tracks its metadata and links it to any parent entity through the
+ * polymorphic (entityType, entityId) pair. `dealId` is denormalised when known
+ * so a whole Buyer Journey's documents can be listed in one query.
+ */
+export interface Document {
+  id: string;
+  /** Display name (defaults to the original filename). */
+  name: string;
+  description: string;
+  /** Public URL the file is served from. */
+  url: string;
+  /** S3 object key — used to reclaim the file on delete. */
+  storageKey: string;
+  mimeType: string;
+  /** Size in bytes (0 if unknown). */
+  size: number;
+  /** Optional classification; '' when the file is unclassified. */
+  category: DocumentCategory | '';
+  /** What this document is attached to. '' when unlinked. */
+  entityType: DocumentEntityType | '';
+  /** Id of the linked record (matches entityType). '' when unlinked. */
+  entityId: string;
+  /** Denormalised Buyer Journey id when the document belongs to one. */
+  dealId: string;
+  /** User id of the uploader. */
+  uploadedBy: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ReferralPartner {
   id: string;
   name: string;
@@ -528,4 +591,71 @@ export interface ReferralPartner {
   notes: string;
   dealsReferredIds: string[];
   createdAt: string;
+}
+
+/** A synced Outlook email is either received (inbound) or sent (outbound). */
+export type EmailDirection = 'inbound' | 'outbound';
+/** Which Outlook folder a synced email came from. */
+export type EmailFolder = 'inbox' | 'sent';
+/** How an email got tagged to a client/deal. '' = not yet linked. */
+export type EmailLinkSource = '' | 'auto' | 'manual';
+
+export interface EmailAddress {
+  name: string;
+  address: string;
+}
+
+/** Attachment metadata only — bytes are streamed on demand from Graph. */
+export interface EmailAttachment {
+  graphId: string;
+  name: string;
+  size: number;
+  contentType: string;
+  isInline: boolean;
+}
+
+/**
+ * An Outlook email pulled into the CRM and tagged against a client/deal.
+ * Records originate from the background Microsoft Graph sync (keyed by graphId);
+ * the UI lists + links them but never creates them by hand.
+ */
+export interface EmailMessage {
+  id: string;
+  graphId: string;
+  internetMessageId: string;
+  conversationId: string;
+  subject: string;
+  bodyPreview: string;
+  bodyHtml: string;
+  fromName: string;
+  fromAddress: string;
+  toRecipients: EmailAddress[];
+  ccRecipients: EmailAddress[];
+  sentAt: string;
+  receivedAt: string;
+  direction: EmailDirection;
+  folder: EmailFolder;
+  hasAttachments: boolean;
+  attachments: EmailAttachment[];
+  /** Linked client id (''=unlinked). */
+  clientId: string;
+  /** Linked Buyer Journey id (''=unlinked or client-only link). */
+  dealId: string;
+  linkSource: EmailLinkSource;
+  linkedBy: string;
+  linkedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Shape returned by GET /api/outlook/status (never includes tokens). */
+export interface OutlookStatus {
+  configured: boolean;
+  connected: boolean;
+  accountEmail: string;
+  connectedByEmail: string;
+  syncStatus: 'idle' | 'running' | 'done' | 'error';
+  lastSyncAt: string;
+  syncedCount: number;
+  syncError: string;
 }

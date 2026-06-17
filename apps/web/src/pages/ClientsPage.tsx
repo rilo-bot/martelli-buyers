@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useClientsStore } from '@/stores/clientsStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useLeadsStore } from '@/stores/leadsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useDocumentsStore } from '@/stores/documentsStore';
+import { useConfigStore } from '@/stores/configStore';
 import { usePermissions } from '@/lib/permissions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Stagger, StaggerItem, CountUp } from '@/components/motion';
+import { StatCard } from '@/components/ui/stat-card';
+import { CardGridSkeleton } from '@/components/ui/skeleton';
+import { Stagger, StaggerItem } from '@/components/motion';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
 } from '@/components/ui/dialog';
@@ -22,6 +27,7 @@ import {
 } from '@/components/ui/sheet';
 import {
   Plus, Search, Users, Phone, Mail, Building2, FileText, ChevronRight, Loader2,
+  Paperclip, X, UploadCloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -31,30 +37,51 @@ const EMPTY_FORM = {
   firstName: '', lastName: '', email: '', phone: '', company: '', notes: '', tags: '',
 };
 
+// A file staged in the Add Client drawer (not yet uploaded).
+interface StagedFile {
+  id: string;
+  file: File;
+}
+
+/** Human-readable file size, e.g. "1.4 MB". */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function ClientsPage() {
   const clients = useClientsStore((s) => s.clients);
+  const clientsLoaded = useClientsStore((s) => s.loaded);
   const addClient = useClientsStore((s) => s.addClient);
   const deleteClient = useClientsStore((s) => s.deleteClient);
   const deals = useDealsStore((s) => s.deals);
   const leads = useLeadsStore((s) => s.leads);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const uploadAndAttach = useDocumentsStore((s) => s.uploadAndAttach);
+  const hasS3 = useConfigStore((s) => s.hasS3);
   const { can } = usePermissions();
 
   const [search, setSearch] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canAttachDocs = hasS3 && can('documents:create');
 
+  const debouncedSearch = useDebouncedValue(search, 200);
   const filteredClients = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     if (!q) return clients;
     return clients.filter((c) => {
       const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
       return fullName.includes(q) || c.email.toLowerCase().includes(q) || c.company.toLowerCase().includes(q);
     });
-  }, [clients, search]);
+  }, [clients, debouncedSearch]);
 
   const getClientDeals = (client: Client) => deals.filter((d) => client.dealIds.includes(d.id));
   const getClientLeads = (client: Client) => leads.filter((l) => client.leadIds.includes(l.id));
@@ -67,6 +94,29 @@ export default function ClientsPage() {
 
   const canSubmit = !!form.firstName.trim() && !!form.lastName.trim() && !!form.email.trim();
 
+  const handleFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length > 0) {
+      setStagedFiles((prev) => [
+        ...prev,
+        ...picked.map((file, i) => ({
+          id: `${Date.now()}-${i}-${file.name}`,
+          file,
+        })),
+      ]);
+    }
+    // Reset the input so picking the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeStaged = (id: string) =>
+    setStagedFiles((prev) => prev.filter((f) => f.id !== id));
+
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setStagedFiles([]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -76,7 +126,7 @@ export default function ClientsPage() {
     }
     setSubmitting(true);
     try {
-      await addClient({
+      const client = await addClient({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         email: form.email.trim().toLowerCase(),
@@ -90,13 +140,37 @@ export default function ClientsPage() {
         xeroContactId: '',
         xeroSyncedAt: '',
       });
-      setForm(EMPTY_FORM);
+
+      // Upload any staged documents now that we have the client id. A failed
+      // upload must not undo the created client — count failures and warn.
+      if (stagedFiles.length > 0) {
+        setUploadingDocs(true);
+        let failed = 0;
+        for (const sf of stagedFiles) {
+          try {
+            await uploadAndAttach(sf.file, {
+              entityType: 'client',
+              entityId: client.id,
+              uploadedBy: currentUser?.id ?? '',
+            });
+          } catch {
+            failed += 1;
+          }
+        }
+        setUploadingDocs(false);
+        if (failed > 0) {
+          toast.error(`Client added, but ${failed} document${failed === 1 ? '' : 's'} failed to upload.`);
+        }
+      }
+
+      resetForm();
       setShowAddDialog(false);
       toast.success('Client added.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add client.');
     } finally {
       setSubmitting(false);
+      setUploadingDocs(false);
     }
   };
 
@@ -125,11 +199,12 @@ export default function ClientsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Pipeline"
         title="Clients"
         subtitle="All buyer clients, linked to their leads and active deals."
         actions={
           can('clients:create') && (
-            <Button onClick={() => setShowAddDialog(true)} className="h-9 shadow-sm shadow-primary/20">
+            <Button onClick={() => setShowAddDialog(true)} className="h-10 shadow-sm shadow-primary/20">
               <Plus className="mr-2 h-4 w-4" /> Add Client
             </Button>
           )
@@ -137,15 +212,10 @@ export default function ClientsPage() {
       />
 
       {/* Stats strip */}
-      <Stagger className="grid grid-cols-3 gap-3">
+      <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {statCards.map((s) => (
           <StaggerItem key={s.label}>
-            <Card className="border-border/70 kpi-card">
-              <CardContent className="px-5 py-4">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{s.label}</p>
-                <CountUp value={s.value} className="mt-1 block text-2xl font-bold tabular-nums text-foreground" />
-              </CardContent>
-            </Card>
+            <StatCard label={s.label} value={s.value} />
           </StaggerItem>
         ))}
       </Stagger>
@@ -162,7 +232,9 @@ export default function ClientsPage() {
       </div>
 
       {/* Client grid */}
-      {filteredClients.length === 0 ? (
+      {!clientsLoaded ? (
+        <CardGridSkeleton />
+      ) : filteredClients.length === 0 ? (
         <EmptyState
           icon={Users}
           title={search ? 'No clients match your search' : 'No clients yet'}
@@ -275,7 +347,7 @@ export default function ClientsPage() {
       )}
 
       {/* Add Client drawer */}
-      <Sheet open={showAddDialog} onOpenChange={(o) => { if (!submitting) setShowAddDialog(o); }}>
+      <Sheet open={showAddDialog} onOpenChange={(o) => { if (submitting) return; setShowAddDialog(o); if (!o) resetForm(); }}>
         <SheetContent size="lg">
           <SheetHeader>
             <SheetTitle>Add New Client</SheetTitle>
@@ -314,13 +386,78 @@ export default function ClientsPage() {
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Background, preferences, referral details..." rows={3} />
             </div>
+
+            {/* Documents */}
+            <div className="space-y-2 border-t border-border/50 pt-4">
+              <div className="flex items-center justify-between">
+                <Label>Documents</Label>
+                {canAttachDocs && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={submitting}
+                  >
+                    <Paperclip className="mr-1.5 h-3.5 w-3.5" /> Attach files
+                  </Button>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={handleFilesPicked}
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+              />
+              {!hasS3 ? (
+                <p className="text-xs text-muted-foreground">File uploads aren’t configured on the server.</p>
+              ) : !can('documents:create') ? (
+                <p className="text-xs text-muted-foreground">You don’t have permission to upload documents.</p>
+              ) : stagedFiles.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <UploadCloud className="h-5 w-5" />
+                  <span>Attach ID, agreements or contracts (PDF, Word, Excel, images)</span>
+                </button>
+              ) : (
+                <ul className="space-y-2">
+                  {stagedFiles.map((sf) => (
+                    <li key={sf.id} className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2">
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">{sf.file.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{formatBytes(sf.file.size)}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeStaged(sf.id)}
+                        disabled={submitting}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             </SheetBody>
             <SheetFooter>
               <SheetClose asChild>
                 <Button type="button" variant="ghost" disabled={submitting}>Cancel</Button>
               </SheetClose>
               <Button type="submit" disabled={!canSubmit || submitting} className="shadow-sm shadow-primary/20">
-                {submitting ? (
+                {uploadingDocs ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading documents…</>
+                ) : submitting ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding…</>
                 ) : (
                   <><Plus className="mr-2 h-4 w-4" /> Add Client</>

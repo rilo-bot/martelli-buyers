@@ -76,7 +76,11 @@ export function DataTable<T>({
   const cellPad = density === 'compact' ? 'px-3 py-1.5' : 'px-3 py-2.5';
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div
+      className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+      aria-busy={loading || undefined}
+    >
+      {loading && <span className="sr-only" role="status">Loading…</span>}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -86,7 +90,7 @@ export function DataTable<T>({
                   <input
                     type="checkbox"
                     aria-label="Select all"
-                    className="h-3.5 w-3.5 rounded border-border accent-[hsl(var(--primary))]"
+                    className="h-3.5 w-3.5 rounded border-border accent-[hsl(var(--primary))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                     checked={allSelected}
                     ref={(el) => { if (el) el.indeterminate = someSelected; }}
                     onChange={toggleAll}
@@ -155,7 +159,7 @@ export function DataTable<T>({
                         <input
                           type="checkbox"
                           aria-label="Select row"
-                          className="h-3.5 w-3.5 rounded border-border accent-[hsl(var(--primary))]"
+                          className="h-3.5 w-3.5 rounded border-border accent-[hsl(var(--primary))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                           checked={selected}
                           onChange={() => toggleOne(id)}
                         />

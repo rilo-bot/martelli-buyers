@@ -21,19 +21,12 @@ import {
 import { cn } from '@/lib/utils';
 import { uploadFile, deleteUpload, isVideoUrl } from '@/lib/upload';
 import { toast } from 'sonner';
+import { PROPERTY_STATUS_ORDER, PROPERTY_STATUS_PILL } from '@/lib/statusStyles';
+import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
 import type { PropertyStatus } from '@/types';
 
-const STATUS_OPTIONS: PropertyStatus[] = ['suggested', 'interested', 'viewed', 'shortlisted', 'rejected', 'offer_placed', 'purchased'];
-
-const STATUS_CONFIG: Record<PropertyStatus, string> = {
-  suggested: 'bg-primary/10 text-primary border-primary/25',
-  interested: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/25',
-  viewed: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25',
-  shortlisted: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/25',
-  rejected: 'bg-muted text-muted-foreground border-border',
-  offer_placed: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/25',
-  purchased: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25',
-};
+const STATUS_OPTIONS = PROPERTY_STATUS_ORDER;
+const STATUS_CONFIG = PROPERTY_STATUS_PILL;
 
 type SaveState = 'idle' | 'saving' | 'saved';
 
@@ -59,6 +52,8 @@ export default function PropertyDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useDetailBreadcrumb(property ? (property.address || property.suburb || 'Property') : null);
 
   // Debounced note editing — local copy + auto-save, so we don't PATCH per keystroke.
   const [notes, setNotes] = useState('');

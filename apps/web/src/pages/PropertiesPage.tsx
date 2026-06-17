@@ -14,24 +14,22 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
-import { PageTransition, Stagger, StaggerItem, CountUp } from '@/components/motion';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { CardGridSkeleton } from '@/components/ui/skeleton';
+import { PageTransition, Stagger, StaggerItem } from '@/components/motion';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { Plus, Search, Home, MapPin, Star, ArrowRight, Building2, ChevronRight, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isVideoUrl } from '@/lib/upload';
-
-const PROP_STATUS_CONFIG: Record<string, { pill: string; dot: string }> = {
-  suggested: { pill: 'bg-primary/8 text-primary border-primary/20', dot: 'bg-primary' },
-  interested: { pill: 'bg-cyan-500/8 text-cyan-700 dark:text-cyan-400 border-cyan-500/20', dot: 'bg-cyan-500' },
-  viewed: { pill: 'bg-amber-500/8 text-amber-700 dark:text-amber-400 border-amber-500/20', dot: 'bg-amber-500' },
-  shortlisted: { pill: 'bg-violet-500/8 text-violet-700 dark:text-violet-400 border-violet-500/20', dot: 'bg-violet-500' },
-  rejected: { pill: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' },
-  offer_placed: { pill: 'bg-orange-500/8 text-orange-700 dark:text-orange-400 border-orange-500/20', dot: 'bg-orange-500' },
-  purchased: { pill: 'bg-emerald-500/8 text-emerald-700 dark:text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-500' },
-};
+import { PROPERTY_STATUS_PILL } from '@/lib/statusStyles';
+import type { PropertyStatus } from '@/types';
 
 export default function PropertiesPage() {
   const properties = usePropertiesStore((s) => s.properties);
+  const propertiesLoaded = usePropertiesStore((s) => s.loaded);
   const offMarket = useOffMarketStore((s) => s.properties);
+  const offMarketLoaded = useOffMarketStore((s) => s.loaded);
   const addOffMarket = useOffMarketStore((s) => s.addProperty);
   const toggleActive = useOffMarketStore((s) => s.toggleActive);
   const agents = useAgentsStore((s) => s.agents);
@@ -50,15 +48,16 @@ export default function PropertiesPage() {
   // '__manual__' lets the user type a name for an agent not yet in the network.
   const MANUAL = '__manual__';
 
+  const debouncedSearch = useDebouncedValue(search, 200);
   const filteredProperties = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     return properties.filter((p) => !q || p.address.toLowerCase().includes(q) || p.suburb.toLowerCase().includes(q));
-  }, [properties, search]);
+  }, [properties, debouncedSearch]);
 
   const filteredOffMarket = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     return offMarket.filter((p) => !q || p.address.toLowerCase().includes(q) || p.suburb.toLowerCase().includes(q));
-  }, [offMarket, search]);
+  }, [offMarket, debouncedSearch]);
 
   const handleAddOffMarket = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,35 +90,32 @@ export default function PropertiesPage() {
   return (
     <PageTransition className="space-y-6">
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="section-eyebrow mb-1.5">Listings</p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Properties</h1>
-          <p className="text-sm text-muted-foreground mt-1">Track deal-specific listings and manage your off-market property database.</p>
-        </div>
-        {canCreateProperty && (
-          <Button onClick={() => setShowAddOffMarket(true)} className="shadow-md shadow-primary/25 h-9">
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            Add Off-Market
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Listings"
+        title="Properties"
+        subtitle="Track deal-specific listings and manage your off-market property database."
+        actions={
+          canCreateProperty && (
+            <Button onClick={() => setShowAddOffMarket(true)} className="shadow-md shadow-primary/25 h-10">
+              <Plus className="mr-2 h-3.5 w-3.5" />
+              Add Off-Market
+            </Button>
+          )
+        }
+      />
 
       {/* Stats strip */}
-      <div className="grid grid-cols-3 gap-3">
+      <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
-          { label: 'Deal Properties', value: properties.length, accent: 'bg-primary/6 border-primary/15', text: 'text-primary' },
-          { label: 'Off-Market Total', value: offMarket.length, accent: 'bg-violet-500/6 border-violet-500/15', text: 'text-violet-700 dark:text-violet-400' },
-          { label: 'Active Off-Market', value: activeOffMarket, accent: 'bg-emerald-500/6 border-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-400' },
+          { label: 'Deal Properties', value: properties.length, accent: 'primary' as const },
+          { label: 'Off-Market Total', value: offMarket.length, accent: 'info' as const },
+          { label: 'Active Off-Market', value: activeOffMarket, accent: 'success' as const },
         ].map((s) => (
-          <Card key={s.label} className={cn('border kpi-card', s.accent)}>
-            <CardContent className="pt-4 pb-4 px-5">
-              <p className="text-[11px] text-muted-foreground uppercase tracking-widest font-semibold">{s.label}</p>
-              <CountUp value={s.value} className={cn('text-2xl font-bold mt-1 tabular-nums block', s.text)} />
-            </CardContent>
-          </Card>
+          <StaggerItem key={s.label}>
+            <StatCard label={s.label} value={s.value} accent={s.accent} />
+          </StaggerItem>
         ))}
-      </div>
+      </Stagger>
 
       {/* Search */}
       <div className="relative max-w-sm">
@@ -140,7 +136,9 @@ export default function PropertiesPage() {
 
         {/* DEAL PROPERTIES */}
         <TabsContent value="deal" className="mt-4">
-          {filteredProperties.length === 0 ? (
+          {!propertiesLoaded ? (
+            <CardGridSkeleton />
+          ) : filteredProperties.length === 0 ? (
             <EmptyState
               icon={Home}
               title={search ? 'No matching properties' : 'No deal properties yet'}
@@ -156,7 +154,7 @@ export default function PropertiesPage() {
           ) : (
             <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" step={0.04}>
               {filteredProperties.map((prop) => {
-                const config = PROP_STATUS_CONFIG[prop.status] ?? PROP_STATUS_CONFIG['suggested'];
+                const pill = PROPERTY_STATUS_PILL[prop.status as PropertyStatus] ?? PROPERTY_STATUS_PILL.suggested;
                 const cover = (prop.photos ?? []).find((u) => !isVideoUrl(u));
                 return (
                   <StaggerItem key={prop.id}>
@@ -176,7 +174,7 @@ export default function PropertiesPage() {
                             {prop.isOffMarket && (
                               <Badge variant="secondary" className="text-[10px] px-2 py-0.5 font-semibold">Off-Market</Badge>
                             )}
-                            <span className={cn('text-[10px] px-2.5 py-1 rounded-full font-bold border capitalize', config.pill)}>
+                            <span className={cn('text-[10px] px-2.5 py-1 rounded-full font-bold border capitalize', pill)}>
                               {prop.status.replace('_', ' ')}
                             </span>
                           </div>
@@ -207,7 +205,9 @@ export default function PropertiesPage() {
         <TabsContent value="offmarket" className="mt-4">
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Centralised off-market property database. Reuse entries across multiple client deals.</p>
-            {filteredOffMarket.length === 0 ? (
+            {!offMarketLoaded ? (
+              <CardGridSkeleton />
+            ) : filteredOffMarket.length === 0 ? (
               <EmptyState
                 icon={Building2}
                 title={search ? 'No matching off-market properties' : 'No off-market properties yet'}

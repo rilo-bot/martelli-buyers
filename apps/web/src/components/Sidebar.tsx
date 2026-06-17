@@ -7,7 +7,8 @@ import {
   LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
   Home, Star, Mail, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
 } from 'lucide-react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useMenu } from '@/lib/useMenu';
 import { cn } from '@/lib/utils';
 
 interface NavItem { to: string; label: string; icon: React.ElementType; perm?: string }
@@ -80,17 +81,23 @@ export function Sidebar() {
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const accountRef = useRef<HTMLDivElement>(null);
+  const { triggerRef: accountTriggerRef, menuRef: accountMenuRef } = useMenu(
+    accountOpen,
+    () => setAccountOpen(false),
+  );
 
-  // Close the account menu on outside click.
+  // Close the mobile drawer on Escape and lock body scroll while it's open.
   useEffect(() => {
-    if (!accountOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (accountRef.current && !accountRef.current.contains(e.target as Node)) setAccountOpen(false);
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileOpen(false); };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
     };
-    window.addEventListener('mousedown', onClick);
-    return () => window.removeEventListener('mousedown', onClick);
-  }, [accountOpen]);
+  }, [mobileOpen]);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -168,7 +175,7 @@ export function Sidebar() {
 
           {/* Tooltip when collapsed */}
           {collapsed && (
-            <span className="hidden lg:group-hover:flex items-center absolute left-full ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground border border-border shadow-lg whitespace-nowrap z-[70] pointer-events-none">
+            <span className="hidden lg:group-hover:flex lg:group-focus-within:flex items-center absolute left-full ml-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground border border-border shadow-lg whitespace-nowrap z-[70] pointer-events-none">
               {link.label}
             </span>
           )}
@@ -297,17 +304,21 @@ export function Sidebar() {
           {bottomNavLinks.map(renderNavLink)}
 
           {/* Account card + menu */}
-          <div className="relative mt-1.5" ref={accountRef}>
+          <div className="relative mt-1.5">
             {/* Popup menu (opens above the card) */}
             {accountOpen && (
               <div
+                ref={accountMenuRef}
+                role="menu"
+                aria-label="Account"
                 className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-xl border bg-card p-1 shadow-lg z-[70]"
                 style={{ borderColor: 'hsl(var(--sidebar-border))' }}
               >
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => { toggleTheme(); setAccountOpen(false); }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors hover:bg-muted"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                   style={{ color: 'hsl(var(--sidebar-text))' }}
                 >
                   {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
@@ -315,8 +326,9 @@ export function Sidebar() {
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => { setAccountOpen(false); handleLogout(); }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-destructive transition-colors hover:bg-destructive/10"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-destructive transition-colors hover:bg-destructive/10 focus-visible:bg-destructive/10 focus-visible:outline-none"
                 >
                   <LogOut className="h-4 w-4 shrink-0" />
                   Sign out
@@ -326,6 +338,7 @@ export function Sidebar() {
 
             {/* The card itself */}
             <button
+              ref={accountTriggerRef}
               type="button"
               onClick={() => setAccountOpen((o) => !o)}
               aria-haspopup="menu"

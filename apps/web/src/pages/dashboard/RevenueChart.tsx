@@ -41,6 +41,17 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">collected</p>
           </div>
         </div>
+        {/* Legend — distinguishes the two series without needing a hover */}
+        <div className="mt-2 flex items-center gap-4 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-4 rounded-full bg-primary" />
+            Collected
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0 w-4 border-t-2 border-dashed border-muted-foreground/50" />
+            Invoiced
+          </span>
+        </div>
       </CardHeader>
       <CardContent className="px-2 py-4">
         <ResponsiveContainer width="100%" height={200}>

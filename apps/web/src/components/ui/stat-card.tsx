@@ -1,0 +1,108 @@
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, ArrowDownRight, Minus, type LucideIcon } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Sparkline } from '@/components/ui/sparkline';
+import { CountUp } from '@/components/motion';
+import { cn } from '@/lib/utils';
+
+export interface StatCardProps {
+  label: string;
+  value: number;
+  /** Formats the value (e.g. add $ / %). Defaults to a localized integer. */
+  format?: (n: number) => string;
+  /** Optional leading icon shown in a tinted tile. */
+  icon?: LucideIcon;
+  /** Optional sparkline series, rendered top-right (implies icon layout). */
+  spark?: number[];
+  /** Optional period-over-period delta; drives the trend arrow + colour. */
+  delta?: number;
+  deltaLabel?: string;
+  /** Makes the whole card a link. */
+  to?: string;
+  /** Tints the value text + icon tile with a semantic accent. */
+  accent?: 'primary' | 'success' | 'warning' | 'info' | 'teal';
+  /** 'lg' bumps the value to text-3xl (dashboard KPIs); 'default' is text-2xl. */
+  size?: 'default' | 'lg';
+  className?: string;
+}
+
+const ACCENT_TEXT: Record<NonNullable<StatCardProps['accent']>, string> = {
+  primary: 'text-primary',
+  success: 'text-success',
+  warning: 'text-warning',
+  info: 'text-info',
+  teal: 'text-teal',
+};
+
+/**
+ * Single source of truth for the "summary number" tile used on the dashboard,
+ * Clients, Properties and other list pages. Optional icon / sparkline / trend /
+ * link / accent props cover every existing variant without per-page reinvention.
+ */
+export function StatCard({
+  label,
+  value,
+  format,
+  icon: Icon,
+  spark,
+  delta,
+  deltaLabel,
+  to,
+  accent,
+  size = 'default',
+  className,
+}: StatCardProps) {
+  const hasTrend = typeof delta === 'number';
+  const TrendIcon = !hasTrend ? Minus : delta! > 0 ? ArrowUpRight : delta! < 0 ? ArrowDownRight : Minus;
+  const trendClass =
+    !hasTrend || delta === 0
+      ? 'text-muted-foreground'
+      : delta! > 0
+      ? 'text-success'
+      : 'text-destructive';
+  const valueClass = cn('tabular-nums', accent ? ACCENT_TEXT[accent] : 'text-foreground');
+
+  const inner = (
+    <Card
+      className={cn(
+        'kpi-card h-full border-border/70 bg-card',
+        to && 'group transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',
+        className,
+      )}
+    >
+      <CardContent className={cn('px-5', size === 'lg' ? 'py-5' : 'py-4')}>
+        {(Icon || spark) && (
+          <div className="mb-3 flex items-center justify-between">
+            {Icon ? (
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/15 bg-primary/10">
+                <Icon className="h-[18px] w-[18px] text-primary" />
+              </div>
+            ) : (
+              <span />
+            )}
+            {spark && spark.length > 0 && (
+              <Sparkline data={spark} className="opacity-80 transition-opacity group-hover:opacity-100" />
+            )}
+          </div>
+        )}
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+        <CountUp value={value} format={format} className={cn('block font-bold', size === 'lg' ? 'text-3xl' : 'text-2xl', valueClass)} />
+        {(hasTrend || deltaLabel) && (
+          <div className={cn('mt-1.5 flex items-center gap-1 text-[11px] font-medium', trendClass)}>
+            <TrendIcon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{deltaLabel}</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (to) {
+    return (
+      <Link to={to} className="block h-full">
+        {inner}
+      </Link>
+    );
+  }
+  return inner;
+}

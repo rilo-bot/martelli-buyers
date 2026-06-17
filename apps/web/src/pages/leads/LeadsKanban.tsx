@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { DollarSign, MapPin, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QualStageBadge, STATUS_OPTIONS, STATUS_STYLES } from './leadShared';
@@ -95,6 +96,7 @@ export function KanbanView({
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onMarkWon={onMarkWon}
+                    onStatusChange={onStatusChange}
                   />
                 ))
               )}
@@ -112,12 +114,14 @@ function KanbanCard({
   onDragStart,
   onDragEnd,
   onMarkWon,
+  onStatusChange,
 }: {
   lead: Lead;
   isDragging: boolean;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragEnd: () => void;
   onMarkWon: (id: string) => void;
+  onStatusChange: (id: string, status: LeadStatus) => void;
 }) {
   return (
     <div
@@ -169,6 +173,22 @@ function KanbanCard({
             </span>
           </div>
         )}
+      </div>
+
+      {/* Keyboard/touch-accessible status change — fallback for drag-and-drop. */}
+      <div className="pt-1">
+        <label className="sr-only" htmlFor={`kb-status-${lead.id}`}>Change status</label>
+        <Select
+          id={`kb-status-${lead.id}`}
+          value={lead.status}
+          onChange={(e) => onStatusChange(lead.id, e.target.value as LeadStatus)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-7 text-[11px] capitalize"
+        >
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>{s.replace('_', ' ')}</option>
+          ))}
+        </Select>
       </div>
 
       <div className="flex gap-1.5 pt-1 border-t border-border/50">

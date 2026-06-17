@@ -8,7 +8,7 @@ import { sendMail } from '../lib/mailer';
 import { env, hasEmail } from '../env';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
 import { buildDdReportPdf } from '../lib/pdf/ddReport';
-import { buildAgreementPdf } from '../lib/pdf/agreement';
+import { buildAgreementPdf, defaultFeeText, DEFAULT_TERMS } from '../lib/pdf/agreement';
 import { sendInvoiceEmail } from '../lib/invoiceEmail';
 import { recordEvent } from '../lib/audit';
 
@@ -130,6 +130,32 @@ documentsRouter.get(
 );
 
 /* ───────────────────────── agreement ─────────────────────────────────── */
+
+/**
+ * GET /api/documents/agreement/:dealId/content — the editable agreement text
+ * for the admin editor: the effective value (override or default) per section,
+ * plus the defaults so the UI can show "Reset to default".
+ */
+documentsRouter.get(
+  '/agreement/:dealId/content',
+  requirePermission('journeys:view'),
+  asyncHandler(async (req, res) => {
+    const deal = await Deal.findById(req.params.dealId);
+    if (!deal) {
+      res.status(404).json({ error: 'Buyer journey not found.' });
+      return;
+    }
+    const d = deal.toJSON() as never;
+    const defaults = { feeText: defaultFeeText(d), termsText: DEFAULT_TERMS };
+    res.json({
+      feeText: deal.agreementFeeText?.trim() || defaults.feeText,
+      termsText: deal.agreementTermsText?.trim() || defaults.termsText,
+      clauses: deal.agreementClauses || '',
+      defaults,
+      locked: deal.agreementStatus === 'signed',
+    });
+  }),
+);
 
 /** GET /api/documents/agreement/:dealId.pdf — staff preview of the agreement. */
 documentsRouter.get(
