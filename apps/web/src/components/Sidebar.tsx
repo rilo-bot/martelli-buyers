@@ -5,7 +5,7 @@ import { usePermissions } from '@/lib/permissions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
-  Home, Star, Mail, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
+  Home, Star, Mail, Inbox, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useMenu } from '@/lib/useMenu';
@@ -40,6 +40,7 @@ const navGroups: NavGroup[] = [
     links: [
       { to: '/agents', label: 'Agents', icon: Star, perm: 'agents:view' },
       { to: '/emails', label: 'Emails', icon: Mail, perm: 'emails:view' },
+      { to: '/inbox', label: 'Inbox', icon: Inbox, perm: 'emails:view' },
     ],
   },
   {

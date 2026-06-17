@@ -19,11 +19,11 @@ import { StatCard } from '@/components/ui/stat-card';
 import { CardGridSkeleton } from '@/components/ui/skeleton';
 import { PageTransition, Stagger, StaggerItem } from '@/components/motion';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { Plus, Search, Home, MapPin, Star, ArrowRight, Building2, ChevronRight, User } from 'lucide-react';
+import { Plus, Search, Home, MapPin, Star, ArrowRight, Building2, ChevronRight, User, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isVideoUrl } from '@/lib/upload';
 import { PROPERTY_STATUS_PILL } from '@/lib/statusStyles';
-import type { PropertyStatus } from '@/types';
+import type { PropertyStatus, OffMarketProperty } from '@/types';
 
 export default function PropertiesPage() {
   const properties = usePropertiesStore((s) => s.properties);
@@ -31,13 +31,17 @@ export default function PropertiesPage() {
   const offMarket = useOffMarketStore((s) => s.properties);
   const offMarketLoaded = useOffMarketStore((s) => s.loaded);
   const addOffMarket = useOffMarketStore((s) => s.addProperty);
+  const updateOffMarket = useOffMarketStore((s) => s.updateProperty);
   const toggleActive = useOffMarketStore((s) => s.toggleActive);
   const agents = useAgentsStore((s) => s.agents);
   const { can } = usePermissions();
   const canCreateProperty = can('properties:create');
+  const canEditProperty = can('properties:edit');
 
   const [search, setSearch] = useState('');
   const [showAddOffMarket, setShowAddOffMarket] = useState(false);
+  // null → the drawer is in "add" mode; an id → editing that off-market record.
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [omForm, setOmForm] = useState({
     address: '', suburb: '', priceGuide: '', priceLow: '', priceHigh: '',
@@ -59,10 +63,39 @@ export default function PropertiesPage() {
     return offMarket.filter((p) => !q || p.address.toLowerCase().includes(q) || p.suburb.toLowerCase().includes(q));
   }, [offMarket, debouncedSearch]);
 
-  const handleAddOffMarket = (e: React.FormEvent) => {
+  const EMPTY_OM_FORM = { address: '', suburb: '', priceGuide: '', priceLow: '', priceHigh: '', bedrooms: '3', bathrooms: '2', carparks: '1', propertyType: '', notes: '', sourceAgentId: '', sourceAgentName: '' };
+
+  const openAddOffMarket = () => {
+    setEditingId(null);
+    setOmForm(EMPTY_OM_FORM);
+    setShowAddOffMarket(true);
+  };
+
+  const openEditOffMarket = (prop: OffMarketProperty) => {
+    setEditingId(prop.id);
+    setOmForm({
+      address: prop.address,
+      suburb: prop.suburb,
+      priceGuide: prop.priceGuide,
+      priceLow: prop.priceLow ? String(prop.priceLow) : '',
+      priceHigh: prop.priceHigh ? String(prop.priceHigh) : '',
+      bedrooms: String(prop.bedrooms),
+      bathrooms: String(prop.bathrooms),
+      carparks: String(prop.carparks),
+      propertyType: prop.propertyType,
+      notes: prop.notes,
+      // A stored name with no linked agent id means it was typed manually —
+      // re-open in manual mode so the name input stays visible and editable.
+      sourceAgentId: prop.sourceAgentId || (prop.sourceAgentName ? MANUAL : ''),
+      sourceAgentName: prop.sourceAgentName,
+    });
+    setShowAddOffMarket(true);
+  };
+
+  const handleSubmitOffMarket = (e: React.FormEvent) => {
     e.preventDefault();
     if (!omForm.address.trim()) return;
-    addOffMarket({
+    const fields = {
       address: omForm.address.trim(),
       suburb: omForm.suburb.trim(),
       priceGuide: omForm.priceGuide.trim(),
@@ -77,11 +110,14 @@ export default function PropertiesPage() {
       // only the typed name so the card still has a source to show.
       sourceAgentId: omForm.sourceAgentId === MANUAL ? '' : omForm.sourceAgentId,
       sourceAgentName: omForm.sourceAgentName.trim(),
-      attachments: [],
-      usedInDealIds: [],
-      isActive: true,
-    });
-    setOmForm({ address: '', suburb: '', priceGuide: '', priceLow: '', priceHigh: '', bedrooms: '3', bathrooms: '2', carparks: '1', propertyType: '', notes: '', sourceAgentId: '', sourceAgentName: '' });
+    };
+    if (editingId) {
+      updateOffMarket(editingId, fields);
+    } else {
+      addOffMarket({ ...fields, attachments: [], usedInDealIds: [], isActive: true });
+    }
+    setOmForm(EMPTY_OM_FORM);
+    setEditingId(null);
     setShowAddOffMarket(false);
   };
 
@@ -96,7 +132,7 @@ export default function PropertiesPage() {
         subtitle="Track deal-specific listings and manage your off-market property database."
         actions={
           canCreateProperty && (
-            <Button onClick={() => setShowAddOffMarket(true)} className="shadow-md shadow-primary/25 h-10">
+            <Button onClick={openAddOffMarket} className="shadow-md shadow-primary/25 h-10">
               <Plus className="mr-2 h-3.5 w-3.5" />
               Add Off-Market
             </Button>
@@ -215,7 +251,7 @@ export default function PropertiesPage() {
                   ? 'Try a different address or suburb.'
                   : 'Build your centralised off-market database to stop losing track of exclusive listings across spreadsheets.'}
                 action={!search && canCreateProperty && (
-                  <Button onClick={() => setShowAddOffMarket(true)}>
+                  <Button onClick={openAddOffMarket}>
                     <Plus className="mr-2 h-4 w-4" />Add your first off-market property
                   </Button>
                 )}
@@ -267,7 +303,12 @@ export default function PropertiesPage() {
                       {prop.usedInDealIds.length > 0 && (
                         <p className="text-xs text-muted-foreground">Used in {prop.usedInDealIds.length} deal(s)</p>
                       )}
-                      <div className="flex justify-end border-t border-border/50 pt-2">
+                      <div className="flex justify-end gap-1 border-t border-border/50 pt-2">
+                        {canEditProperty && (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openEditOffMarket(prop)}>
+                            <Pencil className="mr-1.5 h-3.5 w-3.5" />Edit
+                          </Button>
+                        )}
                         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toggleActive(prop.id)}>
                           {prop.isActive ? 'Mark Inactive' : 'Mark Active'}
                         </Button>
@@ -282,11 +323,11 @@ export default function PropertiesPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Add Off-Market drawer */}
-      <Sheet open={showAddOffMarket} onOpenChange={setShowAddOffMarket}>
+      {/* Add / Edit Off-Market drawer */}
+      <Sheet open={showAddOffMarket} onOpenChange={(open) => { setShowAddOffMarket(open); if (!open) setEditingId(null); }}>
         <SheetContent size="lg">
-          <SheetHeader><SheetTitle>Add Off-Market Property</SheetTitle></SheetHeader>
-          <form onSubmit={handleAddOffMarket} className="flex min-h-0 flex-1 flex-col">
+          <SheetHeader><SheetTitle>{editingId ? 'Edit Off-Market Property' : 'Add Off-Market Property'}</SheetTitle></SheetHeader>
+          <form onSubmit={handleSubmitOffMarket} className="flex min-h-0 flex-1 flex-col">
             <SheetBody className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="omAddress">Street address *</Label>
@@ -376,7 +417,11 @@ export default function PropertiesPage() {
             <SheetFooter>
               <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
               <Button type="submit" disabled={!omForm.address.trim()} className="shadow-sm shadow-primary/20">
-                <Plus className="mr-2 h-4 w-4" />Add Property
+                {editingId ? (
+                  <><Pencil className="mr-2 h-4 w-4" />Save Changes</>
+                ) : (
+                  <><Plus className="mr-2 h-4 w-4" />Add Property</>
+                )}
               </Button>
             </SheetFooter>
           </form>

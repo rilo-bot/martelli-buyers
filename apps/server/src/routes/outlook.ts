@@ -79,11 +79,22 @@ outlookRouter.get(
 outlookRouter.get(
   '/callback',
   asyncHandler(async (req, res) => {
-    const { code, state } = req.query as { code?: string; state?: string; error?: string };
+    const { code, state, error, error_description } = req.query as {
+      code?: string; state?: string; error?: string; error_description?: string;
+    };
     const expected = req.session.outlookState;
     req.session.outlookState = undefined;
 
+    // Microsoft redirected back with an error (denied consent, bad scope, etc.).
+    if (error) {
+      console.error(`[outlook] authorize error: ${error} — ${error_description ?? ''}`);
+      res.redirect(`${WEB}/settings?outlook=error`);
+      return;
+    }
     if (!code || !state || state !== expected) {
+      console.error(
+        `[outlook] callback rejected: code=${Boolean(code)} state=${Boolean(state)} stateMatch=${state === expected}`,
+      );
       res.redirect(`${WEB}/settings?outlook=error`);
       return;
     }
@@ -97,7 +108,8 @@ outlookRouter.get(
         console.error('[outlook] initial sync failed:', (err as Error).message),
       );
       res.redirect(`${WEB}/settings?outlook=connected`);
-    } catch {
+    } catch (err) {
+      console.error('[outlook] token exchange failed:', (err as Error).message);
       res.redirect(`${WEB}/settings?outlook=error`);
     }
   }),

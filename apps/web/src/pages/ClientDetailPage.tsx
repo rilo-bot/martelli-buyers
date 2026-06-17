@@ -29,6 +29,8 @@ import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
 import type { Deal, Lead, DealStage, LeadStatus, Document } from '@/types';
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
+import { EmailList } from '@/components/EmailList';
+import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
 import { useXeroStore } from '@/stores/xeroStore';
 import { pushClientToXero } from '@/lib/xero';
 
@@ -609,6 +611,7 @@ export default function ClientDetailPage() {
   const deals = useDealsStore((s) => s.deals);
   const leads = useLeadsStore((s) => s.leads);
   const agents = useAgentsStore((s) => s.agents);
+  const emailMessages = useEmailMessagesStore((s) => s.emails);
   const xeroConnected = useXeroStore((s) => s.connected);
 
   const [editing, setEditing] = useState(false);
@@ -636,6 +639,7 @@ export default function ClientDetailPage() {
 
   const clientDeals = deals.filter((d) => client.dealIds.includes(d.id));
   const clientLeads = leads.filter((l) => client.leadIds.includes(l.id));
+  const clientEmails = emailMessages.filter((e) => e.clientId === client.id);
   const activeDeals = clientDeals.filter((d) => d.stage !== 'complete');
   const totalBudget = clientDeals.reduce((sum, d) => sum + (d.budget || 0), 0);
 
@@ -938,6 +942,16 @@ export default function ClientDetailPage() {
 
       {/* Documents */}
       <DocumentsSection clientId={client.id} />
+
+      {/* Linked Outlook emails */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Emails ({clientEmails.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmailList emails={clientEmails} emptyText="No emails linked to this client yet. Link them from the Inbox." />
+        </CardContent>
+      </Card>
 
       {/* Linked Campaigns */}
       <CampaignsListSection deals={clientDeals} />

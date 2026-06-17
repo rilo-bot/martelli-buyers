@@ -1,22 +1,43 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart3, ExternalLink } from 'lucide-react';
-import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
-import type { Property } from '@/types';
+import { request } from '@/lib/api';
+import type { ComparableSale, Property } from '@/types';
 
 const money = (n: number) => (n ? `$${n.toLocaleString()}` : '—');
+
+/** One DD record's comparables, returned by GET /api/journeys/:dealId/comparables. */
+interface ComparableGroupDto {
+  id: string;
+  propertyId: string;
+  address: string;
+  comparableSales: ComparableSale[];
+}
 
 /**
  * Read-only aggregation of comparable sales recorded across all of this journey's
  * due-diligence records (comparables live per-property inside DD; this surfaces
  * them at the journey level). Editing still happens on the Due Diligence page.
+ *
+ * Fetched via the journeys-scoped endpoint rather than the DD store so that users
+ * who can view the journey (`journeys:view`) but not Due Diligence
+ * (`dueDiligence:view`) still see the comparables.
  */
 export function ComparablesTab({ dealId, properties }: { dealId: string; properties: Property[] }) {
-  const records = useDueDiligenceStore((s) => s.records);
+  const [records, setRecords] = useState<ComparableGroupDto[]>([]);
+
+  useEffect(() => {
+    if (!dealId) return;
+    let active = true;
+    request<ComparableGroupDto[]>('GET', `/api/journeys/${dealId}/comparables`)
+      .then((data) => { if (active) setRecords(data); })
+      .catch(() => { if (active) setRecords([]); });
+    return () => { active = false; };
+  }, [dealId]);
 
   const groups = useMemo(() => {
     return records
-      .filter((r) => r.dealId === dealId && (r.comparableSales?.length ?? 0) > 0)
+      .filter((r) => (r.comparableSales?.length ?? 0) > 0)
       .map((r) => {
         const prop = properties.find((p) => p.id === r.propertyId);
         return {
@@ -25,7 +46,7 @@ export function ComparablesTab({ dealId, properties }: { dealId: string; propert
           comps: r.comparableSales,
         };
       });
-  }, [records, properties, dealId]);
+  }, [records, properties]);
 
   const total = groups.reduce((s, g) => s + g.comps.length, 0);
 

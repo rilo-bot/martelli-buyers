@@ -17,6 +17,7 @@ import { signRouter } from './routes/sign';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
 import { timelineRouter } from './routes/timeline';
+import { journeysRouter } from './routes/journeys';
 import { xeroRouter } from './routes/xero';
 import { xeroWebhookHandler } from './routes/xeroWebhook';
 import { outlookRouter } from './routes/outlook';
@@ -109,6 +110,10 @@ app.use('/api/leads', leadsRouter);
 
 // Read-only Buyer Journey timeline / audit events.
 app.use('/api/timeline', timelineRouter);
+
+// Read-only Buyer Journey aggregates (e.g. comparable sales) scoped to
+// journeys:view, so journey viewers see them without needing dueDiligence:view.
+app.use('/api/journeys', journeysRouter);
 
 // Generic CRUD for every domain resource — each gated on its RBAC module.
 for (const [resource, model] of Object.entries(RESOURCES)) {

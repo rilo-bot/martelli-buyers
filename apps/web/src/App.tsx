@@ -24,6 +24,7 @@ import PropertiesPage from '@/pages/PropertiesPage';
 import PropertyDetailPage from '@/pages/PropertyDetailPage';
 import AgentsPage from '@/pages/AgentsPage';
 import EmailsPage from '@/pages/EmailsPage';
+import InboxPage from '@/pages/InboxPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
 import TeamPage from '@/pages/TeamPage';
@@ -112,6 +113,14 @@ export default function App() {
           <Route path="/properties/:id" element={<PropertyDetailPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/emails" element={<EmailsPage />} />
+          <Route
+            path="/inbox"
+            element={
+              <RequirePermission perm="emails:view">
+                <InboxPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/due-diligence" element={<DueDiligencePage />} />
           <Route

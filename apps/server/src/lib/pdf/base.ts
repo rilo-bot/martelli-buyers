@@ -71,6 +71,11 @@ export function footer(doc: Doc): void {
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
+    // The footer sits below the bottom margin. Writing text past `page.maxY()`
+    // makes pdfkit auto-append a blank page per fragment (which is why the
+    // document was ballooning to 3+ pages). Zeroing the bottom margin on the
+    // page we're annotating lets the footer render in place without paginating.
+    doc.page.margins.bottom = 0;
     const y = doc.page.height - 38;
     doc
       .fillColor(MUTED)

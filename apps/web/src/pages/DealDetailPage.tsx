@@ -31,6 +31,8 @@ import {
 import type { DealStage, PropertyStatus, ConsentStatus, OffMarketProperty } from '@/types';
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
+import { EmailList } from '@/components/EmailList';
+import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
 import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useXeroStore } from '@/stores/xeroStore';
@@ -136,6 +138,8 @@ export default function DealDetailPage() {
   const dealInvoices = useMemo(() => invoices.filter((inv) => inv.dealId === id), [invoices, id]);
   const dealComments = useMemo(() => comments.filter((c) => c.dealId === id && !c.propertyId), [comments, id]);
   const dealSummaries = useMemo(() => summaries.filter((s) => s.dealId === id), [summaries, id]);
+  const emailMessages = useEmailMessagesStore((s) => s.emails);
+  const dealEmails = useMemo(() => emailMessages.filter((e) => e.dealId === id), [emailMessages, id]);
 
   const emailRecipients: EmailRecipient[] = useMemo(() => {
     const list: EmailRecipient[] = [];
@@ -567,7 +571,7 @@ export default function DealDetailPage() {
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="emails">
             <Mail className="h-3.5 w-3.5 mr-1" />
-            Emails
+            Emails{dealEmails.length > 0 ? ` (${dealEmails.length})` : ''}
           </TabsTrigger>
         </TabsList>
 
@@ -1330,6 +1334,18 @@ export default function DealDetailPage() {
         {/* EMAILS TAB */}
         <TabsContent value="emails">
           <div className="space-y-6">
+            {/* Synced Outlook emails linked to this Buyer Journey. */}
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-base font-semibold">Linked emails</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Outlook mail tagged to this deal. Tag more from the{' '}
+                  <Link to="/inbox" className="underline underline-offset-2">Inbox</Link>.
+                </p>
+              </div>
+              <EmailList emails={dealEmails} emptyText="No emails linked to this deal yet. Link them from the Inbox." />
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold">Send Email</h2>
