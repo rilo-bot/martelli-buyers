@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Home, Loader2, Trophy, Trash2, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -58,6 +60,8 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<PurchaseForm>(formFrom(undefined, ''));
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const openDialog = () => {
     setForm(formFrom(purchase, properties.find((p) => p.status === 'offer_placed')?.id || properties[0]?.id || ''));
@@ -101,12 +105,16 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
   };
 
   const handleDelete = async () => {
-    if (!purchase) return;
+    if (!purchase || deleting) return;
+    setDeleting(true);
     try {
       await deletePurchase(purchase.id);
       toast.success('Purchase removed.');
+      setConfirmDelete(false);
     } catch {
       toast.error('Failed to remove purchase.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -123,13 +131,14 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
     <div className="space-y-4">
       {!purchase ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/8 border border-dashed border-primary/30 mb-3">
-              <Trophy className="h-6 w-6 text-primary/40" />
-            </div>
-            <p className="text-sm font-medium">No purchase recorded</p>
-            <p className="text-xs text-muted-foreground mt-1 mb-4">Record the final purchase that closes this buyer journey.</p>
-            <Button size="sm" onClick={openDialog}><Trophy className="mr-1.5 h-3.5 w-3.5" />Record Purchase</Button>
+          <CardContent className="p-0">
+            <EmptyState
+              compact
+              icon={Trophy}
+              title="No purchase recorded"
+              description="Record the final purchase that closes this buyer journey."
+              action={<Button size="sm" onClick={openDialog}><Trophy className="mr-1.5 h-3.5 w-3.5" />Record Purchase</Button>}
+            />
           </CardContent>
         </Card>
       ) : (
@@ -147,7 +156,7 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
                 {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </Select>
               <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={openDialog}>Edit</Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete} aria-label="Remove purchase">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDelete(true)} aria-label="Remove purchase">
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -248,6 +257,23 @@ export function PurchaseTab({ dealId, properties, stage }: { dealId: string; pro
           </form>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={confirmDelete} onOpenChange={(o) => { if (!o && !deleting) setConfirmDelete(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove purchase record?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the purchase, including price and settlement details. This can’t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="ghost" disabled={deleting}>Cancel</Button></DialogClose>
+            <Button variant="destructive" loading={deleting} onClick={handleDelete}>
+              {deleting ? 'Removing…' : 'Remove purchase'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

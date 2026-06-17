@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
+import { CardGridSkeleton } from '@/components/ui/skeleton';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { Plus, Search, Users, LayoutGrid, List, Columns, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -24,6 +26,7 @@ import type { LeadStatus } from '@/types';
 
 export default function LeadsPage() {
   const leads = useLeadsStore((s) => s.leads);
+  const leadsLoaded = useLeadsStore((s) => s.loaded);
   const addLead = useLeadsStore((s) => s.addLead);
   const updateLead = useLeadsStore((s) => s.updateLead);
   const deleteLead = useLeadsStore((s) => s.deleteLead);
@@ -36,10 +39,15 @@ export default function LeadsPage() {
 
   const sortedStages = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
 
-  const [view, setView] = useState<ViewMode>('list');
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [stageFilter, setStageFilter] = useState('');
+  // Filter/view state is seeded from the URL so it survives refresh and is shareable.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = searchParams.get('view');
+  const [view, setView] = useState<ViewMode>(
+    initialView === 'card' || initialView === 'kanban' ? initialView : 'list',
+  );
+  const [search, setSearch] = useState(searchParams.get('q') ?? '');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? '');
+  const [stageFilter, setStageFilter] = useState(searchParams.get('stage') ?? '');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
@@ -48,7 +56,6 @@ export default function LeadsPage() {
   const [wonForm, setWonForm] = useState<WonFormState>({ clientMode: 'new', existingClientId: '' });
 
   // Open the add dialog when arrived via the top-bar "+ New" (/leads?new=1).
-  const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     if (searchParams.get('new') === '1') {
       setShowAddDialog(true);
@@ -57,15 +64,26 @@ export default function LeadsPage() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Keep the URL in sync with the active filters/view (bookmarkable, refresh-safe).
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (view !== 'list') next.set('view', view);
+    if (statusFilter) next.set('status', statusFilter);
+    if (stageFilter) next.set('stage', stageFilter);
+    if (search.trim()) next.set('q', search.trim());
+    setSearchParams(next, { replace: true });
+  }, [view, statusFilter, stageFilter, search, setSearchParams]);
+
+  const debouncedSearch = useDebouncedValue(search, 200);
   const filteredLeads = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     return leads.filter((l) => {
       const matchesSearch = !q || `${l.firstName} ${l.lastName} ${l.email}`.toLowerCase().includes(q);
       const matchesStatus = !statusFilter || l.status === statusFilter;
       const matchesStage = !stageFilter || l.qualificationStageId === stageFilter;
       return matchesSearch && matchesStatus && matchesStage;
     });
-  }, [leads, search, statusFilter, stageFilter]);
+  }, [leads, debouncedSearch, statusFilter, stageFilter]);
 
   const handleAddLead = async (payload: NewLeadInput) => {
     await addLead(payload);
@@ -123,14 +141,15 @@ export default function LeadsPage() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Page header */}
       <PageHeader
+        eyebrow="Pipeline"
         title="Leads"
         subtitle="Track and qualify your incoming buyer enquiries."
         actions={
           can('leads:create') && (
-            <Button onClick={() => setShowAddDialog(true)} className="h-9">
+            <Button onClick={() => setShowAddDialog(true)} className="h-10">
               <Plus className="mr-2 h-4 w-4" /> Add Lead
             </Button>
           )
@@ -185,14 +204,14 @@ export default function LeadsPage() {
       <div className="flex gap-3 flex-wrap items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search leads..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+          <Input placeholder="Search leads..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-10" />
         </div>
         {view === 'list' && (
-          <Button variant="outline" size="sm" className="h-9" onClick={() => setDensity((d) => (d === 'comfortable' ? 'compact' : 'comfortable'))}>
+          <Button variant="outline" size="sm" className="h-10" onClick={() => setDensity((d) => (d === 'comfortable' ? 'compact' : 'comfortable'))}>
             {density === 'comfortable' ? 'Compact' : 'Comfortable'}
           </Button>
         )}
-        <div className="flex items-center rounded-lg border border-border overflow-hidden h-9 shrink-0">
+        <div className="flex items-center rounded-lg border border-border overflow-hidden h-10 shrink-0">
           {viewButtons.map(({ mode, icon, label }, i) => (
             <button key={mode} type="button" onClick={() => setView(mode)} title={label}
               className={cn('flex items-center gap-1.5 px-3 h-full text-xs font-medium transition-colors', view === mode ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground', i > 0 && 'border-l border-border')}>
@@ -221,7 +240,11 @@ export default function LeadsPage() {
       )}
 
       {/* Content */}
-      {filteredLeads.length === 0 ? (
+      {!leadsLoaded ? (
+        view === 'list'
+          ? <LeadsTable leads={[]} selectedIds={[]} onSelectedChange={() => {}} density={density} onMarkWon={() => {}} loading />
+          : <CardGridSkeleton />
+      ) : filteredLeads.length === 0 ? (
         <EmptyState
           icon={Users}
           title={statusFilter ? `No ${statusFilter.replace('_', ' ')} leads` : stageFilter ? 'No leads in this stage' : 'No leads yet'}

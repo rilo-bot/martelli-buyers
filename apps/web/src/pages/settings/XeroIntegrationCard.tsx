@@ -86,7 +86,7 @@ export function XeroIntegrationCard() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-              <Plug className="h-4.5 w-4.5" />
+              <Plug className="h-[18px] w-[18px]" />
             </div>
             <div>
               <CardTitle className="text-base font-semibold">Xero</CardTitle>

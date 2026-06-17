@@ -2,6 +2,7 @@ import {
   createDoc, docToBuffer, header, footer, heading, keyValue, table,
   money, niceDate, paragraph, INK, MUTED,
 } from './base';
+import type { CompanySettings } from '@rilo/shared';
 
 interface ChecklistItem { label: string; status: string }
 interface Comparable {
@@ -33,9 +34,9 @@ const STATUS_LABEL: Record<string, string> = {
  * Build the buyer-facing Due Diligence report. Internal notes are intentionally
  * excluded — the UI marks them staff-only.
  */
-export async function buildDdReportPdf(record: DDLike): Promise<Buffer> {
+export async function buildDdReportPdf(record: DDLike, settings?: Partial<CompanySettings>): Promise<Buffer> {
   const doc = createDoc();
-  header(doc, 'Due Diligence Report');
+  header(doc, 'Due Diligence Report', settings);
 
   heading(doc, 'Property');
   keyValue(doc, 'Address', record.address);
@@ -101,6 +102,6 @@ export async function buildDdReportPdf(record: DDLike): Promise<Buffer> {
     'This report is prepared by Martelli Buyers Agents to support the buyer\'s due diligence. It does not replace independent legal, building, or financial advice.',
   );
 
-  footer(doc);
+  footer(doc, settings);
   return docToBuffer(doc);
 }

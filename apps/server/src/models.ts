@@ -1,4 +1,5 @@
 import mongoose, { Schema, model } from 'mongoose';
+import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
 
 /* ───────────────────────── shared options ───────────────────────────── */
 
@@ -229,6 +230,15 @@ const DealSchema = new Schema(
     agreementSignerName: { type: String, default: '' },
     agreementSignedAt: { type: String, default: '' },
     agreementSignerIp: { type: String, default: '' },
+    // Drawn signature as a PNG data URL ('data:image/png;base64,...'). Empty when
+    // the buyer signed by typing their name instead of drawing.
+    agreementSignatureImage: { type: String, default: '' },
+    // Per-deal agreement text overrides. Empty means "use the generated default"
+    // so editing deal fields (fee, budget…) keeps flowing into the PDF until an
+    // admin deliberately customises the wording.
+    agreementFeeText: { type: String, default: '' },
+    agreementTermsText: { type: String, default: '' },
+    agreementClauses: { type: String, default: '' },
     invoiceIds: { type: [String], default: [] },
     assignedTo: { type: String, default: '' },
     aiConsentStatus: { type: String, enum: ['pending', 'granted', 'declined'], default: 'pending' },
@@ -369,6 +379,10 @@ const EmailTemplateSchema = new Schema(
       enum: ['welcome', 'dd_request', 'status_update', 'requirement_blast', 'thank_you', 'post_settlement', 'other'],
       default: 'other',
     },
+    // Intended audience — drives recipient pre-selection in the Send Email dialog.
+    // No default: legacy templates predating this field stay undefined so the
+    // client falls back to inferring the audience from `category`.
+    recipientType: { type: String, enum: ['client', 'agent'] },
     subject: { type: String, default: '' },
     body: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
@@ -434,6 +448,105 @@ const XeroConnectionSchema = new Schema(
     importedClients: { type: Number, default: 0 },
     linkedInvoices: { type: Number, default: 0 },
     importError: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+// Single org-wide Outlook (Microsoft Graph) connection (one document). Tokens
+// and delta cursors are server-side only and never serialised to the client.
+const OutlookConnectionSchema = new Schema(
+  {
+    // The mailbox these tokens read (from Graph /me on connect).
+    accountEmail: { type: String, default: '' },
+    accessToken: { type: String, default: '' },
+    refreshToken: { type: String, default: '' },
+    expiresAt: { type: Date },
+    scopes: { type: String, default: '' },
+    connectedByEmail: { type: String, default: '' },
+    connectedAt: { type: String, default: '' },
+    // Graph @odata.deltaLink cursors — one per synced folder. Empty → full sync.
+    inboxDeltaLink: { type: String, default: '' },
+    sentDeltaLink: { type: String, default: '' },
+    // Background sync progress.
+    syncStatus: { type: String, enum: ['idle', 'running', 'done', 'error'], default: 'idle' },
+    lastSyncAt: { type: String, default: '' },
+    syncedCount: { type: Number, default: 0 },
+    syncError: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+// Single org-wide company settings (one document): identity, branding and
+// invoice-template text consumed by the PDF builders. Defaults mirror today's
+// hardcoded output so PDFs are unchanged until an admin customises them.
+const CompanySettingsSchema = new Schema(
+  {
+    firmName: { type: String, default: COMPANY_SETTINGS_DEFAULTS.firmName },
+    firmAddress: { type: String, default: COMPANY_SETTINGS_DEFAULTS.firmAddress },
+    firmLicence: { type: String, default: COMPANY_SETTINGS_DEFAULTS.firmLicence },
+    gstNumber: { type: String, default: COMPANY_SETTINGS_DEFAULTS.gstNumber },
+    bankDetails: { type: String, default: COMPANY_SETTINGS_DEFAULTS.bankDetails },
+    brandColor: { type: String, default: COMPANY_SETTINGS_DEFAULTS.brandColor },
+    logoDataUrl: { type: String, default: COMPANY_SETTINGS_DEFAULTS.logoDataUrl },
+    invoiceTitle: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoiceTitle },
+    invoicePaymentTerms: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoicePaymentTerms },
+    invoiceDefaultDescription: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoiceDefaultDescription },
+    invoiceFooterText: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoiceFooterText },
+    gstRate: { type: Number, default: COMPANY_SETTINGS_DEFAULTS.gstRate },
+  },
+  baseOpts,
+);
+
+// Sender/recipient pair on a synced email (no _id; not client-provided).
+const EmailAddressSchema = new Schema(
+  {
+    name: { type: String, default: '' },
+    address: { type: String, default: '' },
+  },
+  sub,
+);
+
+// Attachment metadata only — bytes are streamed on demand from Graph via
+// /api/outlook/messages/:id/attachments/:attachmentId.
+const EmailAttachmentSchema = new Schema(
+  {
+    graphId: { type: String, default: '' },
+    name: { type: String, default: '' },
+    size: { type: Number, default: 0 },
+    contentType: { type: String, default: '' },
+    isInline: { type: Boolean, default: false },
+  },
+  sub,
+);
+
+// An Outlook email pulled into the CRM and tagged against a client/deal. Records
+// originate from the background sync (upserted by graphId); the UI lists + links
+// them but never creates them by hand.
+const EmailMessageSchema = new Schema(
+  {
+    // Graph message id — unique so re-syncs upsert instead of duplicating.
+    graphId: { type: String, default: '', unique: true, index: true },
+    internetMessageId: { type: String, default: '', index: true },
+    conversationId: { type: String, default: '', index: true },
+    subject: { type: String, default: '' },
+    bodyPreview: { type: String, default: '' },
+    bodyHtml: { type: String, default: '' },
+    fromName: { type: String, default: '' },
+    fromAddress: { type: String, default: '', index: true },
+    toRecipients: { type: [EmailAddressSchema], default: [] },
+    ccRecipients: { type: [EmailAddressSchema], default: [] },
+    sentAt: { type: String, default: '' },
+    receivedAt: { type: String, default: '' },
+    direction: { type: String, enum: ['inbound', 'outbound'], default: 'inbound' },
+    folder: { type: String, enum: ['inbox', 'sent'], default: 'inbox' },
+    hasAttachments: { type: Boolean, default: false },
+    attachments: { type: [EmailAttachmentSchema], default: [] },
+    // Tagging ("link this email to a client/deal"). linkSource '' = unlinked.
+    clientId: { type: String, default: '', index: true },
+    dealId: { type: String, default: '', index: true },
+    linkSource: { type: String, enum: ['', 'auto', 'manual'], default: '' },
+    linkedBy: { type: String, default: '' },
+    linkedAt: { type: String, default: '' },
   },
   baseOpts,
 );
@@ -506,6 +619,35 @@ const AISummarySchema = new Schema(
   baseOpts,
 );
 
+// A catalogued file. Bytes live in S3 (uploaded via /api/uploads/sign); this
+// record holds the metadata and a polymorphic link to its parent entity. Free-
+// form entityType (no enum) mirrors AuditEvent — keeps unlinked docs ('') valid.
+const DocumentSchema = new Schema(
+  {
+    name: { type: String, default: '' },
+    description: { type: String, default: '' },
+    url: { type: String, default: '' },
+    storageKey: { type: String, default: '' },
+    mimeType: { type: String, default: '' },
+    size: { type: Number, default: 0 },
+    // Blank by default — a category is optional and only set when the uploader
+    // explicitly classifies the file. '' is included so unclassified docs pass.
+    category: {
+      type: String,
+      enum: ['', 'agreement', 'invoice', 'dd_report', 'id_verification', 'lim', 'building_report', 'contract', 'photo', 'other'],
+      default: '',
+    },
+    entityType: { type: String, default: '', index: true },
+    entityId: { type: String, default: '', index: true },
+    // Denormalised journey scope so a deal's whole document set is one query.
+    dealId: { type: String, default: '', index: true },
+    uploadedBy: { type: String, default: '' },
+    tags: { type: [String], default: [] },
+  },
+  baseOpts,
+);
+DocumentSchema.index({ entityType: 1, entityId: 1 });
+
 const ReferralPartnerSchema = new Schema(
   {
     name: { type: String, default: '' },
@@ -569,8 +711,14 @@ export const ClientComment = model('ClientComment', ClientCommentSchema);
 export const AISummary = model('AISummary', AISummarySchema);
 export const QualificationStage = model('QualificationStage', QualificationStageSchema);
 export const ReferralPartner = model('ReferralPartner', ReferralPartnerSchema);
+export const Document = model('Document', DocumentSchema);
+export const EmailMessage = model('EmailMessage', EmailMessageSchema);
 // Singleton — not a CRUD resource (no entry in RESOURCES).
 export const XeroConnection = model('XeroConnection', XeroConnectionSchema);
+// Singleton org-wide Outlook connection — not a CRUD resource (managed via /api/outlook).
+export const OutlookConnection = model('OutlookConnection', OutlookConnectionSchema);
+// Singleton org-wide company settings — not a CRUD resource (managed via /api/company-settings).
+export const CompanySettings = model('CompanySettings', CompanySettingsSchema);
 // Append-only audit/timeline log — not a CRUD resource (read-only via /api/timeline).
 export const AuditEvent = model('AuditEvent', AuditEventSchema);
 // Cached AI daily briefings — not a CRUD resource (served via /api/ai/daily-summary).
@@ -603,6 +751,9 @@ export const RESOURCE_MODULE: Record<string, string> = {
   // the pipeline loads. (The router maps GET→view automatically.)
   'qualification-stages': 'settings',
   'referral-partners': 'agents',
+  documents: 'documents',
+  // Synced Outlook emails — read with emails:view, tag/link with emails:edit.
+  'email-messages': 'emails',
 };
 
 /** Maps REST resource path → Mongoose model for the generic CRUD router. */
@@ -624,4 +775,6 @@ export const RESOURCES: Record<string, AnyModel> = {
   'ai-summaries': AISummary,
   'qualification-stages': QualificationStage,
   'referral-partners': ReferralPartner,
+  documents: Document,
+  'email-messages': EmailMessage,
 };

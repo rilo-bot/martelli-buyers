@@ -18,8 +18,12 @@ import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useEmailTemplatesStore } from '@/stores/emailTemplatesStore';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
+import { useCompanySettingsStore } from '@/stores/companySettingsStore';
+import { useDocumentsStore } from '@/stores/documentsStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useXeroStore } from '@/stores/xeroStore';
+import { useOutlookStore } from '@/stores/outlookStore';
+import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
 
 /**
  * Load every server-backed store once, after authentication. Mounted inside the
@@ -38,6 +42,8 @@ export function useBootstrapData() {
       [useConfigStore.getState().fetch, null],
       [useUsersStore.getState().fetch, null],
       [useXeroStore.getState().fetchStatus, null],
+      [useOutlookStore.getState().fetchStatus, null],
+      [useEmailMessagesStore.getState().fetch, 'emails:view'],
       [useLeadsStore.getState().fetch, 'leads:view'],
       [useDealsStore.getState().fetch, 'journeys:view'],
       [useOffersStore.getState().fetch, 'journeys:view'],
@@ -51,8 +57,10 @@ export function useBootstrapData() {
       [useAgentsStore.getState().fetch, 'agents:view'],
       [useInvoicesStore.getState().fetch, 'invoices:view'],
       [useDueDiligenceStore.getState().fetch, 'dueDiligence:view'],
+      [useDocumentsStore.getState().fetch, 'documents:view'],
       [useEmailTemplatesStore.getState().fetch, 'emails:view'],
       [useQualificationStagesStore.getState().fetch, 'settings:view'],
+      [useCompanySettingsStore.getState().fetch, 'settings:view'],
       [useRolesStore.getState().fetch, 'team:view'],
     ];
     const fetchers = gated.filter(([, perm]) => can(perm)).map(([f]) => f);

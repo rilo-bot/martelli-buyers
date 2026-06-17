@@ -177,18 +177,13 @@ export default function LandingPage() {
               <p className="text-sm text-muted-foreground leading-relaxed mb-6">
                 Access your deals, clients, properties and pipeline. Sign in with your team credentials to get started.
               </p>
-              <Link to="/login" className="block mb-3">
+              <Link to="/login" className="block">
                 <Button className="w-full font-semibold gap-2" size="default">
                   Sign In <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <Link to="/signup" className="block">
-                <Button variant="outline" className="w-full font-medium" size="default">
-                  Create Account
-                </Button>
-              </Link>
               <p className="text-[11px] text-muted-foreground text-center mt-5 leading-snug">
-                For authorised Martelli team members only.
+                Access is invite-only — for authorised Martelli team members.
               </p>
             </div>
           </div>
@@ -209,7 +204,7 @@ export default function LandingPage() {
                 className="rounded-xl border border-border bg-card p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
               >
                 <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <cap.icon className="h-4.5 w-4.5 text-primary h-[18px] w-[18px]" />
+                  <cap.icon className="h-[18px] w-[18px] text-primary" />
                 </div>
                 <h3 className="text-sm font-bold text-foreground mb-1.5">{cap.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{cap.description}</p>
@@ -266,11 +261,6 @@ export default function LandingPage() {
             <Link to="/login">
               <Button size="default" className="font-semibold px-6 gap-2 shadow shadow-primary/20">
                 Sign In <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link to="/signup">
-              <Button variant="outline" size="default" className="font-medium px-6">
-                Create Account
               </Button>
             </Link>
           </div>

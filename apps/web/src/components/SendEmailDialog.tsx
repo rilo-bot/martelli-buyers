@@ -10,6 +10,7 @@ import { sendEmail } from '@/lib/email';
 import { cn } from '@/lib/utils';
 import { Mail, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { emailTemplateAudience } from '@/types';
 import type { EmailTemplateCategory } from '@/types';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
@@ -53,6 +54,8 @@ const CATEGORY_LABELS: Record<EmailTemplateCategory, string> = {
 function interpolate(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 /* ─── Main component ─────────────────────────────────────────────────── */
 
@@ -119,40 +122,59 @@ export function SendEmailDialog({
     return Array.from(cats) as EmailTemplateCategory[];
   }, [availableTemplates]);
 
-  // Build recipient variable map
-  const resolvedVars = useMemo(() => {
-    const chosen = recipients.find((r) => r.id === recipientId) ?? defaultRecipient;
+  // Build the interpolation variable map for a chosen recipient. The recipient's
+  // name fills the variable matching its role ({{agentName}} for agents,
+  // {{clientName}} for clients) so an Agent Blast greets the agent, not the
+  // client. Caller-supplied `variables` (e.g. the deal's actual clientName) win.
+  const buildVars = (chosen?: EmailRecipient): Record<string, string> => {
     const extra: Record<string, string> = {};
     if (chosen) {
-      extra['clientName'] = chosen.name;
-      extra['agentName'] = chosen.name;
+      if (chosen.type === 'agent') extra['agentName'] = chosen.name;
+      else extra['clientName'] = chosen.name;
     }
     return { ...extra, ...variables };
-  }, [recipientId, recipients, defaultRecipient, variables]);
+  };
+
+  // Choose a recipient matching a template's intended audience, preferring the
+  // current selection when it already matches, then the first recipient of the
+  // right type, then the default if it matches. Returns undefined when no
+  // recipient of the required audience exists — we deliberately do NOT fall back
+  // to a wrong-audience recipient (e.g. addressing an Agent Blast to the client).
+  const pickRecipientForTemplate = (audience: 'client' | 'agent'): EmailRecipient | undefined => {
+    const current = recipients.find((r) => r.id === recipientId);
+    if (current && current.type === audience) return current;
+    const match = recipients.find((r) => r.type === audience);
+    if (match) return match;
+    if (defaultRecipient?.type === audience) return defaultRecipient;
+    return undefined;
+  };
 
   const handleSelectTemplate = (templateId: string) => {
     const tpl = templates.find((t) => t.id === templateId);
     if (!tpl) return;
     setSelectedTemplateId(templateId);
-    setSubject(interpolate(tpl.subject, resolvedVars));
-    setBody(interpolate(tpl.body, resolvedVars));
-    const chosen = recipients.find((r) => r.id === recipientId) ?? defaultRecipient;
-    if (chosen) setTo(chosen.email);
+    const chosen = pickRecipientForTemplate(emailTemplateAudience(tpl));
+    // Clear the recipient when none matches the audience, so the user is
+    // prompted to pick/enter the right one instead of silently emailing the
+    // wrong party.
+    setRecipientId(chosen?.id ?? '');
+    setTo(chosen?.email ?? '');
+    const vars = buildVars(chosen);
+    setSubject(interpolate(tpl.subject, vars));
+    setBody(interpolate(tpl.body, vars));
     setStep('compose');
   };
 
   const handleRecipientChange = (newId: string) => {
     setRecipientId(newId);
     const chosen = recipients.find((r) => r.id === newId);
-    if (chosen) {
-      setTo(chosen.email);
-      // Re-interpolate with updated recipient name
-      const tpl = templates.find((t) => t.id === selectedTemplateId);
-      if (tpl) {
-        const vars: Record<string, string> = { clientName: chosen.name, agentName: chosen.name, ...variables };
-        setSubject(interpolate(tpl.subject, vars));
-        setBody(interpolate(tpl.body, vars));
-      }
+    if (chosen) setTo(chosen.email);
+    // Re-interpolate with the updated recipient name
+    const tpl = templates.find((t) => t.id === selectedTemplateId);
+    if (tpl) {
+      const vars = buildVars(chosen);
+      setSubject(interpolate(tpl.subject, vars));
+      setBody(interpolate(tpl.body, vars));
     }
   };
 
@@ -162,8 +184,16 @@ export function SendEmailDialog({
       toast.error('Please enter a recipient email address.');
       return;
     }
+    if (!isValidEmail(to)) {
+      toast.error('Please enter a valid email address.');
+      return;
+    }
     if (!subject.trim()) {
       toast.error('Subject is required.');
+      return;
+    }
+    if (unresolvedVars.length > 0) {
+      toast.error('Replace the unfilled {{placeholders}} before sending.');
       return;
     }
     setSending(true);
@@ -179,6 +209,13 @@ export function SendEmailDialog({
   };
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+
+  // An agent-directed template was chosen but there are no agent recipients to
+  // address it to (e.g. no agents in the system yet).
+  const missingAudience =
+    !!selectedTemplate &&
+    emailTemplateAudience(selectedTemplate) === 'agent' &&
+    !recipients.some((r) => r.type === 'agent');
 
   /* ─── Missing variable highlighting ──────────────────────────────── */
   const unresolvedVars = useMemo(() => {
@@ -209,9 +246,9 @@ export function SendEmailDialog({
         {/* ── Step 1: Template picker ── */}
         {step === 'pick' && (
           <div className="flex min-h-0 flex-1 flex-col">
-            <SheetBody className="space-y-4">
+            <SheetBody className="flex min-h-0 flex-col gap-4 overflow-hidden">
             {availableTemplates.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
                 <Mail className="h-10 w-10 text-muted-foreground/30 mb-3" />
                 <p className="text-sm font-medium">No email templates found</p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -221,7 +258,7 @@ export function SendEmailDialog({
             ) : (
               <>
                 {/* Search + category filter */}
-                <div className="flex gap-2">
+                <div className="flex shrink-0 gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                     <Input
@@ -248,13 +285,22 @@ export function SendEmailDialog({
                   )}
                 </div>
 
+                {/* Result count */}
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  {filteredTemplates.length}{' '}
+                  {filteredTemplates.length === 1 ? 'template' : 'templates'}
+                </p>
+
                 {/* Template list */}
                 {filteredTemplates.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    No templates match your search.
-                  </p>
+                  <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
+                    <Search className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No templates match your search.
+                    </p>
+                  </div>
                 ) : (
-                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 -mr-1">
                     {filteredTemplates.map((tpl) => (
                       <button
                         key={tpl.id}
@@ -262,7 +308,9 @@ export function SendEmailDialog({
                         onClick={() => handleSelectTemplate(tpl.id)}
                         className={cn(
                           'w-full text-left rounded-xl border border-border/60 px-4 py-3',
-                          'hover:border-primary/40 hover:bg-muted/30 transition-all group'
+                          'hover:border-primary/40 hover:bg-muted/40 hover:shadow-sm',
+                          'focus:outline-none focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-ring',
+                          'transition-all group'
                         )}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -289,9 +337,9 @@ export function SendEmailDialog({
             )}
 
             </SheetBody>
-            <SheetFooter>
+            <SheetFooter className="sm:justify-start">
               <SheetClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="outline">Cancel</Button>
               </SheetClose>
             </SheetFooter>
           </div>
@@ -341,6 +389,16 @@ export function SendEmailDialog({
               </div>
             )}
 
+            {/* Agent-directed template with no agent recipients available */}
+            {missingAudience && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/10 px-3 py-2.5">
+                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                  This template is addressed to <strong>agents</strong>, but no agents are available to select.
+                  Add agents on the Agents page, or enter an agent's email below.
+                </p>
+              </div>
+            )}
+
             {/* To address (editable) */}
             <div className="space-y-1.5">
               <Label htmlFor="emailTo">Recipient Email *</Label>
@@ -350,7 +408,14 @@ export function SendEmailDialog({
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 placeholder="recipient@example.com"
+                aria-invalid={!!to.trim() && !isValidEmail(to)}
+                aria-describedby="emailTo-error"
               />
+              {!!to.trim() && !isValidEmail(to) && (
+                <p id="emailTo-error" role="alert" className="text-xs text-destructive">
+                  Enter a valid email address.
+                </p>
+              )}
             </div>
 
             {/* Subject */}
@@ -400,8 +465,12 @@ export function SendEmailDialog({
               <Button type="button" variant="ghost" onClick={() => setStep('pick')}>
                 Back
               </Button>
-              <Button type="submit" disabled={sending || !to.trim() || !subject.trim()}>
-                <Mail className="mr-1.5 h-3.5 w-3.5" />
+              <Button
+                type="submit"
+                loading={sending}
+                disabled={!to.trim() || !subject.trim() || !isValidEmail(to) || unresolvedVars.length > 0}
+              >
+                {!sending && <Mail className="mr-1.5 h-3.5 w-3.5" />}
                 {sending ? 'Sending…' : 'Send Email'}
               </Button>
             </SheetFooter>

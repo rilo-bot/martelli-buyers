@@ -3,10 +3,11 @@ import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import helmet from 'helmet';
 import cors from 'cors';
-import { env, hasEmail, hasAi, hasS3, hasXero } from './env';
+import { env, hasEmail, hasAi, hasS3, hasXero, hasOutlook } from './env';
 import { connectDb } from './db';
 import { seedDefaults } from './seed';
 import { startInvoiceReminderScheduler } from './lib/invoiceReminders';
+import { startOutlookSyncScheduler } from './lib/outlookSync';
 import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
 import { aiRouter } from './routes/ai';
@@ -16,10 +17,13 @@ import { signRouter } from './routes/sign';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
 import { timelineRouter } from './routes/timeline';
+import { journeysRouter } from './routes/journeys';
 import { xeroRouter } from './routes/xero';
 import { xeroWebhookHandler } from './routes/xeroWebhook';
+import { outlookRouter } from './routes/outlook';
 import { usersRouter } from './routes/users';
 import { rolesRouter } from './routes/roles';
+import { companySettingsRouter } from './routes/companySettings';
 import { requireAuth } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { RESOURCES, RESOURCE_MODULE } from './models';
@@ -71,13 +75,16 @@ app.use('/api', requireAuth);
 
 // Server capability flags for the UI (which integrations are configured).
 app.get('/api/config', (_req, res) =>
-  res.json({ hasEmail, hasAi, hasS3, hasXero }),
+  res.json({ hasEmail, hasAi, hasS3, hasXero, hasOutlook }),
 );
 
 // User management (GET list is open for assignment dropdowns; writes need
 // team:manage) + role management (super-admin only for mutations).
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
+
+// Org-wide company settings (identity, branding, invoice template).
+app.use('/api/company-settings', companySettingsRouter);
 
 // Transactional email (templates, agent blasts).
 app.use('/api/email', emailRouter);
@@ -88,11 +95,18 @@ app.use('/api/ai', aiRouter);
 // Direct-to-S3 file uploads (presigned URLs).
 app.use('/api/uploads', uploadsRouter);
 
-// Generated documents (invoice / DD report / agreement PDFs + send).
+// Generated documents (invoice / DD report / agreement PDFs + send). These are
+// deep action paths (/invoice/:id.pdf, /agreement/:id/send, …). The generic
+// CRUD loop below also mounts the `documents` catalogue resource at
+// /api/documents — its root + /:id routes fall through past this router, so the
+// two coexist under one namespace without colliding.
 app.use('/api/documents', documentsRouter);
 
 // Xero OAuth connect/callback + invoice push/refresh (org-wide connection).
 app.use('/api/xero', xeroRouter);
+
+// Outlook (Microsoft Graph) OAuth connect/callback + email sync (org-wide mailbox).
+app.use('/api/outlook', outlookRouter);
 
 // Lead-specific actions (e.g. atomic "mark won" conversion). Mounted before the
 // generic CRUD router so /leads/:id/win resolves to this handler.
@@ -100,6 +114,10 @@ app.use('/api/leads', leadsRouter);
 
 // Read-only Buyer Journey timeline / audit events.
 app.use('/api/timeline', timelineRouter);
+
+// Read-only Buyer Journey aggregates (e.g. comparable sales) scoped to
+// journeys:view, so journey viewers see them without needing dueDiligence:view.
+app.use('/api/journeys', journeysRouter);
 
 // Generic CRUD for every domain resource — each gated on its RBAC module.
 for (const [resource, model] of Object.entries(RESOURCES)) {
@@ -112,6 +130,7 @@ async function start() {
   await connectDb();
   await seedDefaults();
   startInvoiceReminderScheduler();
+  startOutlookSyncScheduler();
   app.listen(env.PORT, () => {
     console.log(`[server] listening on http://localhost:${env.PORT}`);
     console.log(`[server] CORS origin: ${env.CLIENT_ORIGIN}`);

@@ -11,13 +11,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
-import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LEAD_SOURCE_OPTIONS, STATUS_OPTIONS, STATUS_STYLES } from '@/pages/leads/leadShared';
 import { LeadStageManager } from '@/pages/leads/LeadStageManager';
 import { WonDialog, type WonFormState } from '@/pages/leads/LeadDialogs';
 import { useWonConversion } from '@/pages/leads/useWonConversion';
+import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
 import type { Lead, LeadStatus } from '@/types';
 
 interface EditForm {
@@ -71,6 +72,10 @@ export default function LeadDetailPage() {
   const [wonForm, setWonForm] = useState<WonFormState>({ clientMode: 'new', existingClientId: '' });
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  useDetailBreadcrumb(lead ? `${lead.firstName} ${lead.lastName}`.trim() : null);
 
   // ── Guards (after all hooks) ─────────────────────────────────────────────
   if (!id) return <Navigate to="/leads" replace />;
@@ -84,31 +89,54 @@ export default function LeadDetailPage() {
   // ── Handlers ─────────────────────────────────────────────────────────────
   const startEditing = () => {
     setForm(formFromLead(lead)); // always re-sync from the live lead → never reverts other fields
+    setSubmitAttempted(false);
     setEditing(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const cancelEditing = () => {
+    setEditing(false);
+    setForm(null);
+    setSubmitAttempted(false);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form) return;
-    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
+    if (!form || saving) return;
+    setSubmitAttempted(true);
+    const invalid: Record<string, boolean> = {
+      fn: !form.firstName.trim(),
+      ln: !form.lastName.trim(),
+      em: !form.email.trim(),
+    };
+    const firstInvalid = Object.keys(invalid).find((k) => invalid[k]);
+    if (firstInvalid) {
       toast.error('First name, last name and email are required.');
+      document.getElementById(firstInvalid)?.focus();
       return;
     }
-    updateLead(id, {
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone.trim(),
-      source: form.source,
-      notes: form.notes.trim(),
-      budget: Number(form.budget) || 0,
-      propertyType: form.propertyType.trim(),
-      bedrooms: Number(form.bedrooms) || 3,
-      bathrooms: Number(form.bathrooms) || 2,
-      preferredSuburbs: form.preferredSuburbs.split(',').map((s) => s.trim()).filter(Boolean),
-    });
-    setEditing(false);
-    toast.success('Lead updated.');
+    setSaving(true);
+    try {
+      await Promise.resolve(updateLead(id, {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        source: form.source,
+        notes: form.notes.trim(),
+        budget: Number(form.budget) || 0,
+        propertyType: form.propertyType.trim(),
+        bedrooms: Number(form.bedrooms) || 3,
+        bathrooms: Number(form.bathrooms) || 2,
+        preferredSuburbs: form.preferredSuburbs.split(',').map((s) => s.trim()).filter(Boolean),
+      }));
+      setEditing(false);
+      setForm(null);
+      toast.success('Lead updated.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update lead.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openWonDialog = () => {
@@ -137,6 +165,7 @@ export default function LeadDetailPage() {
   };
 
   const f = form ?? formFromLead(lead);
+  const fieldError = (val: string) => editing && submitAttempted && !val.trim();
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -204,33 +233,46 @@ export default function LeadDetailPage() {
         onClearAll={(stageId) => clearStageProgress(id, stageId)}
       />
 
-      {/* Details */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Details — single edit bar drives all three cards via one form */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">Lead Details</h2>
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={cancelEditing} disabled={saving}>
+              <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+            </Button>
+            <Button size="sm" type="submit" form="lead-edit-form" loading={saving}>
+              {saving ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" onClick={startEditing}>
+            <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit details
+          </Button>
+        )}
+      </div>
+
+      <form id="lead-edit-form" onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Contact Details</CardTitle>
-              <Button size="sm" variant="ghost" onClick={() => (editing ? setEditing(false) : startEditing())}>
-                {editing ? 'Cancel' : <><Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit</>}
-              </Button>
-            </div>
+            <CardTitle className="text-base">Contact Details</CardTitle>
           </CardHeader>
           <CardContent>
             {editing ? (
-              <form onSubmit={handleSave} className="space-y-3">
+              <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="fn">First name</Label>
-                    <Input id="fn" value={f.firstName} onChange={(e) => setForm({ ...f, firstName: e.target.value })} />
+                    <Label htmlFor="fn">First name *</Label>
+                    <Input id="fn" value={f.firstName} aria-invalid={fieldError(f.firstName)} onChange={(e) => setForm({ ...f, firstName: e.target.value })} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="ln">Last name</Label>
-                    <Input id="ln" value={f.lastName} onChange={(e) => setForm({ ...f, lastName: e.target.value })} />
+                    <Label htmlFor="ln">Last name *</Label>
+                    <Input id="ln" value={f.lastName} aria-invalid={fieldError(f.lastName)} onChange={(e) => setForm({ ...f, lastName: e.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="em">Email</Label>
-                  <Input id="em" type="email" value={f.email} onChange={(e) => setForm({ ...f, email: e.target.value })} />
+                  <Label htmlFor="em">Email *</Label>
+                  <Input id="em" type="email" value={f.email} aria-invalid={fieldError(f.email)} onChange={(e) => setForm({ ...f, email: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ph">Phone</Label>
@@ -243,8 +285,7 @@ export default function LeadDetailPage() {
                     {LEAD_SOURCE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                   </Select>
                 </div>
-                <Button type="submit" size="sm">Save Changes</Button>
-              </form>
+              </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
@@ -275,7 +316,7 @@ export default function LeadDetailPage() {
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="budget">Budget ($)</Label>
-                  <Input id="budget" type="number" value={f.budget} onChange={(e) => setForm({ ...f, budget: e.target.value })} />
+                  <Input id="budget" type="number" min="0" value={f.budget} onChange={(e) => setForm({ ...f, budget: e.target.value })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="pt">Property type</Label>
@@ -284,11 +325,11 @@ export default function LeadDetailPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="beds">Beds</Label>
-                    <Input id="beds" type="number" value={f.bedrooms} onChange={(e) => setForm({ ...f, bedrooms: e.target.value })} />
+                    <Input id="beds" type="number" min="0" value={f.bedrooms} onChange={(e) => setForm({ ...f, bedrooms: e.target.value })} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="baths">Baths</Label>
-                    <Input id="baths" type="number" value={f.bathrooms} onChange={(e) => setForm({ ...f, bathrooms: e.target.value })} />
+                    <Input id="baths" type="number" min="0" value={f.bathrooms} onChange={(e) => setForm({ ...f, bathrooms: e.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-1.5">
@@ -339,7 +380,7 @@ export default function LeadDetailPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </form>
 
       {/* Mark as Won dialog (shared with the Leads list) */}
       <WonDialog

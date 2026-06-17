@@ -39,7 +39,7 @@ export function StatusPill({
     >
       <span className="relative flex h-1.5 w-1.5">
         {shouldPulse && (
-          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-60', t.dot)} />
+          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 motion-reduce:hidden', t.dot)} />
         )}
         <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', t.dot)} />
       </span>

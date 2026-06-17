@@ -191,7 +191,7 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/6 px-4 py-3">
+                <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3">
                   <span className="mt-px h-4 w-4 shrink-0 rounded-full bg-destructive/15 flex items-center justify-center">
                     <span className="text-[10px] font-bold text-destructive">!</span>
                   </span>
@@ -246,7 +246,7 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/6 px-4 py-3">
+                <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3">
                   <span className="mt-px h-4 w-4 shrink-0 rounded-full bg-destructive/15 flex items-center justify-center">
                     <span className="text-[10px] font-bold text-destructive">!</span>
                   </span>

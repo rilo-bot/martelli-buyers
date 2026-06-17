@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Mail, HardDrive, Sparkles, type LucideIcon } from 'lucide-react';
 import { XeroIntegrationCard } from '@/pages/settings/XeroIntegrationCard';
+import { OutlookIntegrationCard } from '@/pages/settings/OutlookIntegrationCard';
 
 /** Server-managed integrations (configured via env vars, not from the UI). */
 function ServerIntegration({ icon: Icon, name, desc }: { icon: LucideIcon; name: string; desc: string }) {
@@ -34,6 +35,7 @@ export function IntegrationsSection() {
   return (
     <div className="space-y-5">
       <XeroIntegrationCard />
+      <OutlookIntegrationCard />
       <ServerIntegration icon={Mail} name="Email · SendGrid" desc="Transactional email and requirement blasts to agents are sent via the SendGrid API." />
       <ServerIntegration icon={HardDrive} name="Storage · AWS S3" desc="Property photos and media upload directly to your S3 bucket via presigned URLs." />
       <ServerIntegration icon={Sparkles} name="AI · OpenRouter" desc="Call and meeting summaries are generated through OpenRouter (Gemini)." />

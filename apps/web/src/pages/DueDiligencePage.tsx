@@ -72,6 +72,18 @@ export default function DueDiligencePage() {
     [records, selectedRecordId]
   );
 
+  // Open the create sheet, pre-filling the address from the linked property
+  // (e.g. via the ?propertyId= URL param) so it matches a dropdown selection.
+  const openCreate = () => {
+    const prop = properties.find((p) => p.id === defaultPropertyId);
+    setCreateForm({
+      propertyId: defaultPropertyId,
+      dealId: prop?.dealId ?? '',
+      address: prop?.address ?? '',
+    });
+    setShowCreateDD(true);
+  };
+
   const handleCreateDD = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.address.trim()) return;
@@ -721,7 +733,7 @@ export default function DueDiligencePage() {
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mt-1">Due Diligence</h1>
           <p className="text-sm text-muted-foreground mt-1">Hazard maps, comparable sales, evidence storage, and internal audit checklists.</p>
         </div>
-        <Button onClick={() => setShowCreateDD(true)} className="h-10 shadow-md shadow-primary/25">
+        <Button onClick={openCreate} className="h-10 shadow-md shadow-primary/25">
           <Plus className="mr-2 h-4 w-4" />
           New DD Record
         </Button>
@@ -742,7 +754,7 @@ export default function DueDiligencePage() {
           <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
             Create a due diligence record for a property to start your hazard analysis, comparable sales research, and audit checklist.
           </p>
-          <Button className="mt-6 shadow-md shadow-primary/20" onClick={() => setShowCreateDD(true)}>
+          <Button className="mt-6 shadow-md shadow-primary/20" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Create your first DD record
           </Button>

@@ -42,6 +42,11 @@ export const env = {
     bucket: process.env.S3_BUCKET ?? '',
     // Optional CDN/custom domain; defaults to the bucket's regional URL.
     publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '',
+    // Key prefix under which objects are publicly readable. Leave blank for a
+    // dedicated bucket whose policy grants public read on the app's own
+    // prefixes. Set to e.g. "public" when sharing a bucket whose policy only
+    // exposes a "public/*" prefix — uploaded keys are stored beneath it.
+    publicPrefix: (process.env.S3_PUBLIC_PREFIX ?? '').replace(/^\/+|\/+$/g, ''),
   },
   REMINDERS: {
     // Automated overdue-invoice reminders (only run when email is configured).
@@ -68,6 +73,24 @@ export const env = {
     scopes: process.env.XERO_SCOPES
       ?? 'openid profile email accounting.transactions accounting.contacts offline_access',
   },
+  MICROSOFT: {
+    // Microsoft Graph OAuth 2.0 app (Entra/Azure AD) for the Outlook email sync.
+    // Until both id+secret are set, the Outlook card stays "Not configured".
+    clientId: process.env.MS_CLIENT_ID ?? '',
+    clientSecret: process.env.MS_CLIENT_SECRET ?? '',
+    // 'common' = work + personal accounts; use a tenant id to restrict to one org.
+    tenant: process.env.MS_TENANT ?? 'common',
+    // Must exactly match a redirect URI registered on the Entra app.
+    redirectUri: process.env.MS_REDIRECT_URI ?? 'http://localhost:3001/api/outlook/callback',
+    // Optional: a true Exchange shared mailbox to read via /users/{addr}. Blank →
+    // read the signed-in account via /me.
+    mailbox: (process.env.MS_MAILBOX ?? '').trim().toLowerCase(),
+    // Space-separated Graph scopes. Read-only ingest — sending stays on SendGrid.
+    scopes: process.env.MS_SCOPES
+      ?? 'offline_access openid profile email User.Read Mail.Read',
+    // How often the background delta sync runs (minutes).
+    syncMinutes: Number(process.env.OUTLOOK_SYNC_MINUTES ?? 10),
+  },
 };
 
 /** True when a SendGrid API key is configured; otherwise dev logs instead of sending. */
@@ -83,6 +106,9 @@ export const hasS3 = Boolean(
 
 /** True when real Xero OAuth credentials are configured. */
 export const hasXero = Boolean(env.XERO.clientId && env.XERO.clientSecret);
+
+/** True when Microsoft Graph OAuth credentials are configured for Outlook sync. */
+export const hasOutlook = Boolean(env.MICROSOFT.clientId && env.MICROSOFT.clientSecret);
 
 /** True when the given email is the configured super admin (case-insensitive). */
 export function isSuperAdminEmail(email: string | undefined | null): boolean {

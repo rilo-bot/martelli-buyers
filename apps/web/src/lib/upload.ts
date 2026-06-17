@@ -66,17 +66,29 @@ function putToS3(uploadUrl: string, file: File, onProgress?: (p: number) => void
   });
 }
 
-/** Upload a file to S3 and return its permanent public URL. */
-export async function uploadFile(file: File, opts: UploadOptions = {}): Promise<string> {
+/**
+ * Upload a file to S3 and return both its public URL and the object key. The key
+ * is needed when cataloguing the upload (e.g. a Document's `storageKey`) so the
+ * server can reclaim the object on delete.
+ */
+export async function uploadFileWithKey(
+  file: File,
+  opts: UploadOptions = {},
+): Promise<{ url: string; key: string }> {
   validate(file);
-  const { uploadUrl, publicUrl } = await request<SignResponse>('POST', '/api/uploads/sign', {
+  const { uploadUrl, publicUrl, key } = await request<SignResponse>('POST', '/api/uploads/sign', {
     filename: file.name,
     contentType: file.type,
     scope: opts.scope ?? 'misc',
     scopeId: opts.scopeId,
   });
   await putToS3(uploadUrl, file, opts.onProgress);
-  return publicUrl;
+  return { url: publicUrl, key };
+}
+
+/** Upload a file to S3 and return its permanent public URL. */
+export async function uploadFile(file: File, opts: UploadOptions = {}): Promise<string> {
+  return (await uploadFileWithKey(file, opts)).url;
 }
 
 /** Delete an uploaded object by its public URL (best-effort). */

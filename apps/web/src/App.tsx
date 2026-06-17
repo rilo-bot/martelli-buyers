@@ -24,11 +24,13 @@ import PropertiesPage from '@/pages/PropertiesPage';
 import PropertyDetailPage from '@/pages/PropertyDetailPage';
 import AgentsPage from '@/pages/AgentsPage';
 import EmailsPage from '@/pages/EmailsPage';
+import InboxPage from '@/pages/InboxPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
 import TeamPage from '@/pages/TeamPage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignAgreementPage from '@/pages/SignAgreementPage';
+import NotFoundPage from '@/pages/NotFoundPage';
 import { RequirePermission } from '@/components/RequirePermission';
 
 // Apply persisted theme before first render to avoid flash
@@ -111,6 +113,14 @@ export default function App() {
           <Route path="/properties/:id" element={<PropertyDetailPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/emails" element={<EmailsPage />} />
+          <Route
+            path="/inbox"
+            element={
+              <RequirePermission perm="emails:view">
+                <InboxPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/due-diligence" element={<DueDiligencePage />} />
           <Route
@@ -122,8 +132,11 @@ export default function App() {
             }
           />
           <Route path="/settings" element={<SettingsPage />} />
+          {/* Authenticated catch-all: show a real 404 inside the shell instead of
+              bouncing signed-in users to the login screen. Unauthenticated users
+              still get redirected to /login by ProtectedRoute. */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
       <Toaster richColors position="top-right" />
     </>

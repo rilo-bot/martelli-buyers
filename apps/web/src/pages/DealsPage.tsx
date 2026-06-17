@@ -11,45 +11,25 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CardGridSkeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { Plus, Search, FileText, ArrowRight, DollarSign, Home, MapPin, Users, ChevronRight } from 'lucide-react';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { Plus, Search, FileText, DollarSign, Home, MapPin, Users, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { DealStage } from '@/types';
-
-const STAGE_OPTIONS: DealStage[] = ['qualification', 'search', 'shortlisting', 'due_diligence', 'offer', 'settlement', 'complete'];
-const STAGE_LABELS: Record<DealStage, string> = {
-  qualification: 'Qualification',
-  search: 'Search',
-  shortlisting: 'Shortlisting',
-  due_diligence: 'Due Diligence',
-  offer: 'Offer',
-  settlement: 'Settlement',
-  complete: 'Complete',
-};
-
-const STAGE_PILL: Record<DealStage, string> = {
-  qualification: 'bg-primary/10 text-primary border-primary/20',
-  search: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20',
-  shortlisting: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
-  due_diligence: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20',
-  offer: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20',
-  settlement: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20',
-  complete: 'bg-muted text-muted-foreground border-border',
-};
-
-const STAGE_BAR_ACCENT: Record<DealStage, string> = {
-  qualification: 'bg-primary',
-  search: 'bg-violet-500',
-  shortlisting: 'bg-amber-500',
-  due_diligence: 'bg-orange-500',
-  offer: 'bg-rose-500',
-  settlement: 'bg-emerald-500',
-  complete: 'bg-muted-foreground',
-};
+import {
+  DEAL_STAGE_ORDER as STAGE_OPTIONS,
+  STAGE_LABELS,
+  STAGE_PILL,
+  STAGE_BAR_ACCENT,
+} from '@/lib/statusStyles';
 
 export default function DealsPage() {
   const deals = useDealsStore((s) => s.deals);
+  const dealsLoaded = useDealsStore((s) => s.loaded);
   const addDeal = useDealsStore((s) => s.addDeal);
   const clients = useClientsStore((s) => s.clients);
   const addDealToClient = useClientsStore((s) => s.addDealToClient);
@@ -60,6 +40,7 @@ export default function DealsPage() {
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     clientName: '', clientEmail: '', clientPhone: '', brief: '',
@@ -67,23 +48,27 @@ export default function DealsPage() {
     propertyType: '', bedrooms: '3', bathrooms: '2', preferredSuburbs: '', clientId: '',
   });
 
+  const debouncedSearch = useDebouncedValue(search, 200);
   const filteredDeals = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     return deals.filter((d) => {
       const matchesSearch = !q || d.clientName.toLowerCase().includes(q) || d.clientEmail.toLowerCase().includes(q);
       const matchesStage = !stageFilter || d.stage === stageFilter;
       return matchesSearch && matchesStage;
     });
-  }, [deals, search, stageFilter]);
+  }, [deals, debouncedSearch, stageFilter]);
 
   const getClientForDeal = (dealId: string) => clients.find((c) => c.dealIds.includes(dealId));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!form.clientName.trim() || !form.clientEmail.trim()) {
       toast.error('Client name and email are required.');
       return;
     }
+    setSubmitting(true);
+    try {
     const deal = await addDeal({
       leadId: '',
       clientId: form.clientId,
@@ -101,7 +86,8 @@ export default function DealsPage() {
       bathrooms: Number(form.bathrooms) || 2,
       agreementStatus: 'pending',
       agreementUrl: '',
-      agreementSignToken: '', agreementSentAt: '', agreementSignerName: '', agreementSignedAt: '', agreementSignerIp: '',
+      agreementSignToken: '', agreementSentAt: '', agreementSignerName: '', agreementSignedAt: '', agreementSignerIp: '', agreementSignatureImage: '',
+      agreementFeeText: '', agreementTermsText: '', agreementClauses: '',
       invoiceIds: [],
       assignedTo: currentUser?.id ?? '',
       aiConsentStatus: 'pending',
@@ -110,6 +96,11 @@ export default function DealsPage() {
     if (form.clientId) addDealToClient(form.clientId, deal.id);
     setForm({ clientName: '', clientEmail: '', clientPhone: '', brief: '', budget: '', fee: '', feeType: 'fixed', propertyType: '', bedrooms: '3', bathrooms: '2', preferredSuburbs: '', clientId: '' });
     setShowAddDialog(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create buyer journey.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleClientSelect = (clientId: string) => {
@@ -125,19 +116,19 @@ export default function DealsPage() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="section-eyebrow mb-1.5">Engagements</p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Buyer Journeys</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage every buyer journey from qualification to settlement.</p>
-        </div>
-        {canCreate && (
-          <Button onClick={() => setShowAddDialog(true)} className="shadow-md shadow-primary/25 h-9">
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            New Buyer Journey
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Engagements"
+        title="Buyer Journeys"
+        subtitle="Manage every buyer journey from qualification to settlement."
+        actions={
+          canCreate && (
+            <Button onClick={() => setShowAddDialog(true)} className="shadow-md shadow-primary/25 h-10">
+              <Plus className="mr-2 h-3.5 w-3.5" />
+              New Buyer Journey
+            </Button>
+          )
+        }
+      />
 
       {/* Stage pipeline — visual bar */}
       <Card className="border-border/70 shadow-sm overflow-hidden">
@@ -192,23 +183,19 @@ export default function DealsPage() {
       </div>
 
       {/* Campaigns grid */}
-      {filteredDeals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/6 border-2 border-dashed border-primary/20 mb-5">
-            <FileText className="h-8 w-8 text-primary/40" />
-          </div>
-          <h3 className="text-lg font-bold">
-            {stageFilter ? `No ${STAGE_LABELS[stageFilter as DealStage]} journeys` : 'No buyer journeys yet'}
-          </h3>
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">
-            {stageFilter ? 'Try a different stage filter.' : 'Create your first buyer journey or convert a qualified lead.'}
-          </p>
-          {!stageFilter && canCreate && (
-            <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => setShowAddDialog(true)}>
+      {!dealsLoaded ? (
+        <CardGridSkeleton />
+      ) : filteredDeals.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title={stageFilter ? `No ${STAGE_LABELS[stageFilter as DealStage]} journeys` : 'No buyer journeys yet'}
+          description={stageFilter ? 'Try a different stage filter.' : 'Create your first buyer journey or convert a qualified lead.'}
+          action={!stageFilter && canCreate && (
+            <Button className="shadow-md shadow-primary/20" onClick={() => setShowAddDialog(true)}>
               <Plus className="mr-2 h-4 w-4" />Create your first buyer journey
             </Button>
           )}
-        </div>
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredDeals.map((deal) => {
@@ -285,7 +272,7 @@ export default function DealsPage() {
       )}
 
       {/* Add Buyer Journey drawer */}
-      <Sheet open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Sheet open={showAddDialog} onOpenChange={(o) => { if (submitting) return; setShowAddDialog(o); }}>
         <SheetContent size="lg">
           <SheetHeader>
             <SheetTitle>Create New Buyer Journey</SheetTitle>
@@ -358,9 +345,9 @@ export default function DealsPage() {
             </div>
             </SheetBody>
             <SheetFooter>
-              <SheetClose asChild><Button type="button" variant="ghost">Cancel</Button></SheetClose>
-              <Button type="submit" disabled={!form.clientName.trim() || !form.clientEmail.trim()} className="shadow-sm shadow-primary/20">
-                <Plus className="mr-2 h-4 w-4" />Create Buyer Journey
+              <SheetClose asChild><Button type="button" variant="ghost" disabled={submitting}>Cancel</Button></SheetClose>
+              <Button type="submit" loading={submitting} disabled={!form.clientName.trim() || !form.clientEmail.trim()} className="shadow-sm shadow-primary/20">
+                {!submitting && <Plus className="mr-2 h-4 w-4" />}{submitting ? 'Creating…' : 'Create Buyer Journey'}
               </Button>
             </SheetFooter>
           </form>

@@ -12,9 +12,10 @@ interface LeadsTableProps {
   onSelectedChange: (ids: string[]) => void;
   density: 'comfortable' | 'compact';
   onMarkWon: (id: string) => void;
+  loading?: boolean;
 }
 
-export function LeadsTable({ leads, selectedIds, onSelectedChange, density, onMarkWon }: LeadsTableProps) {
+export function LeadsTable({ leads, selectedIds, onSelectedChange, density, onMarkWon, loading }: LeadsTableProps) {
   const navigate = useNavigate();
 
   const columns: Column<Lead>[] = [
@@ -103,6 +104,7 @@ export function LeadsTable({ leads, selectedIds, onSelectedChange, density, onMa
       selectedIds={selectedIds}
       onSelectedChange={onSelectedChange}
       density={density}
+      loading={loading}
       initialSort={{ key: 'name', dir: 'asc' }}
       empty="No leads match your filters."
     />

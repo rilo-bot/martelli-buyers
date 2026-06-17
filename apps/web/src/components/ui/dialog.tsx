@@ -15,9 +15,24 @@ import { cn } from "@/lib/utils"
 interface DialogContextValue {
   open: boolean
   setOpen: (open: boolean) => void
+  titleId: string
+  descId: string
+  registerTitle: (present: boolean) => void
+  registerDesc: (present: boolean) => void
 }
 
 const DialogContext = React.createContext<DialogContextValue | null>(null)
+
+let dialogIdCounter = 0
+function useDialogIds() {
+  // useId is available in React 18 — gives SSR-stable ids; fall back defensively.
+  const reactId = React.useId?.()
+  const base = reactId ?? React.useMemo(() => `dlg-${++dialogIdCounter}`, [])
+  return { titleId: `${base}-title`, descId: `${base}-desc` }
+}
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 function useDialogContext(): DialogContextValue {
   const ctx = React.useContext(DialogContext)
@@ -50,11 +65,21 @@ export function Dialog({
     },
     [isControlled, onOpenChange]
   )
-  return (
-    <DialogContext.Provider value={{ open, setOpen }}>
-      {children}
-    </DialogContext.Provider>
+  const { titleId, descId } = useDialogIds()
+  const [hasTitle, setHasTitle] = React.useState(false)
+  const [hasDesc, setHasDesc] = React.useState(false)
+  const value = React.useMemo<DialogContextValue>(
+    () => ({
+      open,
+      setOpen,
+      titleId: hasTitle ? titleId : "",
+      descId: hasDesc ? descId : "",
+      registerTitle: setHasTitle,
+      registerDesc: setHasDesc,
+    }),
+    [open, setOpen, hasTitle, hasDesc, titleId, descId]
   )
+  return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>
 }
 
 interface DialogTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -96,19 +121,60 @@ export function DialogContent({
   showClose = true,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & { showClose?: boolean }) {
-  const { open, setOpen } = useDialogContext()
+  const { open, setOpen, titleId, descId } = useDialogContext()
+  const panelRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     if (!open) return
+
+    // Remember what was focused so we can restore it on close.
+    const previouslyFocused = document.activeElement as HTMLElement | null
+
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false)
+      if (e.key === "Escape") {
+        setOpen(false)
+        return
+      }
+      // Trap Tab within the dialog.
+      if (e.key === "Tab" && panelRef.current) {
+        const focusable = Array.from(
+          panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+        ).filter((el) => el.offsetParent !== null || el === document.activeElement)
+        if (focusable.length === 0) {
+          e.preventDefault()
+          panelRef.current.focus()
+          return
+        }
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const activeEl = document.activeElement as HTMLElement
+        if (e.shiftKey && activeEl === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && activeEl === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
     document.addEventListener("keydown", handler)
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
+
+    // Move focus into the dialog (first focusable, else the panel itself).
+    const id = window.setTimeout(() => {
+      const focusable = panelRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+      ;(focusable ?? panelRef.current)?.focus()
+    }, 0)
+
     return () => {
+      window.clearTimeout(id)
       document.removeEventListener("keydown", handler)
       document.body.style.overflow = previousOverflow
+      // Restore focus to the trigger if it's still in the document.
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus()
+      }
     }
   }, [open, setOpen])
 
@@ -122,10 +188,14 @@ export function DialogContent({
         aria-hidden="true"
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId || undefined}
+        aria-describedby={descId || undefined}
+        tabIndex={-1}
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg",
+          "relative z-50 w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg focus:outline-none",
           className
         )}
         {...props}
@@ -176,24 +246,44 @@ export function DialogFooter({
 export const DialogTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <h2
-    ref={ref}
-    className={cn(
-      "text-lg font-semibold leading-none tracking-tight",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  const { titleId, registerTitle } = useDialogContext()
+  React.useEffect(() => {
+    registerTitle(true)
+    return () => registerTitle(false)
+  }, [registerTitle])
+  return (
+    <h2
+      ref={ref}
+      id={titleId || undefined}
+      className={cn(
+        "text-lg font-semibold leading-none tracking-tight",
+        className
+      )}
+      {...props}
+    />
+  )
+})
 DialogTitle.displayName = "DialogTitle"
 
 export const DialogDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <p ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
-))
+>(({ className, ...props }, ref) => {
+  const { descId, registerDesc } = useDialogContext()
+  React.useEffect(() => {
+    registerDesc(true)
+    return () => registerDesc(false)
+  }, [registerDesc])
+  return (
+    <p
+      ref={ref}
+      id={descId || undefined}
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  )
+})
 DialogDescription.displayName = "DialogDescription"
 
 interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

@@ -83,6 +83,32 @@ export async function fetchBlob(path: string): Promise<Blob> {
   return res.blob()
 }
 
+/** POST a JSON body and read the binary response (e.g. a generated PDF) as a Blob. */
+export async function postBlob(path: string, body?: unknown): Promise<Blob> {
+  let res: Response
+  try {
+    res = await fetch(apiUrl(path), {
+      method: 'POST',
+      credentials: 'include',
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new ApiError(0, 'Could not reach the server. Check your connection and try again.')
+  }
+  if (!res.ok) {
+    let message = res.statusText
+    try {
+      const data = await res.json()
+      if (data?.error) message = data.error
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, message)
+  }
+  return res.blob()
+}
+
 /** Trigger a browser download for a Blob with the given filename. */
 export function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)

@@ -18,7 +18,8 @@ import { toast } from 'sonner';
 import { sendBlast } from '@/lib/email';
 import { usePermissions } from '@/lib/permissions';
 import { dealVariables, interpolate, unresolvedVariables, hasRecipientVars } from '@/lib/templates';
-import type { EmailTemplateCategory, AgentGeo } from '@/types';
+import { emailTemplateAudience } from '@/types';
+import type { EmailTemplateCategory, EmailRecipientType, AgentGeo } from '@/types';
 
 const CATEGORY_LABELS: Record<EmailTemplateCategory, string> = {
   welcome: 'Welcome',
@@ -61,7 +62,7 @@ export default function EmailsPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
 
   const [templateForm, setTemplateForm] = useState({
-    name: '', category: 'other' as EmailTemplateCategory, subject: '', body: '', variables: '',
+    name: '', category: 'other' as EmailTemplateCategory, recipientType: 'client' as EmailRecipientType, subject: '', body: '', variables: '',
   });
 
   const [blastForm, setBlastForm] = useState({
@@ -132,13 +133,13 @@ export default function EmailsPage() {
     const t = templates.find((tmpl) => tmpl.id === id);
     if (!t) return;
     setEditTemplateId(id);
-    setTemplateForm({ name: t.name, category: t.category, subject: t.subject, body: t.body, variables: t.variables.join(', ') });
+    setTemplateForm({ name: t.name, category: t.category, recipientType: emailTemplateAudience(t), subject: t.subject, body: t.body, variables: t.variables.join(', ') });
     setShowAddTemplate(true);
   };
 
   const openAdd = () => {
     setEditTemplateId(null);
-    setTemplateForm({ name: '', category: 'other', subject: '', body: '', variables: '' });
+    setTemplateForm({ name: '', category: 'other', recipientType: 'client', subject: '', body: '', variables: '' });
     setShowAddTemplate(true);
   };
 
@@ -149,7 +150,7 @@ export default function EmailsPage() {
       return;
     }
     const data = {
-      name: templateForm.name.trim(), category: templateForm.category,
+      name: templateForm.name.trim(), category: templateForm.category, recipientType: templateForm.recipientType,
       subject: templateForm.subject.trim(), body: templateForm.body.trim(),
       variables: templateForm.variables.split(',').map((v) => v.trim()).filter(Boolean),
       isActive: true,
@@ -450,6 +451,14 @@ export default function EmailsPage() {
                   ))}
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tplAudience">Send to</Label>
+              <Select id="tplAudience" value={templateForm.recipientType} onChange={(e) => setTemplateForm((f) => ({ ...f, recipientType: e.target.value as EmailRecipientType }))}>
+                <option value="client">Client</option>
+                <option value="agent">Agent</option>
+              </Select>
+              <p className="text-xs text-muted-foreground">Determines who is pre-selected as the recipient when this template is used.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="tplSubject">Subject *</Label>

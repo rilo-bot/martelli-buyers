@@ -1,5 +1,6 @@
 import { sendMail } from './mailer';
 import { buildInvoicePdf } from './pdf/invoice';
+import { getCompanySettingsDto } from './companySettings';
 
 /** Fields needed to render + email an invoice (a serialized Invoice document). */
 export interface InvoiceEmailData {
@@ -31,7 +32,7 @@ export async function sendInvoiceEmail(
   deal: InvoiceEmailDeal,
   opts: { reminder?: boolean } = {},
 ): Promise<void> {
-  const buf = await buildInvoicePdf(invoice, deal);
+  const buf = await buildInvoicePdf(invoice, deal, await getCompanySettingsDto());
   const num = invoice.invoiceNumber || 'invoice';
   const name = deal.clientName || 'there';
 

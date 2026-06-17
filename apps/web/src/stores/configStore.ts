@@ -7,6 +7,7 @@ interface ServerConfig {
   hasAi: boolean
   hasS3: boolean
   hasXero: boolean
+  hasOutlook: boolean
 }
 
 interface ConfigState extends ServerConfig {
@@ -19,6 +20,7 @@ export const useConfigStore = create<ConfigState>()((set) => ({
   hasAi: false,
   hasS3: false,
   hasXero: false,
+  hasOutlook: false,
   loaded: false,
   fetch: async () => {
     const cfg = await request<ServerConfig>('GET', '/api/config')
