@@ -23,6 +23,7 @@ import { xeroWebhookHandler } from './routes/xeroWebhook';
 import { outlookRouter } from './routes/outlook';
 import { usersRouter } from './routes/users';
 import { rolesRouter } from './routes/roles';
+import { companySettingsRouter } from './routes/companySettings';
 import { requireAuth } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { RESOURCES, RESOURCE_MODULE } from './models';
@@ -81,6 +82,9 @@ app.get('/api/config', (_req, res) =>
 // team:manage) + role management (super-admin only for mutations).
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
+
+// Org-wide company settings (identity, branding, invoice template).
+app.use('/api/company-settings', companySettingsRouter);
 
 // Transactional email (templates, agent blasts).
 app.use('/api/email', emailRouter);

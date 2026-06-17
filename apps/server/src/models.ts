@@ -1,4 +1,5 @@
 import mongoose, { Schema, model } from 'mongoose';
+import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
 
 /* ───────────────────────── shared options ───────────────────────────── */
 
@@ -475,6 +476,27 @@ const OutlookConnectionSchema = new Schema(
   baseOpts,
 );
 
+// Single org-wide company settings (one document): identity, branding and
+// invoice-template text consumed by the PDF builders. Defaults mirror today's
+// hardcoded output so PDFs are unchanged until an admin customises them.
+const CompanySettingsSchema = new Schema(
+  {
+    firmName: { type: String, default: COMPANY_SETTINGS_DEFAULTS.firmName },
+    firmAddress: { type: String, default: COMPANY_SETTINGS_DEFAULTS.firmAddress },
+    firmLicence: { type: String, default: COMPANY_SETTINGS_DEFAULTS.firmLicence },
+    gstNumber: { type: String, default: COMPANY_SETTINGS_DEFAULTS.gstNumber },
+    bankDetails: { type: String, default: COMPANY_SETTINGS_DEFAULTS.bankDetails },
+    brandColor: { type: String, default: COMPANY_SETTINGS_DEFAULTS.brandColor },
+    logoDataUrl: { type: String, default: COMPANY_SETTINGS_DEFAULTS.logoDataUrl },
+    invoiceTitle: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoiceTitle },
+    invoicePaymentTerms: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoicePaymentTerms },
+    invoiceDefaultDescription: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoiceDefaultDescription },
+    invoiceFooterText: { type: String, default: COMPANY_SETTINGS_DEFAULTS.invoiceFooterText },
+    gstRate: { type: Number, default: COMPANY_SETTINGS_DEFAULTS.gstRate },
+  },
+  baseOpts,
+);
+
 // Sender/recipient pair on a synced email (no _id; not client-provided).
 const EmailAddressSchema = new Schema(
   {
@@ -695,6 +717,8 @@ export const EmailMessage = model('EmailMessage', EmailMessageSchema);
 export const XeroConnection = model('XeroConnection', XeroConnectionSchema);
 // Singleton org-wide Outlook connection — not a CRUD resource (managed via /api/outlook).
 export const OutlookConnection = model('OutlookConnection', OutlookConnectionSchema);
+// Singleton org-wide company settings — not a CRUD resource (managed via /api/company-settings).
+export const CompanySettings = model('CompanySettings', CompanySettingsSchema);
 // Append-only audit/timeline log — not a CRUD resource (read-only via /api/timeline).
 export const AuditEvent = model('AuditEvent', AuditEventSchema);
 // Cached AI daily briefings — not a CRUD resource (served via /api/ai/daily-summary).

@@ -5,6 +5,8 @@ import { useClientsStore } from '@/stores/clientsStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useOffMarketStore } from '@/stores/offMarketStore';
 import { useInvoicesStore } from '@/stores/invoicesStore';
+import { useCompanySettingsStore } from '@/stores/companySettingsStore';
+import { COMPANY_SETTINGS_DEFAULTS } from '@/types';
 import { useCommentsStore } from '@/stores/commentsStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -67,6 +69,8 @@ export default function DealDetailPage() {
   const linkOffMarketToDeal = useOffMarketStore((s) => s.linkToDeal);
   const invoices = useInvoicesStore((s) => s.invoices);
   const addInvoice = useInvoicesStore((s) => s.addInvoice);
+  // Configured GST rate (percent) drives new-invoice tax; defaults to 15 until settings load.
+  const gstRate = useCompanySettingsStore((s) => s.settings?.gstRate ?? COMPANY_SETTINGS_DEFAULTS.gstRate);
   const emailInvoice = useInvoicesStore((s) => s.emailInvoice);
   const replaceInvoice = useInvoicesStore((s) => s.replaceInvoice);
   const hasXero = useConfigStore((s) => s.hasXero);
@@ -275,7 +279,7 @@ export default function DealDetailPage() {
     e.preventDefault();
     if (!invForm.amount || !invForm.dueDate) return;
     const amount = Number(invForm.amount);
-    const gst = amount * 0.15;
+    const gst = amount * (gstRate / 100);
     const invoice = await addInvoice({
       dealId: id,
       xeroInvoiceId: '',
@@ -1120,6 +1124,11 @@ export default function DealDetailPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="invAmount">Amount (excl. GST) *</Label>
                   <Input id="invAmount" type="number" value={invForm.amount} onChange={(e) => setInvForm((f) => ({ ...f, amount: e.target.value }))} placeholder="10000" />
+                  {Number(invForm.amount) > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      + {gstRate}% GST = ${(Number(invForm.amount) * (1 + gstRate / 100)).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="invDue">Due date *</Label>

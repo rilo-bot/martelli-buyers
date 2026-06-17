@@ -10,6 +10,7 @@ import { buildInvoicePdf } from '../lib/pdf/invoice';
 import { buildDdReportPdf } from '../lib/pdf/ddReport';
 import { buildAgreementPdf, defaultFeeText, DEFAULT_TERMS } from '../lib/pdf/agreement';
 import { sendInvoiceEmail } from '../lib/invoiceEmail';
+import { getCompanySettingsDto } from '../lib/companySettings';
 import { recordEvent } from '../lib/audit';
 
 export const documentsRouter = Router();
@@ -35,9 +36,10 @@ documentsRouter.get(
       return;
     }
     const deal = invoice.dealId ? await Deal.findById(invoice.dealId) : null;
+    const settings = await getCompanySettingsDto();
     const buf = await buildInvoicePdf(invoice.toJSON() as never, (deal?.toJSON() ?? {
       clientName: '', clientEmail: '',
-    }) as never);
+    }) as never, settings);
     sendPdf(res, buf, `${invoice.invoiceNumber || 'invoice'}.pdf`);
   }),
 );
@@ -119,7 +121,7 @@ documentsRouter.get(
       res.status(404).json({ error: 'DD record not found.' });
       return;
     }
-    const buf = await buildDdReportPdf(record.toJSON() as never);
+    const buf = await buildDdReportPdf(record.toJSON() as never, await getCompanySettingsDto());
     if (!record.reportGenerated) {
       record.set('reportGenerated', true);
       await record.save();
@@ -167,7 +169,7 @@ documentsRouter.get(
       res.status(404).json({ error: 'Buyer journey not found.' });
       return;
     }
-    const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' });
+    const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
     sendPdf(res, buf, 'agency-agreement.pdf');
   }),
 );
@@ -206,7 +208,7 @@ documentsRouter.post(
     const signUrl = `${env.CLIENT_ORIGIN}/sign/${token}`;
 
     if (hasEmail) {
-      const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: false });
+      const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: false }, await getCompanySettingsDto());
       await sendMail({
         to: deal.clientEmail,
         subject: 'Your Buyer’s Agency Agreement — please review and sign',

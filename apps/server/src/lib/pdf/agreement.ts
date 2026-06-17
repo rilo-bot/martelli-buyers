@@ -1,7 +1,8 @@
 import {
   createDoc, docToBuffer, header, footer, heading, keyValue, paragraph,
-  money, niceDate, rule, INK, MUTED, ACCENT, PAGE_MARGIN,
+  money, niceDate, rule, resolveBranding, accentOf, INK, MUTED, PAGE_MARGIN,
 } from './base';
+import type { CompanySettings } from '@rilo/shared';
 
 interface DealLike {
   clientName: string;
@@ -55,15 +56,20 @@ function feeText(deal: DealLike): string {
  * is stamped with the signer's name and timestamp; otherwise it shows the
  * pending e-signature instructions.
  */
-export async function buildAgreementPdf(deal: DealLike, opts: { signed: boolean }): Promise<Buffer> {
+export async function buildAgreementPdf(
+  deal: DealLike,
+  opts: { signed: boolean },
+  settings?: Partial<CompanySettings>,
+): Promise<Buffer> {
   const doc = createDoc();
-  header(doc, 'Buyer’s Agency Agreement');
+  header(doc, 'Buyer’s Agency Agreement', settings);
+  const brand = resolveBranding(settings);
 
   heading(doc, 'Parties');
   keyValue(doc, 'Buyer', deal.clientName);
   keyValue(doc, 'Email', deal.clientEmail);
   if (deal.clientPhone) keyValue(doc, 'Phone', deal.clientPhone);
-  keyValue(doc, 'Agent', 'Martelli Buyers Agents (Licensed REAA 2008)');
+  keyValue(doc, 'Agent', `${brand.firmName} (${brand.firmLicence})`);
 
   heading(doc, 'Buyer Requirements');
   keyValue(doc, 'Property type', deal.propertyType || 'As discussed');
@@ -90,7 +96,7 @@ export async function buildAgreementPdf(deal: DealLike, opts: { signed: boolean 
   }
 
   doc.moveDown(1);
-  rule(doc, ACCENT);
+  rule(doc, accentOf(doc));
   doc.moveDown(0.8);
 
   heading(doc, 'Signature');
@@ -110,7 +116,7 @@ export async function buildAgreementPdf(deal: DealLike, opts: { signed: boolean 
         /* corrupt image — fall through to the name-only block below */
       }
     }
-    doc.font('Helvetica-Bold').fontSize(13).fillColor(ACCENT).text(deal.agreementSignerName);
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(accentOf(doc)).text(deal.agreementSignerName);
     doc.font('Helvetica').fontSize(9).fillColor(MUTED)
       .text(`Signed electronically on ${niceDate(deal.agreementSignedAt || '')}`)
       .text('Accepted via Martelli Buyers secure e-signature.');
@@ -128,6 +134,6 @@ export async function buildAgreementPdf(deal: DealLike, opts: { signed: boolean 
     );
   }
 
-  footer(doc);
+  footer(doc, settings);
   return docToBuffer(doc);
 }

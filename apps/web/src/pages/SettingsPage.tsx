@@ -1,11 +1,12 @@
 import { useSearchParams } from 'react-router-dom';
-import { Settings2, Plug, ClipboardList, type LucideIcon } from 'lucide-react';
+import { Settings2, Plug, ClipboardList, Building2, type LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { usePermissions } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { WorkspaceSection } from '@/pages/settings/WorkspaceSection';
 import { IntegrationsSection } from '@/pages/settings/IntegrationsSection';
 import { LeadSettings } from '@/pages/settings/LeadSettings';
+import { CompanySettingsSection } from '@/pages/settings/CompanySettingsSection';
 
 // Re-exported for back-compat: several Leads pages import these from here.
 export { getStagePillClass, getStageDotClass } from '@/pages/settings/stageColors';
@@ -14,6 +15,7 @@ interface Section { id: string; label: string; desc: string; icon: LucideIcon; p
 
 const SECTIONS: Section[] = [
   { id: 'workspace', label: 'Workspace', desc: 'Profile & appearance', icon: Settings2, render: () => <WorkspaceSection /> },
+  { id: 'company', label: 'Company & Invoices', desc: 'Branding & invoice template', icon: Building2, perm: 'settings:manage', render: () => <CompanySettingsSection /> },
   { id: 'integrations', label: 'Integrations', desc: 'Xero, email, storage, AI', icon: Plug, perm: 'settings:manage', render: () => <IntegrationsSection /> },
   { id: 'leads', label: 'Lead Settings', desc: 'Qualification stages', icon: ClipboardList, perm: 'settings:manage', render: () => <LeadSettings /> },
 ];

@@ -18,6 +18,7 @@ import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useEmailTemplatesStore } from '@/stores/emailTemplatesStore';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
+import { useCompanySettingsStore } from '@/stores/companySettingsStore';
 import { useDocumentsStore } from '@/stores/documentsStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useXeroStore } from '@/stores/xeroStore';
@@ -59,6 +60,7 @@ export function useBootstrapData() {
       [useDocumentsStore.getState().fetch, 'documents:view'],
       [useEmailTemplatesStore.getState().fetch, 'emails:view'],
       [useQualificationStagesStore.getState().fetch, 'settings:view'],
+      [useCompanySettingsStore.getState().fetch, 'settings:view'],
       [useRolesStore.getState().fetch, 'team:view'],
     ];
     const fetchers = gated.filter(([, perm]) => can(perm)).map(([f]) => f);

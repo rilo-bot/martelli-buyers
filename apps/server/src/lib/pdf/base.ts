@@ -1,4 +1,6 @@
 import PDFDocument from 'pdfkit';
+import type { CompanySettings } from '@rilo/shared';
+import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
 
 /**
  * Shared PDF building blocks for Martelli documents (invoices, DD reports,
@@ -6,7 +8,8 @@ import PDFDocument from 'pdfkit';
  * including Render's free tier.
  */
 
-// Logo azure accent (matches the web Design System v3 --primary).
+// Logo azure accent (matches the web Design System v3 --primary). Also the
+// default brand colour, so an un-customised document themes identically.
 export const ACCENT = '#1e6fb0';
 export const INK = '#111827';
 export const MUTED = '#6b7280';
@@ -14,13 +17,77 @@ export const LINE = '#e5e7eb';
 
 export const PAGE_MARGIN = 50;
 
-const FIRM = {
-  name: 'Martelli Buyers Agents',
-  address: '1B George Street, Parnell, Auckland',
-  licence: 'Licensed REAA 2008',
-};
-
 export type Doc = PDFKit.PDFDocument;
+
+/** Firm identity + accent resolved for a single document render. */
+export interface Branding {
+  firmName: string;
+  firmAddress: string;
+  firmLicence: string;
+  accent: string;
+  logoDataUrl: string;
+}
+
+/**
+ * Merge admin-configured company settings over the built-in defaults. Empty or
+ * missing fields fall back field-by-field, so an un-customised document renders
+ * exactly as before.
+ */
+export function resolveBranding(settings?: Partial<CompanySettings>): Branding {
+  const d = COMPANY_SETTINGS_DEFAULTS;
+  return {
+    firmName: settings?.firmName?.trim() || d.firmName,
+    firmAddress: settings?.firmAddress?.trim() || d.firmAddress,
+    firmLicence: settings?.firmLicence?.trim() || d.firmLicence,
+    accent: (settings?.brandColor ?? '').trim() || d.brandColor,
+    logoDataUrl: settings?.logoDataUrl ?? '',
+  };
+}
+
+// Per-document accent colour: header() stashes the resolved brand colour on the
+// doc so the shared helpers (heading, section rules) theme the whole document
+// without every call site threading it through. Falls back to the default ACCENT.
+function setAccent(doc: Doc, color: string): void {
+  (doc as unknown as { __accent?: string }).__accent = color;
+}
+export function accentOf(doc: Doc): string {
+  return (doc as unknown as { __accent?: string }).__accent || ACCENT;
+}
+
+/** Decode a `data:image/(png|jpeg);base64,…` URL to a Buffer, or null if invalid. */
+function decodeImageDataUrl(dataUrl: string): Buffer | null {
+  const m = /^data:image\/(?:png|jpe?g);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+  if (!m) return null;
+  try {
+    return Buffer.from(m[1], 'base64');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify an image data URL actually decodes and embeds by rendering it into a
+ * throwaway document. pdfkit decodes PNG/JPEG **lazily at finalize**, so a
+ * corrupt image only throws at `doc.end()` — not at `doc.image()`. This probe is
+ * therefore the reliable way to reject a bad image before it's stored, so a
+ * broken logo can never crash a real PDF download. Resolves true if it renders.
+ */
+export function imageRenders(dataUrl: string): Promise<boolean> {
+  const buf = decodeImageDataUrl(dataUrl);
+  if (!buf) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    try {
+      const probe = new PDFDocument({ size: 'A4' });
+      probe.on('error', () => resolve(false));
+      probe.on('data', () => { /* drain */ });
+      probe.on('end', () => resolve(true));
+      probe.image(buf, 0, 0, { fit: [50, 50] });
+      probe.end();
+    } catch {
+      resolve(false);
+    }
+  });
+}
 
 /** Create an A4 document with sensible margins. */
 export function createDoc(): Doc {
@@ -38,36 +105,61 @@ export function docToBuffer(doc: Doc): Promise<Buffer> {
   });
 }
 
-/** Branded letterhead: firm name in accent + address/licence line + a rule. */
-export function header(doc: Doc, docLabel: string): void {
-  doc
-    .fillColor(ACCENT)
-    .font('Helvetica-Bold')
-    .fontSize(20)
-    .text(FIRM.name, PAGE_MARGIN, PAGE_MARGIN);
-  doc
-    .fillColor(MUTED)
-    .font('Helvetica')
-    .fontSize(9)
-    .text(`${FIRM.address}  ·  ${FIRM.licence}`);
+/**
+ * Branded letterhead: a logo (or the firm-name wordmark) + address/licence line,
+ * with the document label right-aligned, then a rule. Pass company settings to
+ * customise identity, accent colour, and logo; omit them for the defaults.
+ */
+export function header(doc: Doc, docLabel: string, settings?: Partial<CompanySettings>): void {
+  const b = resolveBranding(settings);
+  setAccent(doc, b.accent);
 
-  // Document label, right-aligned on the first line.
-  doc
-    .fillColor(INK)
-    .font('Helvetica-Bold')
-    .fontSize(13)
-    .text(docLabel.toUpperCase(), PAGE_MARGIN, PAGE_MARGIN + 4, {
-      align: 'right',
-      width: doc.page.width - PAGE_MARGIN * 2,
-    });
+  // Document label, right-aligned on the first line (same in both paths).
+  const drawLabel = () =>
+    doc
+      .fillColor(INK)
+      .font('Helvetica-Bold')
+      .fontSize(13)
+      .text(docLabel.toUpperCase(), PAGE_MARGIN, PAGE_MARGIN + 4, {
+        align: 'right',
+        width: doc.page.width - PAGE_MARGIN * 2,
+      });
 
+  const logo = b.logoDataUrl ? decodeImageDataUrl(b.logoDataUrl) : null;
+  if (logo) {
+    try {
+      doc.image(logo, PAGE_MARGIN, PAGE_MARGIN, { fit: [200, 46] });
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(9)
+        .text(`${b.firmAddress}  ·  ${b.firmLicence}`, PAGE_MARGIN, PAGE_MARGIN + 50);
+      drawLabel();
+      // doc.image() doesn't advance the text cursor, so pin the header bottom
+      // deterministically (below logo + address) before the rule.
+      doc.y = PAGE_MARGIN + 64;
+      doc.moveDown(1);
+      rule(doc);
+      doc.moveDown(1);
+      return;
+    } catch {
+      /* corrupt image — fall through to the text wordmark */
+    }
+  }
+
+  // Default path: firm-name wordmark in the accent colour.
+  doc.fillColor(b.accent).font('Helvetica-Bold').fontSize(20).text(b.firmName, PAGE_MARGIN, PAGE_MARGIN);
+  doc.fillColor(MUTED).font('Helvetica').fontSize(9).text(`${b.firmAddress}  ·  ${b.firmLicence}`);
+  drawLabel();
   doc.moveDown(1);
   rule(doc);
   doc.moveDown(1);
 }
 
 /** Page footer on every buffered page: firm line + page number. */
-export function footer(doc: Doc): void {
+export function footer(doc: Doc, settings?: Partial<CompanySettings>): void {
+  const b = resolveBranding(settings);
+  const firmLine = `${b.firmName}  ·  ${b.firmAddress}  ·  ${b.firmLicence}`;
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
@@ -82,7 +174,7 @@ export function footer(doc: Doc): void {
       .font('Helvetica')
       .fontSize(8)
       .text(
-        `${FIRM.name}  ·  ${FIRM.address}  ·  ${FIRM.licence}`,
+        firmLine,
         PAGE_MARGIN,
         y,
         { width: doc.page.width - PAGE_MARGIN * 2, align: 'left', lineBreak: false },
@@ -106,10 +198,10 @@ export function rule(doc: Doc, color = LINE): void {
     .stroke();
 }
 
-/** Section heading: accent label above content. */
+/** Section heading: accent label above content (uses the document's brand colour). */
 export function heading(doc: Doc, text: string): void {
   doc.moveDown(0.6);
-  doc.fillColor(ACCENT).font('Helvetica-Bold').fontSize(11).text(text.toUpperCase());
+  doc.fillColor(accentOf(doc)).font('Helvetica-Bold').fontSize(11).text(text.toUpperCase());
   doc.moveDown(0.3);
   doc.fillColor(INK).font('Helvetica').fontSize(10);
 }
