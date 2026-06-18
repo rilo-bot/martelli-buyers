@@ -36,14 +36,14 @@ import { RequirePermission } from '@/components/RequirePermission';
 // Apply persisted theme before first render to avoid flash
 applyPersistedTheme();
 
-// Inject Google Fonts: Playfair Display (serif) + Inter (sans)
+// Inject brand Google Fonts: League Spartan (display, Spartan-aligned) + Inter (UI/data)
 (function injectFonts() {
   if (document.getElementById('font-martelli')) return;
   const link = document.createElement('link');
   link.id = 'font-martelli';
   link.rel = 'stylesheet';
   link.href =
-    'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap';
+    'https://fonts.googleapis.com/css2?family=League+Spartan:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap';
   document.head.appendChild(link);
 })();
 

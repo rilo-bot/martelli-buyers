@@ -24,7 +24,10 @@ export default function InviteAcceptPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm text-center">
-        <img src="/images/logo.png" alt="Martelli Buyers" className="mx-auto h-12 w-12 rounded-full object-contain shadow" />
+        <div className="brand-wordmark leading-none">
+          <span className="block text-[20px] text-foreground"><span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span></span>
+          <span className="brand-eyebrow mt-1 block text-[9px] text-muted-foreground">Buyers Agents</span>
+        </div>
         {!error ? (
           <>
             <div className="mx-auto mt-6 h-7 w-7 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />

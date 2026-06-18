@@ -55,3 +55,32 @@ export function hasRecipientVars(text: string): boolean {
   }
   return false;
 }
+
+/* ── Plain-text ⇄ HTML helpers ─────────────────────────────────────────────
+ * Bridge legacy plain-text template bodies and the new rich HTML body. The
+ * server is the security boundary (it sanitises before sending); these are for
+ * seeding the editor and keeping a readable plain-text `body` in sync. */
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Convert a plain-text body into simple HTML paragraphs for the editor. */
+export function plainTextToHtml(text: string): string {
+  if (!text.trim()) return '';
+  return text
+    .split(/\n{2,}/)
+    .map((para) => `<p>${escapeHtml(para).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+/** Flatten HTML to plain text (preserving line breaks) for previews + the text part. */
+export function htmlToPlainText(html: string): string {
+  if (!html) return '';
+  const withBreaks = html
+    .replace(/<\/(p|div|h[1-3]|li|tr|blockquote)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n');
+  const doc = new DOMParser().parseFromString(withBreaks, 'text/html');
+  return (doc.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
+}

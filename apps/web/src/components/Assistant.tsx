@@ -150,13 +150,13 @@ export function Assistant() {
             className="fixed bottom-24 right-5 z-50 flex h-[min(560px,calc(100vh-7rem))] w-[min(384px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
           >
             {/* Header */}
-            <div className="flex items-center gap-2.5 border-b border-border px-4 py-3" style={{ background: 'hsl(var(--sidebar-bg))' }}>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex items-center gap-2.5 border-b px-4 py-3" style={{ background: 'hsl(var(--sidebar-bg))', borderColor: 'hsl(var(--sidebar-border))' }}>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white shadow-sm ring-1 ring-inset ring-white/20">
                 <Sparkles className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Martelli Assistant</p>
-                <p className="text-[11px] text-muted-foreground">Guidance + your portal data</p>
+                <p className="text-sm font-semibold text-[hsl(var(--sidebar-text))]">Martelli Assistant</p>
+                <p className="text-[11px] text-[hsl(var(--sidebar-text-muted))]">Guidance + your portal data</p>
               </div>
               <button
                 type="button"
@@ -164,7 +164,7 @@ export function Assistant() {
                 disabled={streaming || messages.length === 0}
                 aria-label="New chat"
                 title="New chat"
-                className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[hsl(var(--sidebar-text-muted))] transition-colors hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-[hsl(var(--sidebar-text))] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[hsl(var(--sidebar-text-muted))]"
               >
                 <SquarePen className="h-4 w-4" />
               </button>

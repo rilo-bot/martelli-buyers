@@ -7,11 +7,15 @@ import { requirePermission } from '../lib/permissions';
 import { getCompanySettings } from '../lib/companySettings';
 import { imageRenders } from '../lib/pdf/base';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
+import { sanitizeEmailHtml, renderBrandedEmail } from '../lib/email/render';
 
 export const companySettingsRouter = Router();
 
 /** Max decoded size for an embedded logo (keeps PDFs and the settings doc small). */
 const MAX_LOGO_BYTES = 500 * 1024;
+
+/** Max length of the stored (sanitised) email signature HTML. */
+const MAX_SIGNATURE_CHARS = 5000;
 
 // Editable string fields → max length. Values are trimmed and capped.
 const STRING_FIELDS: Record<string, number> = {
@@ -37,10 +41,10 @@ export class ValidationError extends Error {}
  * subset. Throws {@link ValidationError} (→ 400) on any invalid value. Exported
  * so the live-preview endpoint can validate draft settings the same way.
  */
-export function sanitizeCompanySettings(body: unknown): Record<string, string | number> {
+export function sanitizeCompanySettings(body: unknown): Record<string, string | number | boolean> {
   if (!body || typeof body !== 'object') throw new ValidationError('Invalid request body.');
   const src = body as Record<string, unknown>;
-  const out: Record<string, string | number> = {};
+  const out: Record<string, string | number | boolean> = {};
 
   for (const [field, max] of Object.entries(STRING_FIELDS)) {
     if (src[field] === undefined) continue;
@@ -75,6 +79,27 @@ export function sanitizeCompanySettings(body: unknown): Record<string, string | 
     out.gstRate = n;
   }
 
+  // ── Email branding ──
+  if (src.emailLogoUrl !== undefined) {
+    const url = String(src.emailLogoUrl).trim();
+    if (url !== '' && !/^https:\/\/.+/i.test(url)) {
+      throw new ValidationError('Email logo must be a hosted https URL.');
+    }
+    out.emailLogoUrl = url;
+  }
+
+  if (src.emailSignatureHtml !== undefined) {
+    if (typeof src.emailSignatureHtml !== 'string') {
+      throw new ValidationError('emailSignatureHtml must be a string.');
+    }
+    // Sanitise on the way in so stored HTML is always safe, then cap length.
+    out.emailSignatureHtml = sanitizeEmailHtml(src.emailSignatureHtml).slice(0, MAX_SIGNATURE_CHARS);
+  }
+
+  if (src.emailBrandingEnabled !== undefined) {
+    out.emailBrandingEnabled = Boolean(src.emailBrandingEnabled);
+  }
+
   return out;
 }
 
@@ -93,7 +118,7 @@ companySettingsRouter.put(
   '/',
   requirePermission('settings:manage'),
   asyncHandler(async (req, res) => {
-    let updates: Record<string, string | number>;
+    let updates: Record<string, string | number | boolean>;
     try {
       updates = sanitizeCompanySettings(req.body);
     } catch (err) {
@@ -125,7 +150,7 @@ companySettingsRouter.post(
   '/preview.pdf',
   requirePermission('settings:manage'),
   asyncHandler(async (req, res) => {
-    let draft: Record<string, string | number>;
+    let draft: Record<string, string | number | boolean>;
     try {
       draft = sanitizeCompanySettings(req.body);
     } catch (err) {
@@ -155,5 +180,39 @@ companySettingsRouter.post(
     res.setHeader('Content-Disposition', 'inline; filename="invoice-preview.pdf"');
     res.setHeader('Content-Length', buf.length);
     res.end(buf);
+  }),
+);
+
+/**
+ * POST /api/company-settings/email-preview — render a sample branded email from
+ * the supplied (possibly unsaved) settings so admins can preview their email
+ * branding before saving. Returns HTML (mirrors the invoice preview.pdf flow).
+ */
+const SAMPLE_EMAIL_BODY =
+  '<h2>Hello Alex,</h2>' +
+  '<p>This is a preview of how your <strong>branded emails</strong> will look. ' +
+  'Formatting like <span style="color:#1e6fb0">colour</span>, <em>italics</em> and ' +
+  '<a href="https://example.com">links</a> are supported.</p>' +
+  '<ul><li>Your logo and brand colour frame every message.</li>' +
+  '<li>Your signature is appended automatically.</li></ul>' +
+  '<p>Kind regards,</p>';
+
+companySettingsRouter.post(
+  '/email-preview',
+  requirePermission('settings:manage'),
+  asyncHandler(async (req, res) => {
+    let draft: Record<string, string | number | boolean>;
+    try {
+      draft = sanitizeCompanySettings(req.body);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof ValidationError ? err.message : 'Invalid settings.' });
+      return;
+    }
+    const html = renderBrandedEmail({
+      bodyHtml: SAMPLE_EMAIL_BODY,
+      settings: draft as Partial<CompanySettings>,
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(html);
   }),
 );

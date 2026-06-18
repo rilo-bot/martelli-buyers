@@ -16,6 +16,7 @@ export function KpiCards({ kpis }: { kpis: KpiDatum[] }) {
             delta={k.delta}
             deltaLabel={k.deltaLabel}
             to={k.to}
+            accent={k.accent}
             size="lg"
           />
         </StaggerItem>

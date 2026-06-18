@@ -790,8 +790,8 @@ export default function DueDiligencePage() {
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30 shrink-0">
-                      <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white shadow-sm ring-1 ring-inset ring-white/20 shrink-0">
+                      <AlertCircle className="h-5 w-5" />
                     </div>
                     <div className="flex gap-1.5 flex-wrap justify-end">
                       {record.reportGenerated && <Badge variant="default" className="text-[10px] px-2 py-0.5">Report Ready</Badge>}

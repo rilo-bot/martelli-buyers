@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { RotateCcw, Loader2, Trash2, Upload, Eye } from 'lucide-react';
+import { RotateCcw, Loader2, Trash2, Upload, Eye, Mail } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor } from '@/components/ui/rich-editor';
 import { useCompanySettingsStore } from '@/stores/companySettingsStore';
 import { ApiError, postBlob, triggerDownload } from '@/lib/api';
+import { uploadFile } from '@/lib/upload';
 import { COMPANY_SETTINGS_DEFAULTS, type CompanySettings } from '@/types';
 
 const MAX_LOGO_BYTES = 500 * 1024;
@@ -31,6 +33,8 @@ function toForm(s: CompanySettings | null): FormState {
     invoiceTitle: s.invoiceTitle, invoicePaymentTerms: s.invoicePaymentTerms,
     invoiceDefaultDescription: s.invoiceDefaultDescription, invoiceFooterText: s.invoiceFooterText,
     gstRate: String(s.gstRate),
+    emailLogoUrl: s.emailLogoUrl ?? '', emailSignatureHtml: s.emailSignatureHtml ?? '',
+    emailBrandingEnabled: s.emailBrandingEnabled ?? true,
   };
 }
 
@@ -43,7 +47,10 @@ export function CompanySettingsSection() {
   const [form, setForm] = useState<FormState>(() => toForm(settings));
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [emailPreviewing, setEmailPreviewing] = useState(false);
+  const [uploadingEmailLogo, setUploadingEmailLogo] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
+  const emailLogoRef = useRef<HTMLInputElement>(null);
 
   // Ensure the settings are loaded even if an admin deep-links here before boot.
   useEffect(() => { if (!loaded) fetch().catch(() => {}); }, [loaded, fetch]);
@@ -86,6 +93,42 @@ export function CompanySettingsSection() {
       toast.error(err instanceof ApiError ? err.message : 'Could not generate preview.');
     } finally {
       setPreviewing(false);
+    }
+  };
+
+  // Email logos must be hosted (S3) — base64 is stripped by most email clients,
+  // so this uses the presigned-upload flow rather than embedding the bytes.
+  const handleEmailLogoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|gif|webp)$/.test(file.type)) {
+      toast.error('Email logo must be a PNG, JPEG, GIF or WebP image.');
+      return;
+    }
+    setUploadingEmailLogo(true);
+    try {
+      const url = await uploadFile(file, { scope: 'email' });
+      set('emailLogoUrl', url);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not upload the email logo.');
+    } finally {
+      setUploadingEmailLogo(false);
+    }
+  };
+
+  const handleEmailPreview = async () => {
+    setEmailPreviewing(true);
+    try {
+      const blob = await postBlob('/api/company-settings/email-preview', { ...form, gstRate: Number(form.gstRate) });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) triggerDownload(blob, 'email-preview.html');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not generate the email preview.');
+    } finally {
+      setEmailPreviewing(false);
     }
   };
 
@@ -187,6 +230,67 @@ export function CompanySettingsSection() {
               <input ref={logoRef} type="file" accept="image/png,image/jpeg" className="hidden" onChange={handleLogoFile} />
             </div>
           </Field>
+        </CardContent>
+      </Card>
+
+      {/* ── Email branding ───────────────────────────────────────────── */}
+      <Card className="border-border/80 shadow-sm">
+        <CardHeader className="border-b border-border/60 pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Mail className="h-4 w-4 text-primary" /> Email branding
+          </CardTitle>
+          <CardDescription className="mt-1 text-sm">
+            Logo, signature and styling applied to every outbound email — templates, sends and agent blasts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5 pt-5">
+          <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors">
+            <input
+              type="checkbox"
+              checked={form.emailBrandingEnabled}
+              onChange={(e) => set('emailBrandingEnabled', e.target.checked)}
+              className="rounded"
+            />
+            <span>Wrap outbound emails in the branded layout (logo header + signature footer)</span>
+          </label>
+
+          <Field label="Email logo" hint="PNG, JPEG, GIF or WebP. Hosted on your storage — email clients block embedded (base64) logos, so this is separate from the PDF logo above.">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-40 items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/40">
+                {form.emailLogoUrl
+                  ? <img src={form.emailLogoUrl} alt="Email logo preview" className="max-h-full max-w-full object-contain" />
+                  : <span className="text-[11px] text-muted-foreground">No email logo</span>}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={uploadingEmailLogo} onClick={() => emailLogoRef.current?.click()}>
+                  {uploadingEmailLogo
+                    ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Uploading…</>
+                    : <><Upload className="mr-1.5 h-3.5 w-3.5" /> {form.emailLogoUrl ? 'Replace' : 'Upload'}</>}
+                </Button>
+                {form.emailLogoUrl && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => set('emailLogoUrl', '')} className="text-muted-foreground hover:text-destructive">
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remove
+                  </Button>
+                )}
+              </div>
+              <input ref={emailLogoRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden" onChange={handleEmailLogoFile} />
+            </div>
+          </Field>
+
+          <Field label="Email signature" hint="Appended to the bottom of every email. Use the toolbar for formatting, links and images.">
+            <RichTextEditor
+              value={form.emailSignatureHtml}
+              onChange={(html) => set('emailSignatureHtml', html)}
+              variables={[]}
+              placeholder="e.g. The Martelli Buyers Team · 09 123 4567 · martelli.example"
+            />
+          </Field>
+
+          <div>
+            <Button type="button" variant="outline" onClick={handleEmailPreview} disabled={emailPreviewing}>
+              {emailPreviewing ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Generating…</> : <><Eye className="mr-1.5 h-4 w-4" /> Preview email</>}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

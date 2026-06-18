@@ -78,12 +78,12 @@ export default function LoginPage() {
         {/* Brand content */}
         <div className="relative z-10 flex flex-col h-full p-10 xl:p-14">
           {/* Logo mark */}
-          <div className="flex items-center gap-3">
-            <img src="/images/logo.png" alt="Martelli Buyers" className="h-11 w-11 rounded-full bg-white object-contain shadow-lg" />
-            <div>
-              <span className="text-sm font-bold tracking-wide" style={{ color: 'var(--paper-cream)' }}>
-                Martelli Buyers CRM
+          <div className="flex items-center">
+            <div className="brand-wordmark">
+              <span className="block text-[17px]" style={{ color: 'var(--paper-cream)' }}>
+                <span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span>
               </span>
+              <span className="brand-eyebrow mt-0.5 block text-[8px]" style={{ color: 'rgba(245, 240, 230, 0.6)' }}>Buyers Agents</span>
             </div>
           </div>
 
@@ -128,19 +128,13 @@ export default function LoginPage() {
         className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden"
         style={{ background: 'hsl(var(--background))' }}
       >
-        {/* Subtle background texture for right panel */}
-        <div
-          className="absolute inset-0 opacity-[0.03] pointer-events-none"
-          style={{
-            backgroundImage: 'radial-gradient(circle at 60% 20%, hsl(var(--primary)) 0%, transparent 60%), radial-gradient(circle at 20% 80%, hsl(var(--accent)) 0%, transparent 50%)',
-          }}
-        />
+        {/* Subtle brand weave texture for right panel */}
+        <div className="brand-pattern absolute inset-0 opacity-60 pointer-events-none [mask-image:radial-gradient(circle_at_70%_30%,black,transparent_75%)]" />
 
         <div className="relative w-full max-w-[400px] space-y-8">
           {/* Mobile-only logo */}
           <div className="flex lg:hidden flex-col items-center gap-2">
-            <img src="/images/logo.png" alt="Martelli Buyers" className="h-12 w-12 rounded-full object-contain shadow-lg" />
-            <span className="text-sm font-bold text-foreground">Martelli Buyers CRM</span>
+            <span className="brand-wordmark text-[17px] text-foreground"><span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span></span>
           </div>
 
           {/* Heading block */}

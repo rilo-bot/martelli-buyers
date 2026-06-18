@@ -1,9 +1,18 @@
 import { request } from '@/lib/api';
 import type { EmailCampaign } from '@/types';
 
-/** Send a single transactional email through the backend SMTP relay. */
-export function sendEmail(to: string, subject: string, body: string): Promise<{ ok: boolean }> {
-  return request('POST', '/api/email/send', { to, subject, body });
+/**
+ * Send a single transactional email through the backend relay. `bodyHtml` (rich
+ * HTML, already interpolated) is wrapped in the branded shell server-side; `body`
+ * is the plain-text fallback.
+ */
+export function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  bodyHtml = '',
+): Promise<{ ok: boolean }> {
+  return request('POST', '/api/email/send', { to, subject, body, bodyHtml });
 }
 
 export interface BlastRecipient {
@@ -32,6 +41,7 @@ export function sendBlast(
   subject: string,
   body: string,
   campaign?: BlastCampaignMeta,
+  bodyHtml = '',
 ): Promise<BlastResult> {
-  return request('POST', '/api/email/blast', { recipients, subject, body, campaign });
+  return request('POST', '/api/email/blast', { recipients, subject, body, bodyHtml, campaign });
 }
