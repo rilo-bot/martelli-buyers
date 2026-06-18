@@ -1,87 +1,94 @@
 /* ===================================================
-   Martelli Buyers CRM — Design System v3
-   "Clean operational": neutral slate canvas, white
-   surfaces, a single blue accent, dense data UI.
+   Martelli Buyers CRM — Design System v4 "Sage Estate"
+   Brand-aligned to the Martelli & Co identity:
+   warm cream canvas, ivory surfaces, a single sage-
+   olive accent, stone neutrals, geometric type.
    Single source of truth for design tokens.
    =================================================== */
 
 :root {
-  /* ── Accent (single) — Martelli logo azure blue ── */
-  --primary: 206 72% 42%;
-  --primary-foreground: 0 0% 100%;
-  --ring: 206 72% 42%;
+  /* ── Accent (single) — Martelli sage / eucalyptus green ── */
+  --primary: 76 21% 42%;
+  --primary-foreground: 48 40% 98%;
+  --ring: 76 21% 42%;
 
   /* Accent kept equal to primary — no second brand colour. */
-  --accent: 206 72% 42%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 76 21% 42%;
+  --accent-foreground: 48 40% 98%;
 
-  /* Logo secondary marks (used sparingly for highlights). */
-  --brand-gold: 38 90% 55%;
-  --brand-red: 6 78% 53%;
+  /* Brand secondary marks (used sparingly for highlights). */
+  --brand-sage: 76 21% 42%;        /* the hero sage */
+  --brand-sage-soft: 76 26% 90%;   /* faint sage tint for fills */
+  --brand-sage-deep: 80 18% 24%;   /* dark badge / chrome green */
+  --brand-stone: 38 19% 70%;       /* taupe neutral from palette */
+  --brand-stone-soft: 40 24% 88%;
+  --brand-gold: 38 50% 56%;        /* warm bronze, used sparingly */
+  --brand-red: 9 52% 53%;
 
   /* ── Semantic palette (the "command center" set) ──
      Use these tokens instead of hand-coded hsl() per page. */
-  --success: 142 60% 36%;          /* green — won / paid / positive */
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;           /* gold/amber — pending / attention */
-  --warning-foreground: 28 80% 16%;
-  --info: 199 89% 44%;             /* teal-blue — neutral highlight */
-  --info-foreground: 0 0% 100%;
-  --teal: 174 72% 38%;             /* secondary accent from palette */
-  --teal-foreground: 0 0% 100%;
+  --success: 142 38% 36%;          /* forest green — won / paid / positive */
+  --success-foreground: 48 30% 97%;
+  --warning: 40 72% 47%;           /* muted gold — pending / attention */
+  --warning-foreground: 36 60% 14%;
+  --info: 196 42% 42%;             /* slate-teal — neutral highlight */
+  --info-foreground: 48 30% 97%;
+  --teal: 174 40% 36%;             /* secondary accent from palette */
+  --teal-foreground: 48 30% 97%;
 
-  /* ── Surfaces ── */
-  --background: 210 20% 98%;   /* faint cool-gray canvas */
-  --card: 0 0% 100%;            /* white surfaces */
-  --card-foreground: 222 30% 12%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 30% 12%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 222 25% 20%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
+  /* ── Surfaces (warm cream / ivory / stone — layered light theme) ── */
+  --background: 46 26% 95%;    /* warm cream canvas */
+  --card: 48 42% 99.5%;        /* crisp warm-ivory surfaces (brightest layer) */
+  --card-foreground: 72 13% 16%;
+  --popover: 48 42% 99.5%;
+  --popover-foreground: 72 13% 16%;
+  --muted: 44 24% 90%;
+  --muted-foreground: 58 9% 41%;
+  --border: 42 19% 85%;
+  --input: 42 19% 85%;
+  --secondary: 42 24% 89%;
+  --secondary-foreground: 72 13% 22%;
+  --destructive: 9 56% 51%;
+  --destructive-foreground: 48 40% 98%;
 
-  /* ── Foreground ── */
-  --foreground: 222 30% 12%;
+  /* ── Foreground (deep warm charcoal-green) ── */
+  --foreground: 72 13% 16%;
 
-  /* ── Sidebar (light neutral) ── */
-  --sidebar-bg: 0 0% 100%;
-  --sidebar-border: 220 13% 91%;
-  --sidebar-text: 222 25% 22%;
-  --sidebar-text-muted: 220 9% 46%;
-  --sidebar-item-hover: 220 14% 96%;
-  --sidebar-item-active: 206 72% 42%;
+  /* ── Sidebar + top navbar (warm greige — LIGHT theme chrome) ── */
+  --sidebar-bg: 44 24% 92%;
+  --sidebar-border: 42 19% 86%;
+  --sidebar-text: 72 13% 22%;
+  --sidebar-text-muted: 58 9% 45%;
+  --sidebar-item-hover: 44 26% 88%;
+  --sidebar-item-active: 76 24% 38%;
 
   --sidebar-width: 232px;
   --sidebar-collapsed-width: 64px;
   --topbar-height: 56px;
 
   /* ── Legacy custom vars (kept so auth pages keep rendering) ── */
-  --navy-deep: #0f1729;
-  --navy-mid: #1c2742;
-  --navy-surface: #162236;
-  --ink-deep: #0f1729;
-  --paper-cream: #f4f6fa;
-  --paper: #f8f6f1;
-  --ink: #0f1c2e;
+  --navy-deep: #3a3f31;        /* deep sage (replaces navy) */
+  --navy-mid: #4c5340;
+  --navy-surface: #3f4536;
+  --ink-deep: #2a2c25;
+  --paper-cream: #f5f3ec;
+  --paper: #f6f4ed;
+  --ink: #2a2c25;
 
-  /* ── Typography ── */
-  --font-serif: 'Playfair Display', Georgia, serif;
+  /* ── Typography (geometric / Spartan-aligned) ── */
+  --font-serif: 'League Spartan', 'Inter', system-ui, sans-serif;
+  --font-display: 'League Spartan', 'Inter', system-ui, sans-serif;
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  /* ── Radius ── */
-  --radius: 0.5rem;
+  /* ── Radius (softer, more premium) ── */
+  --radius: 0.7rem;
 
-  /* ── Shadows (subtle, neutral) ── */
-  --shadow-sm: 0 1px 2px hsl(222 30% 12% / 0.05);
-  --shadow-md: 0 2px 8px hsl(222 30% 12% / 0.08);
-  --shadow-lg: 0 8px 24px hsl(222 30% 12% / 0.10);
-  --shadow-card: 0 1px 2px hsl(222 30% 12% / 0.05);
+  /* ── Shadows (soft, diffuse, warm-tinted) ── */
+  --shadow-sm: 0 1px 3px hsl(80 16% 12% / 0.05);
+  --shadow-md: 0 6px 18px -4px hsl(80 16% 12% / 0.09);
+  --shadow-lg: 0 18px 44px -10px hsl(80 16% 12% / 0.13);
+  --shadow-card: 0 1px 3px hsl(80 16% 12% / 0.05);
 
   /* ── Motion ── */
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
@@ -92,41 +99,53 @@
 }
 
 .dark {
-  --primary: 206 80% 58%;
-  --primary-foreground: 222 47% 8%;
-  --ring: 206 80% 58%;
-  --accent: 206 80% 58%;
-  --accent-foreground: 222 47% 8%;
+  /* Deep-olive estate dark theme — brand green lifted for contrast. */
+  --primary: 76 33% 60%;
+  --primary-foreground: 80 38% 9%;
+  --ring: 76 33% 60%;
+  --accent: 76 33% 60%;
+  --accent-foreground: 80 38% 9%;
 
-  --background: 222 22% 9%;
-  --card: 222 20% 12%;
-  --card-foreground: 210 20% 96%;
-  --popover: 222 20% 12%;
-  --popover-foreground: 210 20% 96%;
-  --muted: 222 16% 17%;
-  --muted-foreground: 220 12% 60%;
-  --border: 222 14% 20%;
-  --input: 222 14% 20%;
-  --secondary: 222 16% 17%;
-  --secondary-foreground: 210 20% 92%;
-  --destructive: 0 62% 50%;
-  --destructive-foreground: 0 0% 100%;
+  --brand-sage: 76 33% 60%;
+  --brand-sage-soft: 80 16% 18%;
+  --brand-sage-deep: 80 18% 24%;
 
-  --foreground: 210 20% 96%;
+  --background: 78 12% 8%;     /* deep charcoal-green canvas */
+  --card: 78 10% 12%;          /* raised olive-charcoal surface */
+  --card-foreground: 46 22% 92%;
+  --popover: 78 10% 12%;
+  --popover-foreground: 46 22% 92%;
+  --muted: 76 9% 16%;
+  --muted-foreground: 52 9% 62%;
+  --border: 76 9% 20%;
+  --input: 76 9% 20%;
+  --secondary: 76 9% 16%;
+  --secondary-foreground: 46 20% 90%;
+  --destructive: 9 56% 54%;
+  --destructive-foreground: 48 36% 97%;
 
-  --sidebar-bg: 222 24% 10%;
-  --sidebar-border: 222 14% 18%;
-  --sidebar-text: 210 20% 92%;
-  --sidebar-text-muted: 220 12% 55%;
-  --sidebar-item-hover: 222 16% 16%;
-  --sidebar-item-active: 206 80% 62%;
+  --foreground: 46 22% 92%;
+
+  /* Sidebar + chrome — rich deep olive, raised above the canvas. */
+  --sidebar-bg: 80 15% 13%;
+  --sidebar-border: 80 11% 21%;
+  --sidebar-text: 46 22% 90%;
+  --sidebar-text-muted: 54 9% 62%;
+  --sidebar-item-hover: 80 13% 19%;
+  --sidebar-item-active: 76 36% 64%;
 
   /* Semantic palette — dark variants */
-  --success: 142 55% 45%;
-  --warning: 38 92% 56%;
-  --warning-foreground: 28 80% 12%;
-  --info: 199 80% 55%;
-  --teal: 174 64% 46%;
+  --success: 142 44% 52%;
+  --warning: 40 78% 60%;
+  --warning-foreground: 36 60% 10%;
+  --info: 196 52% 58%;
+  --teal: 174 48% 52%;
+
+  /* Shadows — deeper for the dark canvas. */
+  --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.4);
+  --shadow-md: 0 6px 18px -4px hsl(0 0% 0% / 0.5);
+  --shadow-lg: 0 18px 44px -10px hsl(0 0% 0% / 0.6);
+  --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.35);
 }
 
 /* ════════════════════════════════════════════════════
@@ -165,11 +184,12 @@
 }
 
 .section-eyebrow {
+  font-family: var(--font-sans);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: hsl(var(--muted-foreground));
+  color: hsl(var(--primary));
 }
 
 /* ════════════════════════════════════════════════════
@@ -240,19 +260,19 @@
 /* ════════════════════════════════════════════════════
    STATUS BADGES (semantic colours retained)
    ════════════════════════════════════════════════════ */
-.badge-new { background: hsl(221 70% 48% / 0.10); color: hsl(221 70% 42%); }
-.badge-contacted { background: hsl(199 89% 48% / 0.10); color: hsl(199 89% 38%); }
-.badge-qualified { background: hsl(258 70% 58% / 0.12); color: hsl(258 60% 48%); }
-.badge-active { background: hsl(142 60% 35% / 0.10); color: hsl(142 60% 30%); }
-.badge-won { background: hsl(142 60% 35% / 0.15); color: hsl(142 60% 26%); }
-.badge-lost { background: hsl(0 72% 51% / 0.10); color: hsl(0 72% 46%); }
+.badge-new { background: hsl(196 42% 42% / 0.12); color: hsl(196 50% 32%); }
+.badge-contacted { background: hsl(174 40% 36% / 0.12); color: hsl(174 46% 28%); }
+.badge-qualified { background: hsl(40 72% 47% / 0.16); color: hsl(36 70% 34%); }
+.badge-active { background: hsl(78 17% 42% / 0.14); color: hsl(82 22% 30%); }
+.badge-won { background: hsl(142 38% 36% / 0.16); color: hsl(142 42% 26%); }
+.badge-lost { background: hsl(9 60% 50% / 0.10); color: hsl(9 58% 44%); }
 
-.dark .badge-new { background: hsl(217 91% 60% / 0.16); color: hsl(217 91% 76%); }
-.dark .badge-contacted { background: hsl(199 80% 55% / 0.16); color: hsl(199 80% 70%); }
-.dark .badge-qualified { background: hsl(258 72% 65% / 0.16); color: hsl(258 72% 80%); }
-.dark .badge-active { background: hsl(142 55% 45% / 0.16); color: hsl(142 55% 64%); }
-.dark .badge-won { background: hsl(142 55% 45% / 0.16); color: hsl(142 55% 64%); }
-.dark .badge-lost { background: hsl(0 65% 55% / 0.16); color: hsl(0 65% 74%); }
+.dark .badge-new { background: hsl(196 50% 56% / 0.18); color: hsl(196 55% 72%); }
+.dark .badge-contacted { background: hsl(174 46% 50% / 0.18); color: hsl(174 50% 66%); }
+.dark .badge-qualified { background: hsl(40 78% 58% / 0.18); color: hsl(40 78% 70%); }
+.dark .badge-active { background: hsl(80 28% 58% / 0.18); color: hsl(80 34% 70%); }
+.dark .badge-won { background: hsl(142 42% 50% / 0.18); color: hsl(142 46% 66%); }
+.dark .badge-lost { background: hsl(9 58% 55% / 0.18); color: hsl(9 60% 72%); }
 
 /* ════════════════════════════════════════════════════
    PROGRESS BAR
@@ -293,7 +313,7 @@
    AUTH PANEL
    ════════════════════════════════════════════════════ */
 .auth-brand-panel {
-  background: linear-gradient(160deg, var(--navy-deep) 0%, var(--navy-mid) 60%, #16335a 100%);
+  background: linear-gradient(160deg, #3a3f31 0%, #4c5340 55%, #5c6349 100%);
 }
 
 /* ════════════════════════════════════════════════════
@@ -369,6 +389,43 @@ html {
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* ════════════════════════════════════════════════════
+   BRAND WEAVE PATTERN
+   Evokes the Martelli & Co line-weave motif. Apply as a
+   faint texture layer (set color via currentColor/opacity).
+   ════════════════════════════════════════════════════ */
+.brand-pattern {
+  background-color: transparent;
+  background-image:
+    repeating-linear-gradient(45deg,  hsl(var(--primary) / 0.06) 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(-45deg, hsl(var(--primary) / 0.06) 0 1px, transparent 1px 14px);
+  background-size: 28px 28px;
+}
+.brand-pattern-soft {
+  background-image:
+    repeating-linear-gradient(45deg,  hsl(var(--foreground) / 0.035) 0 1px, transparent 1px 16px),
+    repeating-linear-gradient(-45deg, hsl(var(--foreground) / 0.035) 0 1px, transparent 1px 16px);
+  background-size: 32px 32px;
+}
+
+/* Faint woven texture for the dark chrome (sidebar / top navbar). Sits as a
+   non-interactive overlay; the low alpha keeps text crisp. */
+.chrome-weave { position: relative; }
+.chrome-weave > * { position: relative; z-index: 1; }
+.chrome-weave::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(45deg,  hsl(var(--sidebar-text) / 0.04) 0 1px, transparent 1px 15px),
+    repeating-linear-gradient(-45deg, hsl(var(--sidebar-text) / 0.04) 0 1px, transparent 1px 15px);
+  background-size: 30px 30px;
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent 55%);
+  mask-image: linear-gradient(to bottom, black, transparent 55%);
+}
+
 /* Divider with label */
 .divider-label {
   display: flex; align-items: center; gap: 0.75rem;
@@ -378,4 +435,24 @@ html {
 }
 .divider-label::before, .divider-label::after {
   content: ''; flex: 1; height: 1px; background: hsl(var(--border));
+}
+
+/* ── Rich text (TipTap) content — Tailwind preflight strips list markers and
+ *    heading sizes, so restore them for the editor and HTML previews. ── */
+.rich-editor-content { outline: none; }
+.rich-editor-content p { margin: 0 0 0.6em; }
+.rich-editor-content h2 { font-size: 1.25rem; font-weight: 700; margin: 0.4em 0; }
+.rich-editor-content h3 { font-size: 1.1rem; font-weight: 600; margin: 0.4em 0 0.3em; }
+.rich-editor-content ul { list-style: disc; margin: 0 0 0.6em; padding-left: 1.4em; }
+.rich-editor-content ol { list-style: decimal; margin: 0 0 0.6em; padding-left: 1.4em; }
+.rich-editor-content li { margin: 0 0 0.2em; }
+.rich-editor-content a { color: hsl(var(--primary)); text-decoration: underline; }
+.rich-editor-content img { max-width: 100%; height: auto; border-radius: 6px; }
+.rich-editor-content blockquote { border-left: 3px solid hsl(var(--border)); padding-left: 0.8em; color: hsl(var(--muted-foreground)); margin: 0 0 0.6em; }
+.rich-editor-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  float: left;
+  height: 0;
 }

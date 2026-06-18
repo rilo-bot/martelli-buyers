@@ -134,7 +134,6 @@ export default function SignAgreementPage() {
     <div className="min-h-screen bg-muted/30 text-foreground">
       <header className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-          <img src="/images/logo.png" alt="Martelli" className="h-9 w-9 rounded-full object-contain" />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold leading-tight">Martelli Buyers Agents</p>
             <p className="truncate text-xs text-muted-foreground">Buyer’s Agency Agreement</p>

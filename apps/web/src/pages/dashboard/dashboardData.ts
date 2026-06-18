@@ -41,6 +41,7 @@ function weeklySum(entries: { t: number; v: number }[], now: number, weeks = 8):
 export interface KpiDatum {
   key: string; label: string; value: number; format?: (n: number) => string;
   icon: LucideIcon; to: string; spark: number[]; delta: number; deltaLabel: string;
+  accent?: 'primary' | 'success' | 'warning' | 'info' | 'teal';
 }
 export interface AttentionItem { key: string; label: string; count: number; sub: string; icon: LucideIcon; to: string }
 export interface FunnelStage { stage: DealStage; label: string; count: number; value: number; pct: number }
@@ -95,13 +96,13 @@ export function useDashboardData(): DashboardData {
     const deltaLabel = (n: number, unit = '') => (n > 0 ? `+${n}${unit} this week` : n < 0 ? `${n}${unit} this week` : 'No change this week');
 
     const kpis: KpiDatum[] = [
-      { key: 'campaigns', label: 'Active Journeys', value: activeDeals.length, icon: FileText, to: '/journeys',
+      { key: 'campaigns', label: 'Active Journeys', value: activeDeals.length, icon: FileText, to: '/journeys', accent: 'primary',
         spark: weeklySeries(dealDates, now), delta: dd.thisWk - dd.lastWk, deltaLabel: deltaLabel(dd.thisWk - dd.lastWk) },
-      { key: 'leads', label: 'New Leads', value: newLeads.length, icon: Users, to: '/leads',
+      { key: 'leads', label: 'New Leads', value: newLeads.length, icon: Users, to: '/leads', accent: 'info',
         spark: weeklySeries(leadDates, now), delta: dl.thisWk - dl.lastWk, deltaLabel: deltaLabel(dl.thisWk - dl.lastWk) },
-      { key: 'properties', label: 'Properties', value: shortlisted.length, icon: Home, to: '/properties',
+      { key: 'properties', label: 'Properties', value: shortlisted.length, icon: Home, to: '/properties', accent: 'teal',
         spark: weeklySeries(propDates, now), delta: dp.thisWk - dp.lastWk, deltaLabel: deltaLabel(dp.thisWk - dp.lastWk) },
-      { key: 'revenue', label: 'Revenue', value: totalPaid, format: money, icon: DollarSign, to: '/journeys',
+      { key: 'revenue', label: 'Revenue', value: totalPaid, format: money, icon: DollarSign, to: '/journeys', accent: 'success',
         spark: weeklySum(paidEntries, now), delta: revThis - revLast,
         deltaLabel: revThis > 0 ? `+${money(revThis)} this week` : 'No payments this week' },
     ];

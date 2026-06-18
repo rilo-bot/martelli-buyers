@@ -26,12 +26,12 @@ export function PageHeader({
   return (
     <div className={cn('flex flex-wrap items-start justify-between gap-4', className)}>
       <div className="min-w-0">
-        {eyebrow && <p className="section-eyebrow mb-1">{eyebrow}</p>}
+        {eyebrow && <p className="section-eyebrow mb-1.5">{eyebrow}</p>}
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+          <h1 className="text-[1.6rem] font-semibold leading-tight tracking-[-0.01em] text-foreground">{title}</h1>
           {status}
         </div>
-        {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+        {subtitle && <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>

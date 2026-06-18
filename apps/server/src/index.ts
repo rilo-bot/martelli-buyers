@@ -79,7 +79,8 @@ app.get('/api/config', (_req, res) =>
 );
 
 // User management (GET list is open for assignment dropdowns; writes need
-// team:manage) + role management (super-admin only for mutations).
+// team:manage) + role management (mutations need team:manage; the built-in
+// Admin role stays super-admin-only).
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
 

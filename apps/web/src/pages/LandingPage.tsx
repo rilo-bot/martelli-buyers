@@ -75,12 +75,9 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur-md">
         <div className="max-w-screen-xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center shadow shadow-primary/30">
-              <Building2 className="h-[18px] w-[18px] text-primary-foreground" />
-            </div>
-            <div className="leading-none">
-              <span className="block text-sm font-bold text-foreground tracking-tight">Martelli</span>
-              <span className="block text-[10px] text-muted-foreground tracking-widest uppercase">Buyers CRM</span>
+            <div className="brand-wordmark leading-none">
+              <span className="block text-[16px] text-foreground"><span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span></span>
+              <span className="brand-eyebrow mt-0.5 block text-[8px] text-muted-foreground">Buyers Agents</span>
             </div>
           </div>
           <Link to="/login">
@@ -102,7 +99,7 @@ export default function LandingPage() {
             crossOrigin="anonymous"
           />
           {/* deep gradient left side for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[hsl(222_47%_6%/0.96)] via-[hsl(222_47%_8%/0.82)] to-[hsl(222_47%_8%/0.18)]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[hsl(84_18%_10%/0.96)] via-[hsl(84_16%_12%/0.82)] to-[hsl(84_16%_14%/0.18)]" />
           {/* bottom fade */}
           <div className="absolute bottom-0 inset-x-0 h-32 bg-gradient-to-t from-background to-transparent" />
         </div>
@@ -115,9 +112,9 @@ export default function LandingPage() {
             </p>
 
             {/* Headline */}
-            <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-bold text-primary-foreground leading-[1.08] tracking-tight mb-6">
+            <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-bold text-primary-foreground leading-[1.08] tracking-tight mb-6" style={{ fontFamily: 'var(--font-display)' }}>
               The complete system for<br />
-              <span className="gradient-text">Martelli Buyer Agency.</span>
+              <span style={{ color: 'hsl(80 30% 64%)' }}>Martelli &amp; Co Buyers Agents.</span>
             </h1>
 
             {/* Sub */}
@@ -166,12 +163,9 @@ export default function LandingPage() {
           <div className="lg:sticky lg:top-24 w-full lg:w-80">
             <div className="rounded-2xl border border-border bg-card shadow-xl shadow-primary/5 p-8">
               <div className="flex items-center gap-3 mb-6">
-                <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center shadow shadow-primary/30">
-                  <Building2 className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <div className="leading-none">
-                  <span className="block text-sm font-bold text-foreground">Martelli</span>
-                  <span className="block text-[10px] text-muted-foreground tracking-widest uppercase">Buyers CRM</span>
+                <div className="brand-wordmark leading-none">
+                  <span className="block text-[16px] text-foreground"><span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span></span>
+                  <span className="brand-eyebrow mt-0.5 block text-[8px] text-muted-foreground">Buyers Agents</span>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed mb-6">
@@ -271,12 +265,9 @@ export default function LandingPage() {
       <footer className="border-t border-border bg-card">
         <div className="max-w-screen-xl mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
-              <Building2 className="h-3.5 w-3.5 text-primary-foreground" />
-            </div>
-            <div className="leading-none">
-              <span className="block text-xs font-bold text-foreground">Martelli Buyers CRM</span>
-              <span className="block text-[10px] text-muted-foreground">Internal Operations Platform</span>
+            <div className="brand-wordmark leading-none">
+              <span className="block text-[13px] text-foreground"><span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span></span>
+              <span className="brand-eyebrow mt-0.5 block text-[7px] text-muted-foreground">Buyers Agents</span>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">

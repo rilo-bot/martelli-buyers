@@ -4,14 +4,16 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Download, Mail, Bell, ExternalLink, ArrowRight, Receipt, Loader2 } from 'lucide-react';
+import { Search, Download, Mail, Bell, ExternalLink, ArrowRight, Receipt, Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useInvoicesStore } from '@/stores/invoicesStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useConfigStore } from '@/stores/configStore';
+import { useXeroStore } from '@/stores/xeroStore';
 import { usePermissions } from '@/lib/permissions';
 import { downloadInvoicePdf } from '@/lib/documents';
+import { pushInvoiceToXero } from '@/lib/xero';
 import type { Invoice, InvoiceStatus } from '@/types';
 
 const money = (n: number) => `$${(n || 0).toLocaleString()}`;
@@ -43,14 +45,18 @@ export default function InvoicesPage() {
   const loaded = useInvoicesStore((s) => s.loaded);
   const emailInvoice = useInvoicesStore((s) => s.emailInvoice);
   const remindInvoice = useInvoicesStore((s) => s.remindInvoice);
+  const replaceInvoice = useInvoicesStore((s) => s.replaceInvoice);
   const deals = useDealsStore((s) => s.deals);
   const hasEmail = useConfigStore((s) => s.hasEmail);
+  const hasXero = useConfigStore((s) => s.hasXero);
+  const xeroConnected = useXeroStore((s) => s.connected);
   const { can } = usePermissions();
   const canSend = can('invoices:send');
 
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [xeroBusyId, setXeroBusyId] = useState<string | null>(null);
 
   const clientName = (dealId: string) => deals.find((d) => d.id === dealId)?.clientName || '—';
 
@@ -98,6 +104,18 @@ export default function InvoicesPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to send email.');
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handlePushXero = async (inv: Invoice) => {
+    setXeroBusyId(inv.id);
+    try {
+      replaceInvoice(await pushInvoiceToXero(inv.id));
+      toast.success('Invoice sent to Xero.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send to Xero.');
+    } finally {
+      setXeroBusyId(null);
     }
   };
 
@@ -188,6 +206,18 @@ export default function InvoicesPage() {
                               disabled={busyId === inv.id} onClick={() => handleEmailOrRemind(inv)}>
                               {busyId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : st === 'draft' ? <Mail className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
                             </Button>
+                          )}
+                          {canSend && hasXero && !inv.xeroInvoiceId && (
+                            xeroConnected ? (
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Send to Xero"
+                                disabled={xeroBusyId === inv.id} onClick={() => handlePushXero(inv)}>
+                                {xeroBusyId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                              </Button>
+                            ) : (
+                              <Button asChild variant="ghost" size="icon" className="h-7 w-7" title="Connect Xero in Settings to send">
+                                <Link to="/settings?section=integrations"><Send className="h-3.5 w-3.5 opacity-50" /></Link>
+                              </Button>
+                            )
                           )}
                           {inv.xeroUrl && (
                             <a href={inv.xeroUrl} target="_blank" rel="noreferrer" title="View in Xero"

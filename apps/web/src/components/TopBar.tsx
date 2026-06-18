@@ -62,10 +62,7 @@ export function TopBar() {
 
   return (
     <>
-      <header
-        className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b border-border px-6 lg:flex"
-        style={{ background: 'hsl(var(--sidebar-bg))' }}
-      >
+      <header className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b border-border/70 bg-background/70 px-6 backdrop-blur-md lg:flex">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-sm min-w-0">
           {isDetail ? (
@@ -88,7 +85,7 @@ export function TopBar() {
         <button
           type="button"
           onClick={() => setCmdOpen(true)}
-          className="flex h-9 w-64 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground transition-colors hover:border-primary/40"
+          className="flex h-9 w-64 items-center gap-2 rounded-lg border border-border bg-card/80 px-3 text-sm text-muted-foreground transition-colors hover:border-primary/40"
         >
           <Search className="h-4 w-4 shrink-0" />
           <span className="flex-1 text-left">Search…</span>
@@ -136,7 +133,7 @@ export function TopBar() {
 
       {/* Mobile action bar — keeps search + create reachable below lg, where the
           desktop header is hidden. Sits under the Sidebar's mobile logo bar. */}
-      <div className="lg:hidden sticky top-14 z-20 flex items-center gap-2 border-b border-border bg-[hsl(var(--sidebar-bg))] px-4 py-2">
+      <div className="lg:hidden sticky top-14 z-20 flex items-center gap-2 border-b border-border/70 bg-background/80 px-4 py-2 backdrop-blur-md">
         <button
           type="button"
           onClick={() => setCmdOpen(true)}

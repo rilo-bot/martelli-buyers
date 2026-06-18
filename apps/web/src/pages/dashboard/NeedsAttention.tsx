@@ -20,15 +20,15 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
 
   return (
     <div>
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Needs attention</p>
+      <p className="section-eyebrow mb-2.5">Needs attention</p>
       <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" step={0.05}>
         {items.map((item) => (
           <StaggerItem key={item.key}>
             <Link
               to={item.to}
-              className="group flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              className="group flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 shadow-[var(--shadow-card)] transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-[var(--shadow-md)]"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-primary">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-sm ring-1 ring-inset ring-white/20">
                 <item.icon className="h-[18px] w-[18px]" />
               </div>
               <div className="min-w-0 flex-1">

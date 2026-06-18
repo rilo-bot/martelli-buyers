@@ -64,15 +64,6 @@ export function requirePermission(perm: string) {
   };
 }
 
-/** Express middleware: 403 unless the request is the super admin. */
-export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (req.auth?.isSuperAdmin) {
-    next();
-    return;
-  }
-  res.status(403).json({ error: 'Only the super admin can manage roles.' });
-}
-
 /* ───────────────────────── AI helpers (RBAC context) ─────────────────────
  * Used by the in-app assistant and the daily summary to tailor AI output to
  * exactly what the signed-in user is allowed to see and do. Always derived

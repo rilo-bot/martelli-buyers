@@ -34,6 +34,15 @@ const ACCENT_TEXT: Record<NonNullable<StatCardProps['accent']>, string> = {
   teal: 'text-teal',
 };
 
+/** Solid brand-colour icon chip — confident, premium, brand-forward. */
+const ACCENT_TILE: Record<NonNullable<StatCardProps['accent']>, string> = {
+  primary: 'bg-primary',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  info: 'bg-info',
+  teal: 'bg-teal',
+};
+
 /**
  * Single source of truth for the "summary number" tile used on the dashboard,
  * Clients, Properties and other list pages. Optional icon / sparkline / trend /
@@ -62,33 +71,34 @@ export function StatCard({
       : 'text-destructive';
   const valueClass = cn('tabular-nums', accent ? ACCENT_TEXT[accent] : 'text-foreground');
 
+  const tileClass = accent ? ACCENT_TILE[accent] : 'bg-primary';
   const inner = (
     <Card
       className={cn(
-        'kpi-card h-full border-border/70 bg-card',
-        to && 'group transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',
+        'kpi-card h-full bg-card',
+        to && 'group transition-all duration-200 hover:-translate-y-1 hover:shadow-[var(--shadow-md)]',
         className,
       )}
     >
       <CardContent className={cn('px-5', size === 'lg' ? 'py-5' : 'py-4')}>
         {(Icon || spark) && (
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3.5 flex items-center justify-between">
             {Icon ? (
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/15 bg-primary/10">
-                <Icon className="h-[18px] w-[18px] text-primary" />
+              <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-sm ring-1 ring-inset ring-white/20', tileClass)}>
+                <Icon className="h-[19px] w-[19px]" />
               </div>
             ) : (
               <span />
             )}
             {spark && spark.length > 0 && (
-              <Sparkline data={spark} className="opacity-80 transition-opacity group-hover:opacity-100" />
+              <Sparkline data={spark} className="opacity-90 transition-opacity group-hover:opacity-100" />
             )}
           </div>
         )}
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
-        <CountUp value={value} format={format} className={cn('block font-bold', size === 'lg' ? 'text-3xl' : 'text-2xl', valueClass)} />
+        <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+        <CountUp value={value} format={format} className={cn('block font-bold tracking-[-0.01em]', size === 'lg' ? 'text-[1.9rem]' : 'text-[1.55rem]', valueClass)} />
         {(hasTrend || deltaLabel) && (
-          <div className={cn('mt-1.5 flex items-center gap-1 text-[11px] font-medium', trendClass)}>
+          <div className={cn('mt-2 inline-flex items-center gap-1 rounded-full bg-muted/70 px-2 py-0.5 text-[11px] font-medium', trendClass)}>
             <TrendIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{deltaLabel}</span>
           </div>

@@ -13,5 +13,54 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
   }
+}
+
+/* Display type for premium headings (page titles, card titles). */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.005em;
+}
+
+/* ── Brand wordmark (Martelli & Co) ──────────────────────────────
+   Geometric display type with a wide-tracked "BUYERS AGENTS" eyebrow,
+   mirroring the brand identity. */
+.brand-wordmark {
+  font-family: var(--font-display);
+  line-height: 1;
+}
+.brand-wordmark .bw-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand-wordmark .bw-co {
+  font-weight: 300;
+}
+.brand-eyebrow {
+  font-family: var(--font-display);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+}
+
+/* Themed scrollbar for the assistant transcript — primary (blue) thumb. */
+.chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary)) transparent;
+}
+.chat-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.85);
 }

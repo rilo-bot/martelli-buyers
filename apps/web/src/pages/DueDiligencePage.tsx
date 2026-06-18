@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
@@ -32,6 +32,7 @@ export default function DueDiligencePage() {
   const defaultPropertyId = searchParams.get('propertyId') ?? '';
 
   const records = useDueDiligenceStore((s) => s.records);
+  const loaded = useDueDiligenceStore((s) => s.loaded);
   const addRecord = useDueDiligenceStore((s) => s.addRecord);
   const updateRecord = useDueDiligenceStore((s) => s.updateRecord);
   const addEvidence = useDueDiligenceStore((s) => s.addEvidence);
@@ -83,6 +84,22 @@ export default function DueDiligencePage() {
     });
     setShowCreateDD(true);
   };
+
+  // Arriving from a Buyer Journey via ?propertyId= should land directly on the
+  // linked DD record (not the list). If no record exists yet for that property,
+  // open the create sheet pre-filled instead. Guarded so it fires once per
+  // propertyId, leaving the user free to navigate back to the list afterwards.
+  const autoHandledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!defaultPropertyId || !loaded || autoHandledFor.current === defaultPropertyId) return;
+    autoHandledFor.current = defaultPropertyId;
+    const linked = records.find((r) => r.propertyId === defaultPropertyId);
+    if (linked) {
+      setSelectedRecordId(linked.id);
+    } else {
+      openCreate();
+    }
+  }, [defaultPropertyId, loaded, records]);
 
   const handleCreateDD = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -773,8 +790,8 @@ export default function DueDiligencePage() {
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30 shrink-0">
-                      <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white shadow-sm ring-1 ring-inset ring-white/20 shrink-0">
+                      <AlertCircle className="h-5 w-5" />
                     </div>
                     <div className="flex gap-1.5 flex-wrap justify-end">
                       {record.reportGenerated && <Badge variant="default" className="text-[10px] px-2 py-0.5">Report Ready</Badge>}

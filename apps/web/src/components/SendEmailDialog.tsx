@@ -3,10 +3,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, S
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { RichTextEditor } from '@/components/ui/rich-editor';
 import { useEmailTemplatesStore } from '@/stores/emailTemplatesStore';
 import { sendEmail } from '@/lib/email';
+import { plainTextToHtml, htmlToPlainText } from '@/lib/templates';
 import { cn } from '@/lib/utils';
 import { Mail, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -79,7 +80,7 @@ export function SendEmailDialog({
   const [recipientId, setRecipientId] = useState(defaultRecipient?.id ?? '');
   const [to, setTo] = useState(defaultRecipient?.email ?? '');
   const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+  const [bodyHtml, setBodyHtml] = useState('');
   const [sending, setSending] = useState(false);
 
   // Reset on open
@@ -92,7 +93,7 @@ export function SendEmailDialog({
       setRecipientId(defaultRecipient?.id ?? '');
       setTo(defaultRecipient?.email ?? '');
       setSubject('');
-      setBody('');
+      setBodyHtml('');
     }
   }, [open, defaultRecipient?.id, defaultRecipient?.email]);
 
@@ -161,7 +162,7 @@ export function SendEmailDialog({
     setTo(chosen?.email ?? '');
     const vars = buildVars(chosen);
     setSubject(interpolate(tpl.subject, vars));
-    setBody(interpolate(tpl.body, vars));
+    setBodyHtml(interpolate(tpl.bodyHtml || plainTextToHtml(tpl.body), vars));
     setStep('compose');
   };
 
@@ -174,7 +175,7 @@ export function SendEmailDialog({
     if (tpl) {
       const vars = buildVars(chosen);
       setSubject(interpolate(tpl.subject, vars));
-      setBody(interpolate(tpl.body, vars));
+      setBodyHtml(interpolate(tpl.bodyHtml || plainTextToHtml(tpl.body), vars));
     }
   };
 
@@ -198,7 +199,7 @@ export function SendEmailDialog({
     }
     setSending(true);
     try {
-      await sendEmail(to.trim(), subject, body);
+      await sendEmail(to.trim(), subject, htmlToPlainText(bodyHtml), bodyHtml);
       toast.success(`Email sent to ${to}`);
       onOpenChange(false);
     } catch (err) {
@@ -220,11 +221,11 @@ export function SendEmailDialog({
   /* ─── Missing variable highlighting ──────────────────────────────── */
   const unresolvedVars = useMemo(() => {
     const found = new Set<string>();
-    const combined = subject + ' ' + body;
+    const combined = subject + ' ' + bodyHtml;
     const matches = combined.matchAll(/\{\{(\w+)\}\}/g);
     for (const m of matches) found.add(m[1]);
     return Array.from(found);
-  }, [subject, body]);
+  }, [subject, bodyHtml]);
 
   /* ─── Render ──────────────────────────────────────────────────────── */
 
@@ -432,13 +433,8 @@ export function SendEmailDialog({
             {/* Body */}
             <div className="space-y-1.5">
               <Label htmlFor="emailBody">Message</Label>
-              <Textarea
-                id="emailBody"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={10}
-                className="font-mono text-xs leading-relaxed resize-y"
-              />
+              <RichTextEditor value={bodyHtml} onChange={setBodyHtml} placeholder="Write your message…" />
+              <p className="text-xs text-muted-foreground">Your company logo, colours and signature are added automatically when the email is sent.</p>
             </div>
 
             {/* Unresolved variable warning */}

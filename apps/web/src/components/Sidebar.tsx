@@ -195,11 +195,12 @@ export function Sidebar() {
           borderColor: 'hsl(var(--sidebar-border))',
         }}
       >
-        <NavLink to="/dashboard" className="flex items-center gap-2.5">
-          <img src="/images/logo.png" alt="Martelli Buyers" className="h-8 w-8 shrink-0 rounded-full object-contain" />
-          <div className="leading-none">
-            <span className="block text-sm font-bold tracking-tight" style={{ color: 'hsl(var(--sidebar-text))' }}>Martelli</span>
-            <span className="block text-[9px] tracking-[0.12em] uppercase" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>Buyers CRM</span>
+        <NavLink to="/dashboard" className="flex items-center">
+          <div className="brand-wordmark leading-none">
+            <span className="block text-[15px]" style={{ color: 'hsl(var(--sidebar-text))' }}>
+              <span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span>
+            </span>
+            <span className="brand-eyebrow mt-0.5 block text-[8px]" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>Buyers Agents</span>
           </div>
         </NavLink>
         <button
@@ -221,7 +222,7 @@ export function Sidebar() {
       {/* Sidebar panel */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 ease-in-out border-r',
+          'chrome-weave fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 ease-in-out border-r',
           collapsed ? 'lg:w-[68px]' : 'lg:w-[228px]',
           'w-[240px]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -236,23 +237,21 @@ export function Sidebar() {
           className="flex items-center h-14 shrink-0 px-3 relative border-b"
           style={{ borderColor: 'hsl(var(--sidebar-border))' }}
         >
-          <NavLink to="/dashboard" className="flex items-center shrink-0" onClick={() => setMobileOpen(false)}>
-            <img src="/images/logo.png" alt="Martelli Buyers" className="h-8 w-8 shrink-0 rounded-full object-contain" />
-          </NavLink>
-
-          <div
+          <NavLink
+            to="/dashboard"
+            onClick={() => setMobileOpen(false)}
             className={cn(
-              'leading-none overflow-hidden transition-all duration-200 ml-2.5',
-              collapsed ? 'lg:w-0 lg:opacity-0 lg:ml-0 lg:pointer-events-none' : 'opacity-100'
+              'brand-wordmark leading-none overflow-hidden transition-all duration-200',
+              collapsed ? 'lg:w-0 lg:opacity-0 lg:pointer-events-none' : 'opacity-100'
             )}
           >
-            <span className="block text-sm font-bold tracking-tight whitespace-nowrap" style={{ color: 'hsl(var(--sidebar-text))' }}>
-              Martelli
+            <span className="block text-[15px] whitespace-nowrap" style={{ color: 'hsl(var(--sidebar-text))' }}>
+              <span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span>
             </span>
-            <span className="block text-[9px] tracking-[0.12em] uppercase whitespace-nowrap" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>
-              Buyers CRM
+            <span className="brand-eyebrow mt-0.5 block text-[8px] whitespace-nowrap" style={{ color: 'hsl(var(--sidebar-text-muted))' }}>
+              Buyers Agents
             </span>
-          </div>
+          </NavLink>
 
           <div className="flex-1" />
 
@@ -312,15 +311,13 @@ export function Sidebar() {
                 ref={accountMenuRef}
                 role="menu"
                 aria-label="Account"
-                className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-xl border bg-card p-1 shadow-lg z-[70]"
-                style={{ borderColor: 'hsl(var(--sidebar-border))' }}
+                className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg z-[70]"
               >
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => { toggleTheme(); setAccountOpen(false); }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                  style={{ color: 'hsl(var(--sidebar-text))' }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                 >
                   {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
                   {isDark ? 'Light mode' : 'Dark mode'}

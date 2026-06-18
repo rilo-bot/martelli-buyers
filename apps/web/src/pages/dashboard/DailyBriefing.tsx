@@ -27,16 +27,14 @@ export function DailyBriefing() {
     : '';
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+    <div className="rounded-2xl border border-border bg-gradient-to-br from-card to-[hsl(var(--primary)/0.05)] p-5 shadow-[var(--shadow-card)]">
+      <div className="flex items-start gap-3.5">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-sm ring-1 ring-inset ring-white/20">
           <Sparkles className="h-[18px] w-[18px]" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-              Your daily briefing
-            </p>
+            <p className="section-eyebrow">Your daily briefing</p>
             {generatedTime && !loading && (
               <span className="text-[11px] text-muted-foreground/70">· updated {generatedTime}</span>
             )}
@@ -52,7 +50,7 @@ export function DailyBriefing() {
               {error || 'Could not load your daily briefing.'}
             </p>
           ) : (
-            <p className="mt-0.5 text-[15px] font-semibold leading-snug text-foreground">
+            <p className="mt-1 text-base font-semibold leading-snug text-foreground">
               {summary?.headline}
             </p>
           )}
@@ -96,8 +94,8 @@ export function DailyBriefing() {
 
           {/* Focus */}
           {!loading && summary?.focus && (
-            <p className="mt-3 rounded-lg bg-primary/5 px-3 py-2 text-[13px] text-foreground">
-              <span className="font-semibold">Focus today: </span>
+            <p className="mt-3.5 rounded-lg border border-primary/15 bg-primary/[0.07] px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
+              <span className="font-semibold text-primary">Focus today · </span>
               {summary.focus}
             </p>
           )}

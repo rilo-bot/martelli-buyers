@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ALL_PERMISSIONS } from '@rilo/shared';
+import { ALL_PERMISSIONS, canManageRole } from '@rilo/shared';
 import { Role, User } from '../models';
 import { asyncHandler } from '../middleware/error';
-import { requirePermission, requireSuperAdmin, invalidateRolesCache } from '../lib/permissions';
+import { requirePermission, invalidateRolesCache } from '../lib/permissions';
 
 export const rolesRouter = Router();
 
@@ -47,10 +47,10 @@ rolesRouter.get(
   }),
 );
 
-/** POST /api/roles — create a custom role (super admin only). */
+/** POST /api/roles — create a custom role (needs team:manage). */
 rolesRouter.post(
   '/',
-  requireSuperAdmin,
+  requirePermission('team:manage'),
   asyncHandler(async (req, res) => {
     const { name, description, permissions } = createSchema.parse(req.body ?? {});
     const key = slugify(name);
@@ -68,15 +68,20 @@ rolesRouter.post(
   }),
 );
 
-/** PATCH /api/roles/:id — edit name/description/permissions (super admin only). */
+/** PATCH /api/roles/:id — edit name/description/permissions (needs team:manage; the Admin role is super-admin-only). */
 rolesRouter.patch(
   '/:id',
-  requireSuperAdmin,
+  requirePermission('team:manage'),
   asyncHandler(async (req, res) => {
     const patch = updateSchema.parse(req.body ?? {});
     const role = await Role.findById(req.params.id);
     if (!role) {
       res.status(404).json({ error: 'Role not found' });
+      return;
+    }
+    // Only the super admin may touch the built-in Admin role (own-tier guard).
+    if (!canManageRole(role.get('key'), Boolean(req.auth?.isSuperAdmin))) {
+      res.status(403).json({ error: 'Only the super admin can modify the Admin role.' });
       return;
     }
     // key + isSystem are immutable; only name/description/permissions change.
@@ -89,14 +94,19 @@ rolesRouter.patch(
   }),
 );
 
-/** DELETE /api/roles/:id — delete a custom role (super admin only). */
+/** DELETE /api/roles/:id — delete a custom role (needs team:manage; built-in roles are never deletable). */
 rolesRouter.delete(
   '/:id',
-  requireSuperAdmin,
+  requirePermission('team:manage'),
   asyncHandler(async (req, res) => {
     const role = await Role.findById(req.params.id);
     if (!role) {
       res.status(404).json({ error: 'Role not found' });
+      return;
+    }
+    // Only the super admin may touch the built-in Admin role (own-tier guard).
+    if (!canManageRole(role.get('key'), Boolean(req.auth?.isSuperAdmin))) {
+      res.status(403).json({ error: 'Only the super admin can modify the Admin role.' });
       return;
     }
     if (role.get('isSystem')) {

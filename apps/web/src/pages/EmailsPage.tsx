@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
+import { RichTextEditor } from '@/components/ui/rich-editor';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { sendBlast } from '@/lib/email';
 import { usePermissions } from '@/lib/permissions';
-import { dealVariables, interpolate, unresolvedVariables, hasRecipientVars } from '@/lib/templates';
+import { dealVariables, interpolate, unresolvedVariables, hasRecipientVars, plainTextToHtml, htmlToPlainText } from '@/lib/templates';
 import { emailTemplateAudience } from '@/types';
 import type { EmailTemplateCategory, EmailRecipientType, AgentGeo } from '@/types';
 
@@ -62,12 +62,12 @@ export default function EmailsPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
 
   const [templateForm, setTemplateForm] = useState({
-    name: '', category: 'other' as EmailTemplateCategory, recipientType: 'client' as EmailRecipientType, subject: '', body: '', variables: '',
+    name: '', category: 'other' as EmailTemplateCategory, recipientType: 'client' as EmailRecipientType, subject: '', bodyHtml: '', variables: '',
   });
 
   const [blastForm, setBlastForm] = useState({
     dealId: '', templateId: '', geoFilter: [] as AgentGeo[], preferredOnly: false,
-    subject: '', body: '',
+    subject: '', bodyHtml: '',
   });
 
   const filteredTemplates = useMemo(() => {
@@ -102,12 +102,12 @@ export default function EmailsPage() {
 
   // Placeholders that won't be filled (excludes {{agentName}}, resolved per-recipient).
   const unresolved = useMemo(
-    () => unresolvedVariables(`${blastForm.subject}\n${blastForm.body}`),
-    [blastForm.subject, blastForm.body],
+    () => unresolvedVariables(`${blastForm.subject}\n${blastForm.bodyHtml}`),
+    [blastForm.subject, blastForm.bodyHtml],
   );
   const personalizesPerAgent = useMemo(
-    () => hasRecipientVars(`${blastForm.subject}\n${blastForm.body}`),
-    [blastForm.subject, blastForm.body],
+    () => hasRecipientVars(`${blastForm.subject}\n${blastForm.bodyHtml}`),
+    [blastForm.subject, blastForm.bodyHtml],
   );
 
   /** Fill subject/body from a template, interpolating the linked deal's data. */
@@ -120,12 +120,12 @@ export default function EmailsPage() {
       templateId,
       dealId,
       subject: template ? interpolate(template.subject, vars) : f.subject,
-      body: template ? interpolate(template.body, vars) : f.body,
+      bodyHtml: template ? interpolate(template.bodyHtml || plainTextToHtml(template.body), vars) : f.bodyHtml,
     }));
   };
 
   const openBlast = () => {
-    setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, subject: '', body: '' });
+    setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, subject: '', bodyHtml: '' });
     setShowBlastDialog(true);
   };
 
@@ -133,13 +133,13 @@ export default function EmailsPage() {
     const t = templates.find((tmpl) => tmpl.id === id);
     if (!t) return;
     setEditTemplateId(id);
-    setTemplateForm({ name: t.name, category: t.category, recipientType: emailTemplateAudience(t), subject: t.subject, body: t.body, variables: t.variables.join(', ') });
+    setTemplateForm({ name: t.name, category: t.category, recipientType: emailTemplateAudience(t), subject: t.subject, bodyHtml: t.bodyHtml || plainTextToHtml(t.body), variables: t.variables.join(', ') });
     setShowAddTemplate(true);
   };
 
   const openAdd = () => {
     setEditTemplateId(null);
-    setTemplateForm({ name: '', category: 'other', recipientType: 'client', subject: '', body: '', variables: '' });
+    setTemplateForm({ name: '', category: 'other', recipientType: 'client', subject: '', bodyHtml: '', variables: '' });
     setShowAddTemplate(true);
   };
 
@@ -151,7 +151,9 @@ export default function EmailsPage() {
     }
     const data = {
       name: templateForm.name.trim(), category: templateForm.category, recipientType: templateForm.recipientType,
-      subject: templateForm.subject.trim(), body: templateForm.body.trim(),
+      subject: templateForm.subject.trim(),
+      // Keep a plain-text `body` in sync for card previews + the text/alt part.
+      body: htmlToPlainText(templateForm.bodyHtml), bodyHtml: templateForm.bodyHtml,
       variables: templateForm.variables.split(',').map((v) => v.trim()).filter(Boolean),
       isActive: true,
     };
@@ -180,15 +182,21 @@ export default function EmailsPage() {
 
     setBlasting(true);
     try {
-      const result = await sendBlast(recipients, blastForm.subject.trim(), blastForm.body, {
-        dealId: blastForm.dealId,
-        templateId: blastForm.templateId,
-        agentGeoFilter: blastForm.geoFilter,
-        preferredOnly: blastForm.preferredOnly,
-      });
+      const result = await sendBlast(
+        recipients,
+        blastForm.subject.trim(),
+        htmlToPlainText(blastForm.bodyHtml),
+        {
+          dealId: blastForm.dealId,
+          templateId: blastForm.templateId,
+          agentGeoFilter: blastForm.geoFilter,
+          preferredOnly: blastForm.preferredOnly,
+        },
+        blastForm.bodyHtml,
+      );
       // Server already persisted the record atomically with the send.
       if (result.campaign) recordSentCampaign(result.campaign);
-      setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, subject: '', body: '' });
+      setBlastForm({ dealId: '', templateId: '', geoFilter: [], preferredOnly: false, subject: '', bodyHtml: '' });
       setShowBlastDialog(false);
       toast.success(
         result.failed > 0
@@ -466,7 +474,12 @@ export default function EmailsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="tplBody">Body</Label>
-              <Textarea id="tplBody" value={templateForm.body} onChange={(e) => setTemplateForm((f) => ({ ...f, body: e.target.value }))} rows={10} placeholder="Email body. Use {{variableName}} for dynamic content." />
+              <RichTextEditor
+                value={templateForm.bodyHtml}
+                onChange={(html) => setTemplateForm((f) => ({ ...f, bodyHtml: html }))}
+                placeholder="Email body. Use the toolbar to format and {{ }} to insert variables."
+              />
+              <p className="text-xs text-muted-foreground">Your logo, brand colour and signature are applied automatically on send.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="tplVars">Variables (comma-separated)</Label>
@@ -591,12 +604,10 @@ export default function EmailsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="blastBody">Body</Label>
-                    <Textarea
-                      id="blastBody"
-                      value={blastForm.body}
-                      onChange={(e) => setBlastForm((f) => ({ ...f, body: e.target.value }))}
-                      rows={10}
-                      className="font-sans leading-relaxed"
+                    <RichTextEditor
+                      value={blastForm.bodyHtml}
+                      onChange={(html) => setBlastForm((f) => ({ ...f, bodyHtml: html }))}
+                      placeholder="Compose your message…"
                     />
                   </div>
                   {personalizesPerAgent && (
@@ -669,7 +680,10 @@ export default function EmailsPage() {
                 <div className="h-px bg-border" />
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Body</p>
-                  <pre className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed font-sans">{previewTemplate.body}</pre>
+                  <div
+                    className="rich-editor-content text-sm text-foreground leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: previewTemplate.bodyHtml || plainTextToHtml(previewTemplate.body) }}
+                  />
                 </div>
               </div>
               {previewTemplate.variables.length > 0 && (
