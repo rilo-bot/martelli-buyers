@@ -5,7 +5,7 @@ import { useRolesStore } from '@/stores/rolesStore';
 import { useUsersStore } from '@/stores/usersStore';
 import { usePermissions } from '@/lib/permissions';
 import { ApiError } from '@/lib/api';
-import type { Role } from '@/types';
+import { canManageRole, type Role } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,8 @@ const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError ? er
 export function RolesPanel() {
   const { roles, fetch, create, update, remove, loaded } = useRolesStore();
   const users = useUsersStore((s) => s.users);
-  const { isSuperAdmin } = usePermissions();
+  const { can, isSuperAdmin } = usePermissions();
+  const canManageRoles = can('team:manage');
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
@@ -87,13 +88,13 @@ export function RolesPanel() {
   return (
     <div className="space-y-5">
       {/* Create custom role */}
-      {isSuperAdmin && (
+      {canManageRoles && (
         <Card className="border-border/80 shadow-sm">
           <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-border/60 pb-4">
             <div>
               <CardTitle className="text-base font-semibold">Roles</CardTitle>
               <CardDescription className="mt-1 text-sm">
-                Edit a role's permissions, or create a custom role. Only you (the super admin) can change roles.
+                Edit a role's permissions, or create a custom role. Only the super admin can change the Admin role.
               </CardDescription>
             </div>
             {!creating && (
@@ -128,6 +129,8 @@ export function RolesPanel() {
       {roles.map((role) => {
         const isEditing = editingId === role.id;
         const usage = usageFor(role.key);
+        // The Admin role is super-admin-only; every other role follows team:manage.
+        const canEditRole = canManageRoles && canManageRole(role.key, isSuperAdmin);
         return (
           <Card key={role.id} className="border-border/80 shadow-sm">
             <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-4">
@@ -144,7 +147,7 @@ export function RolesPanel() {
                   {role.description || 'No description.'} · {usage} {usage === 1 ? 'user' : 'users'}
                 </CardDescription>
               </div>
-              {isSuperAdmin && (
+              {canEditRole && (
                 <div className="flex shrink-0 items-center gap-2">
                   {isEditing ? (
                     <>

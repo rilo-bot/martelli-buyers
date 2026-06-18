@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Sparkles, X, Send, Loader2 } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, SquarePen } from 'lucide-react';
 import { apiUrl } from '@/lib/api';
 import { useConfigStore } from '@/stores/configStore';
 import { cn } from '@/lib/utils';
@@ -42,11 +42,29 @@ export function Assistant() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, streaming]);
 
+  // While streaming, the typewriter reveals text between message updates, so
+  // pin the view to the bottom on a light interval to follow the live text.
+  useEffect(() => {
+    if (!streaming) return;
+    const id = setInterval(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    }, 120);
+    return () => clearInterval(id);
+  }, [streaming]);
+
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 80);
   }, [open]);
 
   if (!hasAi) return null;
+
+  // Start a fresh conversation. No history is kept — just clear and refocus.
+  function newChat() {
+    if (streaming) return;
+    setMessages([]);
+    setInput('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
 
   async function send(text: string) {
     const content = text.trim();
@@ -140,10 +158,20 @@ export function Assistant() {
                 <p className="text-sm font-semibold text-foreground">Martelli Assistant</p>
                 <p className="text-[11px] text-muted-foreground">Guidance + your portal data</p>
               </div>
+              <button
+                type="button"
+                onClick={newChat}
+                disabled={streaming || messages.length === 0}
+                aria-label="New chat"
+                title="New chat"
+                className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+              >
+                <SquarePen className="h-4 w-4" />
+              </button>
             </div>
 
             {/* Transcript */}
-            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+            <div ref={scrollRef} className="chat-scroll flex-1 space-y-3 overflow-y-auto px-4 py-4">
               {messages.length === 0 ? (
                 <div className="space-y-4">
                   <Bubble role="assistant" content={GREETING} />
@@ -162,14 +190,18 @@ export function Assistant() {
                   </div>
                 </div>
               ) : (
-                messages.map((m, i) => (
-                  <Bubble
-                    key={i}
-                    role={m.role}
-                    content={m.content}
-                    pending={streaming && i === messages.length - 1 && m.content === ''}
-                  />
-                ))
+                messages.map((m, i) => {
+                  const live = streaming && i === messages.length - 1;
+                  return (
+                    <Bubble
+                      key={i}
+                      role={m.role}
+                      content={m.content}
+                      pending={live && m.content === ''}
+                      streaming={live}
+                    />
+                  );
+                })
               )}
             </div>
 
@@ -209,7 +241,17 @@ export function Assistant() {
 }
 
 /** A single chat bubble; assistant messages render lightweight markdown. */
-function Bubble({ role, content, pending }: { role: 'user' | 'assistant'; content: string; pending?: boolean }) {
+function Bubble({
+  role,
+  content,
+  pending,
+  streaming,
+}: {
+  role: 'user' | 'assistant';
+  content: string;
+  pending?: boolean;
+  streaming?: boolean;
+}) {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -222,22 +264,96 @@ function Bubble({ role, content, pending }: { role: 'user' | 'assistant'; conten
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%] rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2 text-sm text-foreground">
-        {pending ? (
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking…
-          </span>
-        ) : (
-          <Markdown text={content} />
-        )}
+        {pending ? <WaveLoader /> : <StreamingMarkdown text={content} live={!!streaming} />}
       </div>
     </div>
   );
 }
 
+/** Three dots rippling in a wave — the assistant's "typing" indicator. */
+function WaveLoader() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 py-1"
+      role="status"
+      aria-label="Assistant is typing"
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60"
+          style={{ animationDelay: `${i * 0.16}s`, animationDuration: '0.9s' }}
+        />
+      ))}
+    </span>
+  );
+}
+
 /**
- * Minimal markdown renderer for assistant replies. Supports paragraphs, bullet
- * and numbered lists, **bold**, and [label](link) — with in-app routes turned
- * into SPA navigation. Deliberately tiny to avoid a markdown dependency.
+ * Renders assistant markdown, but while a reply is streaming it reveals the text
+ * at a steady pace (a soft typewriter) so it reads smoothly regardless of how
+ * bursty the network chunks arrive.
+ */
+function StreamingMarkdown({ text, live }: { text: string; live: boolean }) {
+  const shown = useTypewriter(text, live);
+  return <Markdown text={shown} />;
+}
+
+/**
+ * Reveals `target` one slice at a time on each animation frame at a calm pace.
+ * The speed has a low floor and only accelerates a little when it falls behind,
+ * so it reads slowly and smoothly. It keeps revealing at that pace until caught
+ * up — even after the network stream finishes — rather than snapping to the end.
+ * Messages that were never live (history) render in full immediately.
+ */
+function useTypewriter(target: string, active: boolean): string {
+  const [, force] = useState(0);
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  const shownLen = useRef(active ? 0 : target.length);
+  const everLive = useRef(active);
+  if (active) everLive.current = true;
+
+  useEffect(() => {
+    // History bubble that was never streamed — show it all at once.
+    if (!everLive.current) {
+      shownLen.current = targetRef.current.length;
+      force((n) => n + 1);
+      return;
+    }
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const len = targetRef.current.length;
+      if (shownLen.current < len) {
+        const dt = now - last;
+        const backlog = len - shownLen.current;
+        // chars/sec: low floor, mild catch-up so it never lags too far behind.
+        const speed = Math.max(11, backlog * 1.6);
+        const advance = Math.max(1, Math.round((speed * dt) / 1000));
+        shownLen.current = Math.min(len, shownLen.current + advance);
+        force((n) => n + 1);
+        last = now;
+        raf = requestAnimationFrame(tick);
+      } else if (active) {
+        // Caught up but still streaming — wait for more text to arrive.
+        last = now;
+        raf = requestAnimationFrame(tick);
+      }
+      // Caught up and stream finished: nothing left to reveal, stop.
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
+
+  return targetRef.current.slice(0, shownLen.current);
+}
+
+/**
+ * Minimal markdown renderer for assistant replies. Supports headings (#–###),
+ * paragraphs, bullet and numbered lists, **bold**, [label](link) — with in-app
+ * routes turned into SPA navigation — and `---` dividers. Deliberately tiny to
+ * avoid a markdown dependency, but tuned for an easy-to-scan chat bubble.
  */
 function Markdown({ text }: { text: string }) {
   const navigate = useNavigate();
@@ -249,9 +365,17 @@ function Markdown({ text }: { text: string }) {
     if (!list) return;
     const Tag = list.ordered ? 'ol' : 'ul';
     blocks.push(
-      <Tag key={key} className={cn('my-1 space-y-1 pl-5', list.ordered ? 'list-decimal' : 'list-disc')}>
+      <Tag
+        key={key}
+        className={cn(
+          'my-1.5 space-y-1.5 pl-5 marker:text-muted-foreground',
+          list.ordered ? 'list-decimal' : 'list-disc',
+        )}
+      >
         {list.items.map((it, i) => (
-          <li key={i}>{renderInline(it, navigate)}</li>
+          <li key={i} className="pl-0.5 leading-relaxed">
+            {renderInline(it, navigate)}
+          </li>
         ))}
       </Tag>,
     );
@@ -260,6 +384,35 @@ function Markdown({ text }: { text: string }) {
 
   lines.forEach((raw, idx) => {
     const line = raw.trimEnd();
+
+    // Horizontal rule — a light divider between sections.
+    if (/^\s*([-*_])\1{2,}\s*$/.test(line)) {
+      flushList(`l-${idx}`);
+      blocks.push(<hr key={`hr-${idx}`} className="my-2.5 border-border/70" />);
+      return;
+    }
+
+    // Headings (#, ##, ###+). Rendered as clear, scannable section titles
+    // rather than leaking the raw `###` into the bubble.
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      flushList(`l-${idx}`);
+      const level = heading[1].length;
+      const body = heading[2].replace(/\s*#+\s*$/, '');
+      blocks.push(
+        <p
+          key={`h-${idx}`}
+          className={cn(
+            'font-semibold text-foreground first:mt-0',
+            level <= 1 ? 'mb-1 mt-3 text-[15px]' : 'mb-0.5 mt-2.5 text-[13px]',
+          )}
+        >
+          {renderInline(body, navigate)}
+        </p>,
+      );
+      return;
+    }
+
     const ordered = /^\s*\d+\.\s+/.test(line);
     const bullet = /^\s*[-*]\s+/.test(line);
     if (ordered || bullet) {
@@ -274,14 +427,14 @@ function Markdown({ text }: { text: string }) {
     flushList(`l-${idx}`);
     if (line.trim() === '') return;
     blocks.push(
-      <p key={`p-${idx}`} className="my-1 first:mt-0 last:mb-0 leading-relaxed">
+      <p key={`p-${idx}`} className="my-1.5 leading-relaxed first:mt-0 last:mb-0">
         {renderInline(line, navigate)}
       </p>,
     );
   });
   flushList('l-end');
 
-  return <div className="space-y-0.5">{blocks}</div>;
+  return <div className="space-y-0.5 text-[13px]">{blocks}</div>;
 }
 
 /** Inline parsing: **bold** and [label](link). */

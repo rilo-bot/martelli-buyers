@@ -14,12 +14,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageTransition, Stagger, StaggerItem } from '@/components/motion';
+import { MediaUploader } from '@/components/MediaUploader';
 import {
-  ArrowLeft, Home, MapPin, DollarSign, Send, MessageSquare, BedDouble, Bath, Car,
-  ExternalLink, Star, Upload, Trash2, ImageIcon, Film, Check, Loader2, X,
+  ArrowLeft, MapPin, DollarSign, Send, MessageSquare, BedDouble, Bath, Car,
+  ExternalLink, Star, Trash2, Check, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { uploadFile, deleteUpload, isVideoUrl } from '@/lib/upload';
 import { toast } from 'sonner';
 import { PROPERTY_STATUS_ORDER, PROPERTY_STATUS_PILL } from '@/lib/statusStyles';
 import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
@@ -46,12 +46,8 @@ export default function PropertyDetailPage() {
 
   const [commentText, setCommentText] = useState('');
   const [clientVisible, setClientVisible] = useState(true);
-  const [uploads, setUploads] = useState<{ id: string; name: string; percent: number }[]>([]);
-  const [dragActive, setDragActive] = useState(false);
-  const [lightbox, setLightbox] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useDetailBreadcrumb(property ? (property.address || property.suburb || 'Property') : null);
 
@@ -97,43 +93,6 @@ export default function PropertyDetailPage() {
           toast.error('Failed to save notes. Please try again.');
         }
       }, 600);
-    },
-    [id, updateProperty],
-  );
-
-  const handleFiles = useCallback(
-    async (files: FileList | null) => {
-      if (!files?.length || !id) return;
-      for (const file of Array.from(files)) {
-        const tempId = crypto.randomUUID();
-        setUploads((u) => [...u, { id: tempId, name: file.name, percent: 0 }]);
-        try {
-          const url = await uploadFile(file, {
-            scope: 'property',
-            scopeId: id,
-            onProgress: (p) => setUploads((u) => u.map((x) => (x.id === tempId ? { ...x, percent: p } : x))),
-          });
-          // Read the freshest photos so sequential uploads don't clobber each other.
-          const current = usePropertiesStore.getState().properties.find((p) => p.id === id)?.photos ?? [];
-          await updateProperty(id, { photos: [...current, url] });
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : `Failed to upload ${file.name}.`);
-        } finally {
-          setUploads((u) => u.filter((x) => x.id !== tempId));
-        }
-      }
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    },
-    [id, updateProperty],
-  );
-
-  const handleDeleteMedia = useCallback(
-    async (url: string) => {
-      if (!id) return;
-      const current = usePropertiesStore.getState().properties.find((p) => p.id === id)?.photos ?? [];
-      await updateProperty(id, { photos: current.filter((u) => u !== url) });
-      deleteUpload(url).catch(() => {}); // best-effort object cleanup
-      setLightbox((cur) => (cur === url ? null : cur));
     },
     [id, updateProperty],
   );
@@ -303,83 +262,12 @@ export default function PropertyDetailPage() {
 
         {/* MEDIA */}
         <TabsContent value="media">
-          <div className="space-y-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
-            />
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={(e) => { e.preventDefault(); setDragActive(false); handleFiles(e.dataTransfer.files); }}
-              className={cn(
-                'flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-10 cursor-pointer text-center transition-colors',
-                dragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30',
-              )}
-            >
-              <Upload className={cn('h-7 w-7 mb-2 transition-colors', dragActive ? 'text-primary' : 'text-muted-foreground/50')} />
-              <p className="text-sm font-medium">{dragActive ? 'Drop to upload' : 'Click to upload or drag & drop'}</p>
-              <p className="text-xs text-muted-foreground mt-1">Photos (≤15MB) and videos (≤200MB)</p>
-            </div>
-
-            {/* In-flight uploads */}
-            {uploads.length > 0 && (
-              <div className="space-y-2">
-                {uploads.map((u) => (
-                  <div key={u.id} className="flex items-center gap-3 text-sm">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-                    <span className="truncate flex-1">{u.name}</span>
-                    <div className="h-1.5 w-32 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-primary transition-all" style={{ width: `${u.percent}%` }} />
-                    </div>
-                    <span className="text-xs text-muted-foreground tabular-nums w-9 text-right">{u.percent}%</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Gallery */}
-            {photos.length === 0 && uploads.length === 0 ? (
-              <EmptyState
-                icon={ImageIcon}
-                title="No media yet"
-                description="Upload photos or videos of this property to share with your client."
-                compact
-              />
-            ) : (
-              <Stagger className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" step={0.03}>
-                {photos.map((url) => (
-                  <StaggerItem key={url} className="group relative aspect-square overflow-hidden rounded-lg border border-border/60 bg-muted">
-                    {isVideoUrl(url) ? (
-                      <video src={url} controls className="h-full w-full object-cover" />
-                    ) : (
-                      <button type="button" onClick={() => setLightbox(url)} className="h-full w-full">
-                        <img src={url} alt="Property media" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                      </button>
-                    )}
-                    {isVideoUrl(url) && (
-                      <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white flex items-center gap-1 pointer-events-none">
-                        <Film className="h-3 w-3" /> Video
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteMedia(url)}
-                      className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive"
-                      aria-label="Delete media"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </StaggerItem>
-                ))}
-              </Stagger>
-            )}
-          </div>
+          <MediaUploader
+            value={photos}
+            onChange={(next) => updateProperty(id, { photos: next })}
+            scope="property"
+            scopeId={id}
+          />
         </TabsContent>
 
         {/* COMMENTS */}
@@ -480,23 +368,6 @@ export default function PropertyDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Lightbox */}
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
-          onClick={() => setLightbox(null)}
-        >
-          <button
-            type="button"
-            className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <img src={lightbox} alt="Property media" className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
-        </div>
-      )}
 
       {/* Delete confirmation */}
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>

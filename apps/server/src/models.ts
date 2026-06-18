@@ -349,6 +349,7 @@ const OffMarketPropertySchema = new Schema(
     sourceAgentName: { type: String, default: '' },
     attachments: { type: [String], default: [] },
     usedInDealIds: { type: [String], default: [] },
+    status: { type: String, default: 'available' },
     isActive: { type: Boolean, default: true },
   },
   baseOpts,

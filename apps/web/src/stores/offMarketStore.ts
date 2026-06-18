@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { resource } from '@/lib/api';
-import type { OffMarketProperty } from '@/types';
+import type { OffMarketProperty, OffMarketStatus } from '@/types';
 
 const api = resource<OffMarketProperty>('off-market');
 
@@ -13,7 +13,7 @@ interface OffMarketState {
   updateProperty: (id: string, updates: Partial<OffMarketProperty>) => Promise<void>;
   deleteProperty: (id: string) => Promise<void>;
   linkToDeal: (propertyId: string, dealId: string) => Promise<void>;
-  toggleActive: (id: string) => Promise<void>;
+  setStatus: (id: string, status: OffMarketStatus) => Promise<void>;
 }
 
 export const useOffMarketStore = create<OffMarketState>()((set, get) => ({
@@ -53,9 +53,8 @@ export const useOffMarketStore = create<OffMarketState>()((set, get) => ({
     return get().updateProperty(propertyId, { usedInDealIds: [...prop.usedInDealIds, dealId] });
   },
 
-  toggleActive: (id) => {
-    const prop = get().properties.find((p) => p.id === id);
-    if (!prop) return Promise.resolve();
-    return get().updateProperty(id, { isActive: !prop.isActive });
-  },
+  // Keep the legacy isActive flag in sync with the richer status so the
+  // "Active Off-Market" stat and any older consumers stay correct.
+  setStatus: (id, status) =>
+    get().updateProperty(id, { status, isActive: status === 'available' || status === 'under_offer' }),
 }));

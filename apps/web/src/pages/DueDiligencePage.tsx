@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDueDiligenceStore } from '@/stores/dueDiligenceStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
@@ -32,6 +32,7 @@ export default function DueDiligencePage() {
   const defaultPropertyId = searchParams.get('propertyId') ?? '';
 
   const records = useDueDiligenceStore((s) => s.records);
+  const loaded = useDueDiligenceStore((s) => s.loaded);
   const addRecord = useDueDiligenceStore((s) => s.addRecord);
   const updateRecord = useDueDiligenceStore((s) => s.updateRecord);
   const addEvidence = useDueDiligenceStore((s) => s.addEvidence);
@@ -83,6 +84,22 @@ export default function DueDiligencePage() {
     });
     setShowCreateDD(true);
   };
+
+  // Arriving from a Buyer Journey via ?propertyId= should land directly on the
+  // linked DD record (not the list). If no record exists yet for that property,
+  // open the create sheet pre-filled instead. Guarded so it fires once per
+  // propertyId, leaving the user free to navigate back to the list afterwards.
+  const autoHandledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!defaultPropertyId || !loaded || autoHandledFor.current === defaultPropertyId) return;
+    autoHandledFor.current = defaultPropertyId;
+    const linked = records.find((r) => r.propertyId === defaultPropertyId);
+    if (linked) {
+      setSelectedRecordId(linked.id);
+    } else {
+      openCreate();
+    }
+  }, [defaultPropertyId, loaded, records]);
 
   const handleCreateDD = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,4 +1,4 @@
-import type { DealStage, PropertyStatus } from '@/types';
+import type { DealStage, PropertyStatus, OffMarketStatus } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Single source of truth for stage/status labels + pill colours, so the same
@@ -75,4 +75,25 @@ export const PROPERTY_STATUS_DOT: Record<PropertyStatus, string> = {
   rejected: 'bg-muted-foreground',
   offer_placed: 'bg-orange-500',
   purchased: 'bg-emerald-500',
+};
+
+export const OFF_MARKET_STATUS_ORDER: OffMarketStatus[] = [
+  'available', 'under_offer', 'sold', 'withdrawn', 'archived',
+];
+
+export const OFF_MARKET_STATUS_LABELS: Record<OffMarketStatus, string> = {
+  available: 'Available',
+  under_offer: 'Under Offer',
+  sold: 'Sold',
+  withdrawn: 'Withdrawn',
+  archived: 'Archived',
+};
+
+/** Soft tinted pill (with border) for an off-market property status. */
+export const OFF_MARKET_STATUS_PILL: Record<OffMarketStatus, string> = {
+  available: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25',
+  under_offer: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25',
+  sold: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/25',
+  withdrawn: 'bg-muted text-muted-foreground border-border',
+  archived: 'bg-muted text-muted-foreground border-border',
 };

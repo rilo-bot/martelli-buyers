@@ -11,6 +11,8 @@ export type UserRole = 'admin' | 'staff' | 'client' | 'agent';
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'agreement_sent' | 'active' | 'won' | 'lost';
 export type DealStage = 'qualification' | 'search' | 'shortlisting' | 'due_diligence' | 'offer' | 'settlement' | 'complete';
 export type PropertyStatus = 'suggested' | 'interested' | 'viewed' | 'shortlisted' | 'rejected' | 'offer_placed' | 'purchased';
+/** Market availability of an off-market property in the central database. */
+export type OffMarketStatus = 'available' | 'under_offer' | 'sold' | 'withdrawn' | 'archived';
 export type AgentGeo = 'East' | 'West' | 'North' | 'Central';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
 export type EmailTemplateCategory = 'welcome' | 'dd_request' | 'status_update' | 'requirement_blast' | 'thank_you' | 'post_settlement' | 'other';
@@ -97,6 +99,22 @@ export function outranksRole(
   const rr = roleRank(requesterRole);
   const kr = roleRank(roleKey);
   return rr !== undefined && kr !== undefined && kr < rr;
+}
+
+/**
+ * The built-in role with full administrative authority — top of the management
+ * hierarchy below the super admin. Only the super admin may edit or delete it.
+ */
+export const ADMIN_ROLE_KEY = 'admin';
+
+/**
+ * May a requester who holds `team:manage` edit or delete the role `roleKey`?
+ * The super admin can manage any role; a regular admin can manage every role
+ * EXCEPT the built-in Admin role, so they can't alter (or escalate within) their
+ * own tier. Shared by server enforcement (routes/roles.ts) and the Roles panel.
+ */
+export function canManageRole(roleKey: string, requesterIsSuperAdmin: boolean): boolean {
+  return requesterIsSuperAdmin || roleKey !== ADMIN_ROLE_KEY;
 }
 
 const OPERATIONAL_FULL = ['leads', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence', 'documents'];
@@ -363,6 +381,7 @@ export interface OffMarketProperty {
   sourceAgentName: string;
   attachments: string[];
   usedInDealIds: string[];
+  status: OffMarketStatus;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

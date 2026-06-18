@@ -100,3 +100,14 @@ export async function deleteUpload(url: string): Promise<void> {
 export function isVideoUrl(url: string): boolean {
   return /\.(mp4|webm|mov|m4v|ogg)(\?|$)/i.test(url);
 }
+
+/** True if a stored URL points at a document (PDF, Word, Excel, etc.) by extension. */
+export function isDocUrl(url: string): boolean {
+  return /\.(pdf|docx?|xlsx?|pptx?|txt|csv)(\?|$)/i.test(url);
+}
+
+/** Uppercased file extension from a stored URL (e.g. "PDF"), for labelling document tiles. */
+export function fileExtFromUrl(url: string): string {
+  const m = url.split('?')[0].match(/\.([a-z0-9]+)$/i);
+  return m ? m[1].toUpperCase() : 'FILE';
+}

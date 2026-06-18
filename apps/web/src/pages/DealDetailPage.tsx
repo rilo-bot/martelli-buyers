@@ -34,6 +34,7 @@ import type { DealStage, PropertyStatus, ConsentStatus, OffMarketProperty } from
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
 import { EmailList } from '@/components/EmailList';
+import { MediaUploader } from '@/components/MediaUploader';
 import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
 import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
 import { useConfigStore } from '@/stores/configStore';
@@ -122,6 +123,8 @@ export default function DealDetailPage() {
     carparks: '1', landSize: '', propertyType: '', notes: '', listingUrl: '',
     sourceAgentName: '', isOffMarket: false,
   });
+  // Media uploaded while filling in a new property — attached on submit.
+  const [propMedia, setPropMedia] = useState<string[]>([]);
   const [invForm, setInvForm] = useState({
     type: 'engagement' as 'engagement' | 'milestone' | 'final',
     description: '', amount: '', dueDate: '',
@@ -200,11 +203,12 @@ export default function DealDetailPage() {
       agentId: '',
       sourceAgentName: propForm.sourceAgentName.trim(),
       listingUrl: propForm.listingUrl.trim(),
-      photos: [],
+      photos: propMedia,
       isOffMarket: propForm.isOffMarket,
       offMarketPropertyId: '',
     });
     setPropForm({ address: '', suburb: '', priceGuide: '', bedrooms: '3', bathrooms: '2', carparks: '1', landSize: '', propertyType: '', notes: '', listingUrl: '', sourceAgentName: '', isOffMarket: false });
+    setPropMedia([]);
     setShowAddProperty(false);
   };
 
@@ -540,7 +544,7 @@ export default function DealDetailPage() {
             to={dealProperties[0] ? `/due-diligence?propertyId=${dealProperties[0].id}` : '/due-diligence'}
             className="ml-auto font-semibold underline-offset-2 hover:underline"
           >
-            {ddStatus.recordCount === 0 ? 'Create DD record' : 'Open due diligence'}
+            {ddStatus.recordCount === 0 ? 'Create DD record' : 'Open DD record →'}
           </Link>
         </div>
       )}
@@ -831,7 +835,7 @@ export default function DealDetailPage() {
             )}
           </div>
 
-          <Sheet open={showAddProperty} onOpenChange={(o) => { setShowAddProperty(o); if (!o) { setAddPropMode('new'); setOmSearch(''); } }}>
+          <Sheet open={showAddProperty} onOpenChange={(o) => { setShowAddProperty(o); if (!o) { setAddPropMode('new'); setOmSearch(''); setPropMedia([]); } }}>
             <SheetContent size="lg">
               <SheetHeader><SheetTitle>Add Property to Journey</SheetTitle></SheetHeader>
 
@@ -958,6 +962,10 @@ export default function DealDetailPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="propNotes">Notes</Label>
                   <Textarea id="propNotes" value={propForm.notes} onChange={(e) => setPropForm((f) => ({ ...f, notes: e.target.value }))} rows={2} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Photos, videos & documents</Label>
+                  <MediaUploader value={propMedia} onChange={setPropMedia} scope="property" compact />
                 </div>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input type="checkbox" checked={propForm.isOffMarket} onChange={(e) => setPropForm((f) => ({ ...f, isOffMarket: e.target.checked }))} className="rounded" />
