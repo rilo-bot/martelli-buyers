@@ -1,12 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Navigate, Link, useSearchParams } from 'react-router-dom';
+import { request } from '@/lib/api';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useOffMarketStore } from '@/stores/offMarketStore';
 import { useInvoicesStore } from '@/stores/invoicesStore';
 import { useCompanySettingsStore } from '@/stores/companySettingsStore';
-import { COMPANY_SETTINGS_DEFAULTS } from '@/types';
+import { COMPANY_SETTINGS_DEFAULTS, visibleJourneyTabKeys } from '@/types';
+import { usePermissions } from '@/lib/permissions';
 import { useCommentsStore } from '@/stores/commentsStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -22,7 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw, Download, Copy, FileSignature, Building2, Search, Check, Pencil, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw, Eye, Copy, FileSignature, Building2, Search, Check, Pencil, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -42,7 +44,9 @@ import { useXeroStore } from '@/stores/xeroStore';
 import { useOffersStore } from '@/stores/offersStore';
 import { useTasksStore } from '@/stores/tasksStore';
 import { usePurchasesStore } from '@/stores/purchasesStore';
-import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement, getAgreementContent } from '@/lib/documents';
+import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement, getAgreementContent, invoicePdfPreviewPath, agreementPdfPreviewPath } from '@/lib/documents';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
 import { pushInvoiceToXero, refreshInvoiceFromXero } from '@/lib/xero';
 import { OffersTab } from '@/pages/deal/OffersTab';
 import { TasksTab } from '@/pages/deal/TasksTab';
@@ -89,9 +93,18 @@ export default function DealDetailPage() {
   const dealForCrumb = useMemo(() => deals.find((d) => d.id === id), [deals, id]);
   useDetailBreadcrumb(dealForCrumb ? dealForCrumb.clientName : null);
 
+  // Per-role tab visibility: only tabs the user's role is granted are shown.
+  const { can } = usePermissions();
+  const allowedTabs = useMemo(() => visibleJourneyTabKeys(can), [can]);
+
   // Active tab is mirrored in the URL (?tab=) so refresh/deep-links land correctly.
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'overview';
+  const requestedTab = searchParams.get('tab') || 'overview';
+  // If the requested tab isn't permitted (e.g. a stale deep-link), fall back to
+  // the first tab this role can see.
+  const activeTab = allowedTabs.has(requestedTab)
+    ? requestedTab
+    : ([...allowedTabs][0] ?? 'overview');
   const setActiveTab = (tab: string) => {
     const next = new URLSearchParams(searchParams);
     if (tab === 'overview') next.delete('tab'); else next.set('tab', tab);
@@ -103,6 +116,8 @@ export default function DealDetailPage() {
   const [omSearch, setOmSearch] = useState('');
   const [linkingOmId, setLinkingOmId] = useState<string | null>(null);
   const [showAddInvoice, setShowAddInvoice] = useState(false);
+  const [viewAgreement, setViewAgreement] = useState(false);
+  const [viewInvoice, setViewInvoice] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [showAISummary, setShowAISummary] = useState(false);
   const [showReenableConsent, setShowReenableConsent] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
@@ -143,10 +158,29 @@ export default function DealDetailPage() {
   const purchases = usePurchasesStore((s) => s.purchases);
   const hasPurchase = useMemo(() => purchases.some((p) => p.dealId === id), [purchases, id]);
   const dealInvoices = useMemo(() => invoices.filter((inv) => inv.dealId === id), [invoices, id]);
+  // Comparables live per-property inside DD; fetch the journey-level aggregate so the
+  // tab label can show a live count like the other tabs. Mirrors ComparablesTab's source.
+  const [comparablesCount, setComparablesCount] = useState(0);
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    request<{ comparableSales?: unknown[] }[]>('GET', `/api/journeys/${id}/comparables`)
+      .then((data) => {
+        if (active) setComparablesCount(data.reduce((s, r) => s + (r.comparableSales?.length ?? 0), 0));
+      })
+      .catch(() => { if (active) setComparablesCount(0); });
+    return () => { active = false; };
+  }, [id]);
   const dealComments = useMemo(() => comments.filter((c) => c.dealId === id && !c.propertyId), [comments, id]);
   const dealSummaries = useMemo(() => summaries.filter((s) => s.dealId === id), [summaries, id]);
   const emailMessages = useEmailMessagesStore((s) => s.emails);
   const dealEmails = useMemo(() => emailMessages.filter((e) => e.dealId === id), [emailMessages, id]);
+
+  // Agents connected to this journey = source agents on the journey's properties.
+  const connectedAgents = useMemo(() => {
+    const agentIds = new Set(dealProperties.map((p) => p.agentId).filter(Boolean));
+    return agents.filter((a) => agentIds.has(a.id));
+  }, [agents, dealProperties]);
 
   const emailRecipients: EmailRecipient[] = useMemo(() => {
     const list: EmailRecipient[] = [];
@@ -158,13 +192,13 @@ export default function DealDetailPage() {
         type: 'client',
       });
     }
-    agents.forEach((a) => {
+    connectedAgents.forEach((a) => {
       if (a.email) {
         list.push({ id: a.id, name: `${a.firstName} ${a.lastName}`, email: a.email, type: 'agent' });
       }
     });
     return list;
-  }, [deal, agents]);
+  }, [deal, connectedAgents]);
 
   const emailVariables: Record<string, string> = useMemo(() => ({
     clientName: deal?.clientName ?? '',
@@ -565,22 +599,26 @@ export default function DealDetailPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="h-auto max-w-full flex-nowrap gap-1 overflow-x-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="properties">Properties ({dealProperties.length})</TabsTrigger>
-          <TabsTrigger value="offers">Offers ({dealOffers.length})</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks ({openTaskCount})</TabsTrigger>
-          <TabsTrigger value="comparables">Comparables</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices ({dealInvoices.length})</TabsTrigger>
-          <TabsTrigger value="purchase">
-            Purchase{hasPurchase && <Check className="ml-1 h-3.5 w-3.5 text-emerald-500" />}
-          </TabsTrigger>
-          <TabsTrigger value="comments">Comments ({dealComments.length})</TabsTrigger>
-          <TabsTrigger value="ai">AI Summaries ({dealSummaries.length})</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="emails">
-            <Mail className="h-3.5 w-3.5 mr-1" />
-            Emails{dealEmails.length > 0 ? ` (${dealEmails.length})` : ''}
-          </TabsTrigger>
+          {allowedTabs.has('overview') && <TabsTrigger value="overview">Overview</TabsTrigger>}
+          {allowedTabs.has('properties') && <TabsTrigger value="properties">Properties ({dealProperties.length})</TabsTrigger>}
+          {allowedTabs.has('offers') && <TabsTrigger value="offers">Offers ({dealOffers.length})</TabsTrigger>}
+          {allowedTabs.has('tasks') && <TabsTrigger value="tasks">Tasks ({openTaskCount})</TabsTrigger>}
+          {allowedTabs.has('comparables') && <TabsTrigger value="comparables">Comparables ({comparablesCount})</TabsTrigger>}
+          {allowedTabs.has('invoices') && <TabsTrigger value="invoices">Invoices ({dealInvoices.length})</TabsTrigger>}
+          {allowedTabs.has('purchase') && (
+            <TabsTrigger value="purchase">
+              Purchase{hasPurchase && <Check className="ml-1 h-3.5 w-3.5 text-emerald-500" />}
+            </TabsTrigger>
+          )}
+          {allowedTabs.has('comments') && <TabsTrigger value="comments">Comments ({dealComments.length})</TabsTrigger>}
+          {allowedTabs.has('ai') && <TabsTrigger value="ai">AI Summaries ({dealSummaries.length})</TabsTrigger>}
+          {allowedTabs.has('timeline') && <TabsTrigger value="timeline">Timeline</TabsTrigger>}
+          {allowedTabs.has('emails') && (
+            <TabsTrigger value="emails">
+              <Mail className="h-3.5 w-3.5 mr-1" />
+              Emails{dealEmails.length > 0 ? ` (${dealEmails.length})` : ''}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* OVERVIEW */}
@@ -667,8 +705,8 @@ export default function DealDetailPage() {
                         Edit
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => downloadAgreementPdf(id)}>
-                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                    <Button size="sm" variant="outline" onClick={() => setViewAgreement(true)}>
+                      <Eye className="mr-1.5 h-3.5 w-3.5" />
                       {deal.agreementStatus === 'signed' ? 'Signed PDF' : 'Preview PDF'}
                     </Button>
                   </div>
@@ -1045,8 +1083,8 @@ export default function DealDetailPage() {
                             <p className="text-xs text-muted-foreground">incl. GST</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleDownloadInvoice(inv.id, inv.invoiceNumber)}>
-                              <Download className="mr-1.5 h-3.5 w-3.5" />
+                            <Button size="sm" variant="outline" onClick={() => setViewInvoice({ id: inv.id, invoiceNumber: inv.invoiceNumber })}>
+                              <Eye className="mr-1.5 h-3.5 w-3.5" />
                               PDF
                             </Button>
                             <Button
@@ -1403,8 +1441,8 @@ export default function DealDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* Agent cards */}
-              {agents.slice(0, 3).map((agent) => (
+              {/* Agent cards — only agents connected to this journey's properties */}
+              {connectedAgents.map((agent) => (
                 <Card key={agent.id} className="border-border/60 hover:border-primary/30 hover:shadow-sm transition-all">
                   <CardContent className="pt-4 pb-4">
                     <div className="flex items-center gap-3">
@@ -1435,14 +1473,14 @@ export default function DealDetailPage() {
                 </Card>
               ))}
 
-              {agents.length === 0 && (
+              {connectedAgents.length === 0 && (
                 <Card className="border-dashed border-border/60 col-span-full">
                   <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
                     <Users className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                    <p className="text-sm text-muted-foreground">No agents in the system yet.</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Add agents via the Agents page to email them from here.</p>
+                    <p className="text-sm text-muted-foreground">No agents connected to this journey yet.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Add a property with a source agent to email them from here.</p>
                     <Button asChild size="sm" variant="outline" className="mt-3">
-                      <Link to="/agents">Go to Agents</Link>
+                      <Link to="/properties">Go to Properties</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -1696,6 +1734,30 @@ export default function DealDetailPage() {
         variables={emailVariables}
         contextLabel={deal.clientName}
       />
+
+      {viewAgreement && (
+        <DocumentViewer
+          open={viewAgreement}
+          onClose={() => setViewAgreement(false)}
+          title="Agency agreement"
+          mimeType="application/pdf"
+          previewPath={agreementPdfPreviewPath(id)}
+          canDownload={canDownloadDoc(deal.assignedTo, currentUser)}
+          onDownload={() => downloadAgreementPdf(id)}
+        />
+      )}
+
+      {viewInvoice && (
+        <DocumentViewer
+          open={!!viewInvoice}
+          onClose={() => setViewInvoice(null)}
+          title={`Invoice ${viewInvoice.invoiceNumber || ''}`.trim()}
+          mimeType="application/pdf"
+          previewPath={invoicePdfPreviewPath(viewInvoice.id)}
+          canDownload={canDownloadDoc(deal.assignedTo, currentUser)}
+          onDownload={() => handleDownloadInvoice(viewInvoice.id, viewInvoice.invoiceNumber)}
+        />
+      )}
     </div>
   );
 }

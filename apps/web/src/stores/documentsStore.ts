@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { resource } from '@/lib/api';
+import { resource, request } from '@/lib/api';
 import { uploadFileWithKey } from '@/lib/upload';
 import type { Document, DocumentCategory, DocumentEntityType } from '@/types';
 
@@ -28,6 +28,16 @@ interface DocumentsState {
   /** Upload a file to S3 then create its Document record linked to the target. */
   uploadAndAttach: (file: File, target: AttachTarget) => Promise<Document>;
   deleteDocument: (id: string) => Promise<void>;
+  /**
+   * Resolve a short-lived presigned URL to view/download a document. The bucket
+   * is private, so `doc.url` won't open directly — always go through this.
+   * Owner/admin only on the server (anti-download gate); non-owners get a 403.
+   */
+  fileUrl: (id: string, opts?: { download?: boolean }) => Promise<string>;
+  /** API path that streams a document inline for in-app preview (no save). */
+  previewPath: (id: string) => string;
+  /** Fetch a presigned save URL (owner/admin only) and trigger a browser download. */
+  triggerFileDownload: (id: string) => Promise<void>;
   /** Documents currently attached to a given entity (local cache). */
   forEntity: (entityType: string, entityId: string) => Document[];
 }
@@ -73,6 +83,26 @@ export const useDocumentsStore = create<DocumentsState>()((set, get) => ({
   deleteDocument: async (id) => {
     await api.remove(id);
     set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
+  },
+
+  fileUrl: async (id, opts) => {
+    const path = `/api/documents/${id}/download${opts?.download ? '?download=1' : ''}`;
+    const { url } = await request<{ url: string }>('GET', path);
+    return url;
+  },
+
+  previewPath: (id) => `/api/documents/${id}/preview`,
+
+  triggerFileDownload: async (id) => {
+    // Presigned URL carries Content-Disposition: attachment, so navigating to it
+    // saves the file rather than opening it. Owner/admin only (server-enforced).
+    const url = await get().fileUrl(id, { download: true });
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   },
 
   forEntity: (entityType, entityId) =>

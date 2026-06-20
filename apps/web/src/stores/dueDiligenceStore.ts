@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { resource } from '@/lib/api';
 import { deleteUpload } from '@/lib/upload';
+import { DD_CHECKLIST_TEMPLATE_DEFAULTS } from '@/types';
 import type { DueDiligence, EvidenceItem, ComparableSale, DDChecklistItem, ChecklistItemStatus } from '@/types';
+import { useCompanySettingsStore } from '@/stores/companySettingsStore';
 
 const api = resource<DueDiligence>('due-diligence');
 
@@ -15,24 +17,6 @@ export interface DealDdStatus {
   complete: boolean;
   recordCount: number;
 }
-
-const DEFAULT_CHECKLIST: Omit<DDChecklistItem, 'completedBy' | 'completedAt'>[] = [
-  { id: 'dd-1', label: 'Auckland Council flood map reviewed', status: 'pending', notes: '' },
-  { id: 'dd-2', label: 'Natural hazards map reviewed (NHRP)', status: 'pending', notes: '' },
-  { id: 'dd-3', label: 'LIM report obtained or ordered', status: 'pending', notes: '' },
-  { id: 'dd-4', label: 'Title search completed (LINZ)', status: 'pending', notes: '' },
-  { id: 'dd-5', label: 'Body corporate minutes reviewed (if applicable)', status: 'pending', notes: '' },
-  { id: 'dd-6', label: 'Comparable sales analysis completed (min 5)', status: 'pending', notes: '' },
-  { id: 'dd-7', label: 'Building inspection arranged/completed', status: 'pending', notes: '' },
-  { id: 'dd-8', label: 'Lawyer reviewed contract', status: 'pending', notes: '' },
-  { id: 'dd-9', label: 'Finance/mortgage confirmed', status: 'pending', notes: '' },
-  { id: 'dd-10', label: 'Council rates and outgoings confirmed', status: 'pending', notes: '' },
-  { id: 'dd-11', label: 'Rental appraisal obtained (if investment)', status: 'pending', notes: '' },
-  { id: 'dd-12', label: 'Zoning and development overlay checked', status: 'pending', notes: '' },
-  { id: 'dd-13', label: 'OIA (Overseas Investment Act) compliance checked', status: 'pending', notes: '' },
-  { id: 'dd-14', label: 'Any easements or covenants noted and reviewed', status: 'pending', notes: '' },
-  { id: 'dd-15', label: 'Settlement date and conditions confirmed', status: 'pending', notes: '' },
-];
 
 interface DueDiligenceState {
   records: DueDiligence[];
@@ -142,8 +126,24 @@ export const useDueDiligenceStore = create<DueDiligenceState>()((set, get) => ({
     });
   },
 
-  generateDefaultChecklist: () =>
-    DEFAULT_CHECKLIST.map((item) => ({ ...item, completedBy: '', completedAt: '' })),
+  // Snapshot the org's enabled template items into a fresh checklist. Reads the
+  // admin-configured template from company settings (Settings → Due Diligence);
+  // falls back to the full default set if settings haven't loaded or the org has
+  // no template yet, so behaviour is unchanged until an admin customises it.
+  generateDefaultChecklist: () => {
+    const template = useCompanySettingsStore.getState().settings?.ddChecklistTemplate;
+    const source = template && template.length > 0 ? template : DD_CHECKLIST_TEMPLATE_DEFAULTS;
+    return source
+      .filter((item) => item.enabled)
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        status: 'pending' as ChecklistItemStatus,
+        notes: '',
+        completedBy: '',
+        completedAt: '',
+      }));
+  },
 
   getRecordForProperty: (propertyId) => get().records.find((r) => r.propertyId === propertyId),
 

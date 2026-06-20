@@ -1,5 +1,5 @@
 import mongoose, { Schema, model } from 'mongoose';
-import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
+import { COMPANY_SETTINGS_DEFAULTS, DD_CHECKLIST_TEMPLATE_DEFAULTS } from '@rilo/shared';
 
 /* ───────────────────────── shared options ───────────────────────────── */
 
@@ -69,6 +69,16 @@ const DDChecklistItemSchema = new Schema(
     notes: { type: String, default: '' },
     completedBy: { type: String, default: '' },
     completedAt: { type: String, default: '' },
+  },
+  sub,
+);
+
+// One row of the org-wide DD audit-checklist template (on CompanySettings).
+const DDChecklistTemplateItemSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    label: { type: String, default: '' },
+    enabled: { type: Boolean, default: true },
   },
   sub,
 );
@@ -500,6 +510,11 @@ const CompanySettingsSchema = new Schema(
     emailLogoUrl: { type: String, default: COMPANY_SETTINGS_DEFAULTS.emailLogoUrl },
     emailSignatureHtml: { type: String, default: COMPANY_SETTINGS_DEFAULTS.emailSignatureHtml },
     emailBrandingEnabled: { type: Boolean, default: COMPANY_SETTINGS_DEFAULTS.emailBrandingEnabled },
+    // Fresh copy per document so the shared default array is never mutated.
+    ddChecklistTemplate: {
+      type: [DDChecklistTemplateItemSchema],
+      default: () => DD_CHECKLIST_TEMPLATE_DEFAULTS.map((i) => ({ ...i })),
+    },
   },
   baseOpts,
 );

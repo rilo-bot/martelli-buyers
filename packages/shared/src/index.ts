@@ -60,10 +60,59 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'team', label: 'Team & Roles', actions: ['view', 'manage'] },
 ];
 
+/* ──────────────────── Buyer-journey tab visibility ───────────────────────
+ * Each tab on the Buyer Journey detail page can be shown or hidden per role.
+ * The gating permissions are "journeyTab:<tabKey>" strings so they live in the
+ * same role-permission matrix as every other permission — no separate system.
+ * ------------------------------------------------------------------------- */
+
+/** Module key under which the per-tab permissions are grouped. */
+export const JOURNEY_TAB_MODULE_KEY = 'journeyTab';
+
+export interface JourneyTabDef {
+  /** Tab id used in the URL (?tab=) and as the permission suffix. */
+  key: string;
+  label: string;
+}
+
+/** Buyer-journey detail tabs, in display order. */
+export const JOURNEY_TABS: JourneyTabDef[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'properties', label: 'Properties' },
+  { key: 'offers', label: 'Offers' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'comparables', label: 'Comparables' },
+  { key: 'invoices', label: 'Invoices' },
+  { key: 'purchase', label: 'Purchase' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'ai', label: 'AI Summaries' },
+  { key: 'timeline', label: 'Timeline' },
+  { key: 'emails', label: 'Emails' },
+];
+
+/** The permission string that gates a single journey tab. */
+export const journeyTabPerm = (tabKey: string): Permission => `${JOURNEY_TAB_MODULE_KEY}:${tabKey}`;
+
+/** Every journey-tab permission string (one per tab). */
+export const ALL_JOURNEY_TAB_PERMISSIONS: Permission[] = JOURNEY_TABS.map((t) => journeyTabPerm(t.key));
+
+/**
+ * Which journey tabs a user may see, given a permission predicate.
+ * Backward-compatible: a role that holds NONE of the tab permissions (e.g. one
+ * created before per-tab gating existed) sees every tab — gating only takes
+ * effect once at least one tab is explicitly granted to the role.
+ */
+export function visibleJourneyTabKeys(has: (perm: Permission) => boolean): Set<string> {
+  const held = JOURNEY_TABS.filter((t) => has(journeyTabPerm(t.key))).map((t) => t.key);
+  if (held.length === 0) return new Set(JOURNEY_TABS.map((t) => t.key));
+  return new Set(held);
+}
+
 /** Flat list of every valid permission string. */
-export const ALL_PERMISSIONS: Permission[] = PERMISSION_MODULES.flatMap((m) =>
-  m.actions.map((a) => `${m.key}:${a}`),
-);
+export const ALL_PERMISSIONS: Permission[] = [
+  ...PERMISSION_MODULES.flatMap((m) => m.actions.map((a) => `${m.key}:${a}`)),
+  ...ALL_JOURNEY_TAB_PERMISSIONS,
+];
 
 /** Always granted to any authenticated user, so a misconfigured role is never fully locked out. */
 export const ALWAYS_GRANTED: Permission[] = ['dashboard:view'];
@@ -128,6 +177,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     'invoices:view', 'invoices:create', 'invoices:edit', 'invoices:delete', 'invoices:send',
     'emails:view', 'emails:create', 'emails:edit', 'emails:delete', 'emails:send',
     'settings:view',
+    ...ALL_JOURNEY_TAB_PERMISSIONS,
   ],
   staff: [
     'dashboard:view',
@@ -135,6 +185,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     'invoices:view',
     'emails:view',
     'settings:view',
+    ...ALL_JOURNEY_TAB_PERMISSIONS,
   ],
 };
 
@@ -533,6 +584,20 @@ export interface DDChecklistItem {
   completedAt: string;
 }
 
+/**
+ * One row of the org-wide Due Diligence audit-checklist template (configured in
+ * Settings → Due Diligence). Admins choose which items appear by toggling
+ * `enabled`; each new DD record snapshots the enabled items into its own
+ * {@link DDChecklistItem} list, so editing the template never alters records
+ * already created. Display order follows array order.
+ */
+export interface DDChecklistTemplateItem {
+  id: string;
+  label: string;
+  /** When false the item is hidden — excluded from newly created DD records. */
+  enabled: boolean;
+}
+
 export interface ClientComment {
   id: string;
   dealId: string;
@@ -717,9 +782,38 @@ export interface CompanySettings {
   emailSignatureHtml: string;
   /** Master switch for the branded email shell. When false, emails send unwrapped. */
   emailBrandingEnabled: boolean;
+  /**
+   * Org-wide Due Diligence audit-checklist template. The enabled items are
+   * snapshotted into each new DD record's checklist. Defaults to
+   * {@link DD_CHECKLIST_TEMPLATE_DEFAULTS} (all items enabled).
+   */
+  ddChecklistTemplate: DDChecklistTemplateItem[];
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Default Due Diligence audit-checklist template — the items every org starts
+ * with, all enabled. Single source of truth for the Mongoose schema default,
+ * the DD record builder's fallback, and the Settings "reset to defaults".
+ */
+export const DD_CHECKLIST_TEMPLATE_DEFAULTS: DDChecklistTemplateItem[] = [
+  { id: 'dd-1', label: 'Auckland Council flood map reviewed', enabled: true },
+  { id: 'dd-2', label: 'Natural hazards map reviewed (NHRP)', enabled: true },
+  { id: 'dd-3', label: 'LIM report obtained or ordered', enabled: true },
+  { id: 'dd-4', label: 'Title search completed (LINZ)', enabled: true },
+  { id: 'dd-5', label: 'Body corporate minutes reviewed (if applicable)', enabled: true },
+  { id: 'dd-6', label: 'Comparable sales analysis completed (min 5)', enabled: true },
+  { id: 'dd-7', label: 'Building inspection arranged/completed', enabled: true },
+  { id: 'dd-8', label: 'Lawyer reviewed contract', enabled: true },
+  { id: 'dd-9', label: 'Finance/mortgage confirmed', enabled: true },
+  { id: 'dd-10', label: 'Council rates and outgoings confirmed', enabled: true },
+  { id: 'dd-11', label: 'Rental appraisal obtained (if investment)', enabled: true },
+  { id: 'dd-12', label: 'Zoning and development overlay checked', enabled: true },
+  { id: 'dd-13', label: 'OIA (Overseas Investment Act) compliance checked', enabled: true },
+  { id: 'dd-14', label: 'Any easements or covenants noted and reviewed', enabled: true },
+  { id: 'dd-15', label: 'Settlement date and conditions confirmed', enabled: true },
+];
 
 /**
  * Field defaults for {@link CompanySettings}. Single source of truth for the

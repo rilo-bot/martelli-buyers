@@ -20,7 +20,7 @@ import {
 import {
   ArrowLeft, Mail, Phone, Building2, FileText, Users, Edit, Check, X,
   DollarSign, ArrowRight, Search, Filter, ChevronDown, Loader2, Plug,
-  Paperclip, Trash2, Download, UploadCloud,
+  Paperclip, Trash2, Eye, UploadCloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -30,6 +30,8 @@ import type { Deal, Lead, DealStage, LeadStatus, Document } from '@/types';
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
 import { EmailList } from '@/components/EmailList';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
 import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
 import { useXeroStore } from '@/stores/xeroStore';
 import { pushClientToXero } from '@/lib/xero';
@@ -435,6 +437,8 @@ function DocumentsSection({ clientId }: { clientId: string }) {
   const documents = useDocumentsStore((s) => s.documents);
   const uploadAndAttach = useDocumentsStore((s) => s.uploadAndAttach);
   const deleteDocument = useDocumentsStore((s) => s.deleteDocument);
+  const previewPath = useDocumentsStore((s) => s.previewPath);
+  const triggerFileDownload = useDocumentsStore((s) => s.triggerFileDownload);
   const currentUser = useAuthStore((s) => s.currentUser);
   const hasS3 = useConfigStore((s) => s.hasS3);
   const { can } = usePermissions();
@@ -443,6 +447,7 @@ function DocumentsSection({ clientId }: { clientId: string }) {
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [viewDoc, setViewDoc] = useState<Document | null>(null);
 
   const canUpload = hasS3 && can('documents:create');
   const canDelete = can('documents:delete');
@@ -474,6 +479,16 @@ function DocumentsSection({ clientId }: { clientId: string }) {
     setUploading(false);
     if (failed > 0) toast.error(`${failed} file${failed === 1 ? '' : 's'} failed to upload.`);
     else toast.success(`${files.length} document${files.length === 1 ? '' : 's'} uploaded.`);
+  };
+
+  // Open the in-app viewer (preview-only for non-owners; the bucket is private
+  // and only owners/admins can obtain a saveable URL — enforced server-side).
+  const handleDownload = async (doc: Document) => {
+    try {
+      await triggerFileDownload(doc.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not download document.');
+    }
   };
 
   const handleDelete = async () => {
@@ -552,10 +567,14 @@ function DocumentsSection({ clientId }: { clientId: string }) {
                     {new Date(doc.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
                 </div>
-                <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary">
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer" download title="Download">
-                    <Download className="h-4 w-4" />
-                  </a>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                  onClick={() => setViewDoc(doc)}
+                  title="Preview"
+                >
+                  <Eye className="h-4 w-4" />
                 </Button>
                 {canDelete && (
                   <Button
@@ -597,6 +616,18 @@ function DocumentsSection({ clientId }: { clientId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {viewDoc && (
+        <DocumentViewer
+          open={!!viewDoc}
+          onClose={() => setViewDoc(null)}
+          title={viewDoc.name}
+          mimeType={viewDoc.mimeType}
+          previewPath={previewPath(viewDoc.id)}
+          canDownload={canDownloadDoc(viewDoc.uploadedBy, currentUser)}
+          onDownload={() => handleDownload(viewDoc)}
+        />
+      )}
     </Card>
   );
 }

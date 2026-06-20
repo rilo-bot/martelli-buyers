@@ -20,8 +20,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { downloadDdReport } from '@/lib/documents';
+import { downloadDdReport, ddReportPreviewPath } from '@/lib/documents';
 import { uploadFile } from '@/lib/upload';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
 import type { EvidenceItem } from '@/types';
 
 const ACCEPT_EVIDENCE = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt';
@@ -42,6 +44,7 @@ export default function DueDiligencePage() {
   const updateChecklistItem = useDueDiligenceStore((s) => s.updateChecklistItem);
   const generateDefaultChecklist = useDueDiligenceStore((s) => s.generateDefaultChecklist);
   const properties = usePropertiesStore((s) => s.properties);
+  const deals = useDealsStore((s) => s.deals);
   const currentUser = useAuthStore((s) => s.currentUser);
   const hasS3 = useConfigStore((s) => s.hasS3);
 
@@ -51,6 +54,7 @@ export default function DueDiligencePage() {
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [showAddComp, setShowAddComp] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [viewReport, setViewReport] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
@@ -231,14 +235,26 @@ export default function DueDiligencePage() {
           <Button
             variant={selectedRecord.reportGenerated ? 'secondary' : 'default'}
             size="sm"
-            onClick={handleGenerateReport}
+            onClick={() => setViewReport(true)}
             disabled={generatingReport}
             className={cn('h-9 shadow-sm', !selectedRecord.reportGenerated && 'shadow-primary/20')}
           >
             <FileText className="mr-1.5 h-4 w-4" />
-            {generatingReport ? 'Generating...' : selectedRecord.reportGenerated ? 'Download PDF Report' : 'Generate PDF Report'}
+            Preview PDF Report
           </Button>
         </div>
+
+        {viewReport && (
+          <DocumentViewer
+            open={viewReport}
+            onClose={() => setViewReport(false)}
+            title={`DD report — ${selectedRecord.address || ''}`.trim()}
+            mimeType="application/pdf"
+            previewPath={ddReportPreviewPath(selectedRecord.id)}
+            canDownload={canDownloadDoc(deals.find((d) => d.id === selectedRecord.dealId)?.assignedTo || '', currentUser)}
+            onDownload={handleGenerateReport}
+          />
+        )}
 
         {ddComplete ? (
           <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">

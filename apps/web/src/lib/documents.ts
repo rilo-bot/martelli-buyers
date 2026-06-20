@@ -7,10 +7,20 @@ async function downloadPdf(path: string, filename: string): Promise<void> {
   triggerDownload(blob, filename)
 }
 
+/* ── Preview paths ────────────────────────────────────────────────────────
+ * Inline-streaming endpoints used by the in-app DocumentViewer (no `?download`,
+ * so the server serves them for preview to anyone with view permission). The
+ * matching `download…` helpers below append `?download=1`, which the server
+ * gates to the document owner / admins.
+ * ----------------------------------------------------------------------- */
+export const invoicePdfPreviewPath = (id: string): string => `/api/documents/invoice/${id}.pdf`
+export const ddReportPreviewPath = (id: string): string => `/api/documents/dd/${id}/report.pdf`
+export const agreementPdfPreviewPath = (dealId: string): string => `/api/documents/agreement/${dealId}.pdf`
+
 /* ── Invoices ─────────────────────────────────────────────────────────── */
 
 export function downloadInvoicePdf(id: string, invoiceNumber?: string): Promise<void> {
-  return downloadPdf(`/api/documents/invoice/${id}.pdf`, `${invoiceNumber || 'invoice'}.pdf`)
+  return downloadPdf(`/api/documents/invoice/${id}.pdf?download=1`, `${invoiceNumber || 'invoice'}.pdf`)
 }
 
 export function emailInvoice(id: string): Promise<{ ok: boolean; status: string }> {
@@ -26,13 +36,13 @@ export function remindInvoice(id: string): Promise<Invoice> {
 
 export function downloadDdReport(id: string, address?: string): Promise<void> {
   const safe = (address || 'dd-report').replace(/[^a-z0-9]+/gi, '-').toLowerCase()
-  return downloadPdf(`/api/documents/dd/${id}/report.pdf`, `dd-report-${safe}.pdf`)
+  return downloadPdf(`/api/documents/dd/${id}/report.pdf?download=1`, `dd-report-${safe}.pdf`)
 }
 
 /* ── Agreement ────────────────────────────────────────────────────────── */
 
 export function downloadAgreementPdf(dealId: string): Promise<void> {
-  return downloadPdf(`/api/documents/agreement/${dealId}.pdf`, 'agency-agreement.pdf')
+  return downloadPdf(`/api/documents/agreement/${dealId}.pdf?download=1`, 'agency-agreement.pdf')
 }
 
 export function sendAgreement(dealId: string): Promise<{ ok: boolean; signUrl: string; emailed: boolean }> {
