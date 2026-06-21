@@ -87,7 +87,7 @@ export default function DealsPage() {
       agreementStatus: 'pending',
       agreementUrl: '',
       agreementSignToken: '', agreementSentAt: '', agreementSignerName: '', agreementSignedAt: '', agreementSignerIp: '', agreementSignatureImage: '',
-      agreementFeeText: '', agreementTermsText: '', agreementClauses: '',
+      agreementFeeText: '', agreementTermsText: '', agreementClauses: '', agreementBodyHtml: '',
       invoiceIds: [],
       assignedTo: currentUser?.id ?? '',
       aiConsentStatus: 'pending',

@@ -3,7 +3,7 @@ import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import helmet from 'helmet';
 import cors from 'cors';
-import { env, hasEmail, hasAi, hasS3, hasXero, hasOutlook } from './env';
+import { env, hasEmail, hasAi, hasS3, hasXero, hasOutlook, hasMeet } from './env';
 import { connectDb } from './db';
 import { seedDefaults } from './seed';
 import { startInvoiceReminderScheduler } from './lib/invoiceReminders';
@@ -14,6 +14,7 @@ import { aiRouter } from './routes/ai';
 import { uploadsRouter } from './routes/uploads';
 import { documentsRouter } from './routes/documents';
 import { signRouter } from './routes/sign';
+import { publicRouter } from './routes/public';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
 import { timelineRouter } from './routes/timeline';
@@ -24,9 +25,11 @@ import { outlookRouter } from './routes/outlook';
 import { usersRouter } from './routes/users';
 import { rolesRouter } from './routes/roles';
 import { companySettingsRouter } from './routes/companySettings';
+import { meetRouter } from './routes/meet';
 import { requireAuth } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { RESOURCES, RESOURCE_MODULE } from './models';
+import { closeBrowser } from './lib/pdf/htmlToPdf';
 
 const app = express();
 
@@ -70,12 +73,16 @@ app.use('/api/auth', authRouter);
 // Public agreement e-signing (token-scoped, no session — clients sign here).
 app.use('/api/sign', signRouter);
 
+// Public website forms (e.g. the /contact-us enquiry form). No session — these
+// are submitted by prospects on the marketing site and land as CRM leads.
+app.use('/api/public', publicRouter);
+
 // Everything below requires a session.
 app.use('/api', requireAuth);
 
 // Server capability flags for the UI (which integrations are configured).
 app.get('/api/config', (_req, res) =>
-  res.json({ hasEmail, hasAi, hasS3, hasXero, hasOutlook }),
+  res.json({ hasEmail, hasAi, hasS3, hasXero, hasOutlook, hasMeet }),
 );
 
 // User management (GET list is open for assignment dropdowns; writes need
@@ -108,6 +115,10 @@ app.use('/api/xero', xeroRouter);
 
 // Outlook (Microsoft Graph) OAuth connect/callback + email sync (org-wide mailbox).
 app.use('/api/outlook', outlookRouter);
+
+// RILO Meet (external video meetings). Server-side proxy — the API key never
+// reaches the browser; routes are gated on the `meet` RBAC module.
+app.use('/api/meet', meetRouter);
 
 // Lead-specific actions (e.g. atomic "mark won" conversion). Mounted before the
 // generic CRUD router so /leads/:id/win resolves to this handler.
@@ -142,3 +153,11 @@ start().catch((err) => {
   console.error('[server] failed to start:', err);
   process.exit(1);
 });
+
+// Close the shared headless-Chromium browser (used for agreement PDFs) on exit
+// so a redeploy/restart doesn't leak an orphaned process.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(sig, () => {
+    void closeBrowser().finally(() => process.exit(0));
+  });
+}

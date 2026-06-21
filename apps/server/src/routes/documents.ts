@@ -1,27 +1,135 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { Invoice, DueDiligence, Deal } from '../models';
+import { Invoice, DueDiligence, Deal, Document } from '../models';
 import { asyncHandler } from '../middleware/error';
-import { requirePermission } from '../lib/permissions';
+import { requirePermission, canDownloadDoc } from '../lib/permissions';
+import { presignDownload, getObjectStream, keyFromUrl, hasS3 } from '../lib/s3';
 import { sendMail } from '../lib/mailer';
 import { env, hasEmail } from '../env';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
 import { buildDdReportPdf } from '../lib/pdf/ddReport';
-import { buildAgreementPdf, defaultFeeText, DEFAULT_TERMS } from '../lib/pdf/agreement';
+import { renderAgreementPdf, seedAgreementHtml, ensureAgreementScaffold } from '../lib/pdf/agreementHtml';
 import { sendInvoiceEmail } from '../lib/invoiceEmail';
 import { getCompanySettingsDto } from '../lib/companySettings';
 import { recordEvent } from '../lib/audit';
 
 export const documentsRouter = Router();
 
-/** Stream a PDF buffer to the browser as an inline download. */
-function sendPdf(res: Response, buf: Buffer, filename: string): void {
+/**
+ * Stream a PDF buffer to the browser. Inline by default (preview); pass
+ * `attachment` to force a save dialog — callers gate that on `canDownloadDoc`.
+ */
+function sendPdf(res: Response, buf: Buffer, filename: string, attachment = false): void {
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `${attachment ? 'attachment' : 'inline'}; filename="${filename}"`);
   res.setHeader('Content-Length', buf.length);
   res.end(buf);
 }
+
+/** True for file types a browser can render inline (so non-owners can preview them). */
+function isPreviewable(mime: string): boolean {
+  return mime === 'application/pdf' || mime.startsWith('image/');
+}
+
+/** True when the request is asking to save the file rather than preview it. */
+function wantsDownload(req: { query: Record<string, unknown> }): boolean {
+  return req.query.download === '1' || req.query.download === 'true';
+}
+
+/* ─────────────────── catalogued uploads (private S3) ─────────────────── */
+
+/**
+ * GET /api/documents/:id/download — a short-lived presigned URL for a catalogued
+ * upload (client/deal/property attachment). The bucket is private, so we never
+ * hand out the raw S3 URL; we sign a GET for the object's real key and let the
+ * browser fetch it. `?download=1` forces a save dialog (default: inline preview).
+ *
+ * Mounted before the generic CRUD router, so this wins over /documents/:id while
+ * the bare /:id GET still falls through to the catalogue read.
+ */
+documentsRouter.get(
+  '/:id/download',
+  requirePermission('documents:view'),
+  asyncHandler(async (req, res) => {
+    if (!hasS3) {
+      res.status(503).json({ error: 'File storage is not configured on the server.' });
+      return;
+    }
+    const doc = await Document.findById(req.params.id);
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found.' });
+      return;
+    }
+    // Anti-download gate: a presigned URL lets the holder save the file, so only
+    // the owner (uploader) and admins may obtain one. Everyone else previews via
+    // /:id/preview, which streams inline through the server.
+    if (!canDownloadDoc(req, doc.get('uploadedBy') || '')) {
+      res.status(403).json({ error: 'Only the document owner can download this file. You can preview it instead.' });
+      return;
+    }
+    // Prefer the stored object key; fall back to recovering it from the URL for
+    // legacy records saved before storageKey was tracked.
+    const key = doc.get('storageKey') || keyFromUrl(doc.get('url') ?? '');
+    if (!key) {
+      res.status(404).json({ error: 'This document has no stored file.' });
+      return;
+    }
+    const url = await presignDownload(key, {
+      filename: doc.get('name') || undefined,
+      download: wantsDownload(req),
+    });
+    res.json({ url });
+  }),
+);
+
+/**
+ * GET /api/documents/:id/preview — stream a catalogued upload's bytes inline
+ * through the server (NOT a presigned URL), so non-owners can preview a file
+ * without ever receiving a directly-saveable link. The in-app viewer fetches
+ * this via XHR and renders the result from an in-memory blob.
+ */
+documentsRouter.get(
+  '/:id/preview',
+  requirePermission('documents:view'),
+  asyncHandler(async (req, res) => {
+    // Reject direct browser navigations (address bar / new tab): those carry
+    // Sec-Fetch-Dest: document. Only the app's fetch() path (dest: empty) gets
+    // through, so a non-owner can never open a saveable inline tab.
+    if (req.get('sec-fetch-dest') === 'document') {
+      res.status(403).json({ error: 'Open this document inside the app.' });
+      return;
+    }
+    if (!hasS3) {
+      res.status(503).json({ error: 'File storage is not configured on the server.' });
+      return;
+    }
+    const doc = await Document.findById(req.params.id);
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found.' });
+      return;
+    }
+    const mime = doc.get('mimeType') || '';
+    // A browser can't render Word/Excel/etc. inline — it would just download
+    // them. So for non-previewable types, restrict to owners/admins.
+    if (!isPreviewable(mime) && !canDownloadDoc(req, doc.get('uploadedBy') || '')) {
+      res.status(403).json({ error: 'This file type can’t be previewed. Only the owner can download it.' });
+      return;
+    }
+    const key = doc.get('storageKey') || keyFromUrl(doc.get('url') ?? '');
+    if (!key) {
+      res.status(404).json({ error: 'This document has no stored file.' });
+      return;
+    }
+    const { body, contentType, contentLength } = await getObjectStream(key);
+    res.setHeader('Content-Type', mime || contentType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+    body.pipe(res);
+  }),
+);
 
 /* ───────────────────────── invoices ──────────────────────────────────── */
 
@@ -36,11 +144,16 @@ documentsRouter.get(
       return;
     }
     const deal = invoice.dealId ? await Deal.findById(invoice.dealId) : null;
+    const download = wantsDownload(req);
+    if (download && !canDownloadDoc(req, deal?.get('assignedTo') ?? '')) {
+      res.status(403).json({ error: 'Only the assigned agent or an admin can download this invoice. You can preview it instead.' });
+      return;
+    }
     const settings = await getCompanySettingsDto();
     const buf = await buildInvoicePdf(invoice.toJSON() as never, (deal?.toJSON() ?? {
       clientName: '', clientEmail: '',
     }) as never, settings);
-    sendPdf(res, buf, `${invoice.invoiceNumber || 'invoice'}.pdf`);
+    sendPdf(res, buf, `${invoice.invoiceNumber || 'invoice'}.pdf`, download);
   }),
 );
 
@@ -121,22 +234,32 @@ documentsRouter.get(
       res.status(404).json({ error: 'DD record not found.' });
       return;
     }
+    const download = wantsDownload(req);
+    if (download) {
+      // A DD record has no owner of its own — use the linked journey's agent.
+      const ddDeal = record.dealId ? await Deal.findById(record.dealId) : null;
+      if (!canDownloadDoc(req, ddDeal?.get('assignedTo') ?? '')) {
+        res.status(403).json({ error: 'Only the assigned agent or an admin can download this report. You can preview it instead.' });
+        return;
+      }
+    }
     const buf = await buildDdReportPdf(record.toJSON() as never, await getCompanySettingsDto());
     if (!record.reportGenerated) {
       record.set('reportGenerated', true);
       await record.save();
     }
     const safe = (record.address || 'dd-report').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    sendPdf(res, buf, `dd-report-${safe}.pdf`);
+    sendPdf(res, buf, `dd-report-${safe}.pdf`, download);
   }),
 );
 
 /* ───────────────────────── agreement ─────────────────────────────────── */
 
 /**
- * GET /api/documents/agreement/:dealId/content — the editable agreement text
- * for the admin editor: the effective value (override or default) per section,
- * plus the defaults so the UI can show "Reset to default".
+ * GET /api/documents/agreement/:dealId/content — the editable rich-HTML body for
+ * the WYSIWYG editor. On first open (empty body) we seed it from the legacy
+ * defaults + deal data and persist it once, so the field becomes the single
+ * source of truth. Signed agreements are returned locked (read-only).
  */
 documentsRouter.get(
   '/agreement/:dealId/content',
@@ -147,13 +270,24 @@ documentsRouter.get(
       res.status(404).json({ error: 'Buyer journey not found.' });
       return;
     }
-    const d = deal.toJSON() as never;
-    const defaults = { feeText: defaultFeeText(d), termsText: DEFAULT_TERMS };
+    // Lazy seed / upgrade (skip signed deals — those stay frozen on the render
+    // they were signed against). New deals get the full body; older ones get any
+    // missing scaffold (header, signature block, footer) added non-destructively.
+    if (deal.agreementStatus !== 'signed') {
+      const settings = await getCompanySettingsDto();
+      if (!deal.agreementBodyHtml) {
+        deal.set('agreementBodyHtml', seedAgreementHtml(deal.toJSON() as never, settings));
+        await deal.save();
+      } else {
+        const { html, changed } = ensureAgreementScaffold(deal.agreementBodyHtml, settings);
+        if (changed) {
+          deal.set('agreementBodyHtml', html);
+          await deal.save();
+        }
+      }
+    }
     res.json({
-      feeText: deal.agreementFeeText?.trim() || defaults.feeText,
-      termsText: deal.agreementTermsText?.trim() || defaults.termsText,
-      clauses: deal.agreementClauses || '',
-      defaults,
+      bodyHtml: deal.agreementBodyHtml || '',
       locked: deal.agreementStatus === 'signed',
     });
   }),
@@ -169,8 +303,13 @@ documentsRouter.get(
       res.status(404).json({ error: 'Buyer journey not found.' });
       return;
     }
-    const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
-    sendPdf(res, buf, 'agency-agreement.pdf');
+    const download = wantsDownload(req);
+    if (download && !canDownloadDoc(req, deal.get('assignedTo') ?? '')) {
+      res.status(403).json({ error: 'Only the assigned agent or an admin can download this agreement. You can preview it instead.' });
+      return;
+    }
+    const buf = await renderAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
+    sendPdf(res, buf, 'agency-agreement.pdf', download);
   }),
 );
 
@@ -208,7 +347,7 @@ documentsRouter.post(
     const signUrl = `${env.CLIENT_ORIGIN}/sign/${token}`;
 
     if (hasEmail) {
-      const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: false }, await getCompanySettingsDto());
+      const buf = await renderAgreementPdf(deal.toJSON() as never, { signed: false }, await getCompanySettingsDto());
       await sendMail({
         to: deal.clientEmail,
         subject: 'Your Buyer’s Agency Agreement — please review and sign',

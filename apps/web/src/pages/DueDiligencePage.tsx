@@ -20,9 +20,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { downloadDdReport } from '@/lib/documents';
+import { downloadDdReport, ddReportPreviewPath } from '@/lib/documents';
 import { uploadFile } from '@/lib/upload';
-import type { EvidenceItem } from '@/types';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
+import type { EvidenceItem, DDChecklistItem } from '@/types';
 
 const ACCEPT_EVIDENCE = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt';
 const isImageUrl = (url: string) => /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|$)/i.test(url);
@@ -42,6 +44,7 @@ export default function DueDiligencePage() {
   const updateChecklistItem = useDueDiligenceStore((s) => s.updateChecklistItem);
   const generateDefaultChecklist = useDueDiligenceStore((s) => s.generateDefaultChecklist);
   const properties = usePropertiesStore((s) => s.properties);
+  const deals = useDealsStore((s) => s.deals);
   const currentUser = useAuthStore((s) => s.currentUser);
   const hasS3 = useConfigStore((s) => s.hasS3);
 
@@ -51,6 +54,7 @@ export default function DueDiligencePage() {
   const [showAddEvidence, setShowAddEvidence] = useState(false);
   const [showAddComp, setShowAddComp] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [viewReport, setViewReport] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
@@ -216,6 +220,24 @@ export default function DueDiligencePage() {
   const totalItems = useMemo(() => selectedRecord?.checklistItems.length ?? 0, [selectedRecord]);
   const ddComplete = totalItems > 0 && resolvedItems === totalItems;
 
+  // Group checklist items by section for display, preserving the order each
+  // section first appears in. Ungrouped items ('') fall under "General".
+  const checklistSections = useMemo(() => {
+    const groups: { section: string; items: DDChecklistItem[] }[] = [];
+    const byName = new Map<string, (typeof groups)[number]>();
+    for (const item of selectedRecord?.checklistItems ?? []) {
+      const section = item.section || 'General';
+      let group = byName.get(section);
+      if (!group) {
+        group = { section, items: [] };
+        byName.set(section, group);
+        groups.push(group);
+      }
+      group.items.push(item);
+    }
+    return groups;
+  }, [selectedRecord]);
+
   // ---- Detail view ----
   if (selectedRecord) {
     return (
@@ -231,14 +253,26 @@ export default function DueDiligencePage() {
           <Button
             variant={selectedRecord.reportGenerated ? 'secondary' : 'default'}
             size="sm"
-            onClick={handleGenerateReport}
+            onClick={() => setViewReport(true)}
             disabled={generatingReport}
             className={cn('h-9 shadow-sm', !selectedRecord.reportGenerated && 'shadow-primary/20')}
           >
             <FileText className="mr-1.5 h-4 w-4" />
-            {generatingReport ? 'Generating...' : selectedRecord.reportGenerated ? 'Download PDF Report' : 'Generate PDF Report'}
+            Preview PDF Report
           </Button>
         </div>
+
+        {viewReport && (
+          <DocumentViewer
+            open={viewReport}
+            onClose={() => setViewReport(false)}
+            title={`DD report — ${selectedRecord.address || ''}`.trim()}
+            mimeType="application/pdf"
+            previewPath={ddReportPreviewPath(selectedRecord.id)}
+            canDownload={canDownloadDoc(deals.find((d) => d.id === selectedRecord.dealId)?.assignedTo || '', currentUser)}
+            onDownload={handleGenerateReport}
+          />
+        )}
 
         {ddComplete ? (
           <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
@@ -287,8 +321,18 @@ export default function DueDiligencePage() {
                   <span className="text-sm text-muted-foreground font-medium">{resolvedItems}/{totalItems} resolved</span>
                 </div>
               </div>
-              <div className="space-y-2">
-                {selectedRecord.checklistItems.map((item) => {
+              <div className="space-y-6">
+                {checklistSections.map((group) => {
+                  const groupResolved = group.items.filter((i) => i.status === 'completed' || i.status === 'na').length;
+                  return (
+                  <div key={group.section} className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                      <h3 className="text-sm font-semibold text-foreground">{group.section}</h3>
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        {groupResolved}/{group.items.length}
+                      </span>
+                    </div>
+                    {group.items.map((item) => {
                   const done = item.status === 'completed';
                   const na = item.status === 'na';
                   const notesOpen = expandedNotes.has(item.id);
@@ -367,6 +411,9 @@ export default function DueDiligencePage() {
                         </div>
                       </CardContent>
                     </Card>
+                  );
+                    })}
+                  </div>
                   );
                 })}
               </div>

@@ -53,6 +53,20 @@ export async function getEffectivePermissions(user: {
   return { permissions, isSuperAdmin: false };
 }
 
+/**
+ * Anti-download gate: who may SAVE a file (vs merely preview it). The owner is
+ * the uploader for catalogued uploads, or the assigned agent for generated docs
+ * (passed in as `ownerId`). Admins and the super-admin can always download;
+ * everyone else is preview-only. A blank `ownerId` means "no owner", so only
+ * admins qualify.
+ */
+export function canDownloadDoc(req: Request, ownerId: string): boolean {
+  if (req.auth?.isSuperAdmin) return true;
+  const role = req.auth?.user?.get?.('role') ?? req.auth?.user?.role;
+  if (role === 'admin') return true;
+  return Boolean(ownerId) && req.session.userId === ownerId;
+}
+
 /** Express middleware: 403 unless the request's effective permissions include `perm`. */
 export function requirePermission(perm: string) {
   return (req: Request, res: Response, next: NextFunction) => {

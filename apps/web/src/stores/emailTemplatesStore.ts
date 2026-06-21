@@ -6,8 +6,10 @@ const templatesApi = resource<EmailTemplate>('email-templates');
 const campaignsApi = resource<EmailCampaign>('email-campaigns');
 
 const DEFAULT_TEMPLATES: Omit<EmailTemplate, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  { name: 'New Enquiry Received', category: 'welcome', recipientType: 'client', subject: 'Thank You for Your Enquiry - Let\'s Schedule a Discovery Call', body: 'Thank you for your inquiry on the Martelli Buyers Agent website. We work with many first-time buyers in central Auckland and are happy to help you if we can.\n\nTo ensure we provide the most accurate information tailored to your needs, we typically schedule a 30-minute discovery call. This will allow us to better understand your situation, determine if we can help, and answer your questions.\n\nWould you be available for this brief chat on {{callDay}}?\n\nAhead of this call can you please reply to this email answering these five questions:\n1. What time frame are you looking to purchase?\n2. What is your maximum purchase price?\n3. Which suburb/s are you looking to buy in?\n4. What is your main reason for contacting us?\n5. Are you the final decision maker in buying this home?\n\nThank you and we look forward to speaking with you soon.\n\n{{agentName}}', isActive: true, variables: ['callDay', 'agentName'] },
   { name: 'Welcome - New Client', category: 'welcome', subject: 'Welcome to Martelli Buyers, {{clientName}}!', body: 'Dear {{clientName}},\n\nWelcome to Martelli Buyers. We are delighted to be working with you on your property search.\n\nWe have received your brief and our team is ready to begin the search immediately.\n\nBest regards,\nMartelli Buyers Team', isActive: true, variables: ['clientName', 'consultantName'] },
   { name: 'Welcome - After Agreement Signed', category: 'welcome', subject: 'Your Buyer\'s Agency Agreement - Confirmed', body: 'Dear {{clientName}},\n\nThank you for signing your Buyer\'s Agency Agreement. We are now officially engaged and excited to find your perfect property.\n\nNext steps:\n1. We will begin scanning listings immediately\n2. You will receive your first property update within 48 hours\n3. We will schedule our weekly review call\n\nBest regards,\nMartelli Buyers Team', isActive: true, variables: ['clientName', 'consultantName', 'agreementDate'] },
+  { name: 'Client Onboarding', category: 'welcome', recipientType: 'client', subject: 'Welcome Aboard - Your Onboarding Next Steps', body: 'Good afternoon {{clientName}},\n\nThank you for returning the signed agency agreement, we look forward to working with you to find your home.\n\nThe next steps are:\n- We will email your lawyer to notify them that we are working together and provide a high level overview of what we do. You will be copied into this.\n- We will email your financial/mortgage advisor to notify them that we are working together and provide a high level overview of what we do. You will be copied into this.\n- A new Search Criteria email will be drafted with your specific requirements. This will go to all of the agents and vendors in areas that match your requirements. Your details will always remain confidential.\n- A WhatsApp group will be set up to easily share videos and updates. If you have any concerns with using WhatsApp please let me know.\n- An online tracker will be created so that you can see each property we are reviewing and add comments as you see appropriate.\n- An invoice for the retainer will be sent out next week.\n- We will need to confirm all AML (Anti-Money Laundering) has been satisfied - this is just an email from your lawyer and I will copy you into this request.\n\nPlease be aware that you will need to have a 10% deposit of the purchase price available when we find the right home, and go unconditional.\n\nBest regards,\n{{consultantName}}', isActive: true, variables: ['clientName', 'consultantName'] },
   { name: 'Initial Invoice Sent', category: 'status_update', subject: 'Invoice for Buyer\'s Agency Services - {{invoiceNumber}}', body: 'Dear {{clientName}},\n\nPlease find attached your invoice for buyer\'s agency engagement services.\n\nInvoice Number: {{invoiceNumber}}\nAmount: {{amount}}\nDue Date: {{dueDate}}\n\nPlease feel free to reach out if you have any questions.\n\nBest regards,\nMartelli Buyers Team', isActive: true, variables: ['clientName', 'invoiceNumber', 'amount', 'dueDate'] },
   { name: 'New Client Requirement - Agent Blast', category: 'requirement_blast', recipientType: 'agent', subject: 'New Buyer Requirement - {{suburb}} Area - {{budget}}', body: 'Dear {{agentName}},\n\nWe have a new buyer requirement that may suit your listings.\n\nBriefing:\n- Budget: {{budget}}\n- Property Type: {{propertyType}}\n- Bedrooms: {{bedrooms}}\n- Preferred Suburbs: {{suburbs}}\n- Key Requirements: {{requirements}}\n\nIf you have any suitable properties including off-market opportunities, please contact us.\n\nKind regards,\nMartelli Buyers Team', isActive: true, variables: ['agentName', 'budget', 'propertyType', 'bedrooms', 'suburbs', 'requirements'] },
   { name: 'Property Shortlist Update', category: 'status_update', subject: 'Property Shortlist Update - {{date}}', body: 'Dear {{clientName}},\n\nPlease find below your updated property shortlist as of {{date}}.\n\nWe have reviewed {{propertyCount}} properties this week. Please log in to your client portal to view full details and add any comments.\n\n{{propertyList}}\n\nLet us know if you would like to arrange inspections for any of these properties.\n\nBest regards,\nMartelli Buyers Team', isActive: true, variables: ['clientName', 'date', 'propertyCount', 'propertyList'] },
@@ -44,7 +46,12 @@ interface EmailTemplatesState {
   deleteTemplate: (id: string) => Promise<void>;
   /** Append a campaign the server already persisted (via /api/email/blast). */
   recordSentCampaign: (campaign: EmailCampaign) => void;
-  /** Server seeds nothing for templates — bulk-create the defaults if none exist yet. */
+  /**
+   * Server seeds nothing for templates — bulk-create the defaults. On a fresh
+   * workspace this creates the full set; on an existing one it backfills only
+   * the defaults whose `name` isn't already present (so new defaults added to
+   * the codebase reach environments that were seeded before they existed).
+   */
   seedDefaultTemplates: () => Promise<void>;
 }
 
@@ -85,8 +92,10 @@ export const useEmailTemplatesStore = create<EmailTemplatesState>()((set, get) =
   },
 
   seedDefaultTemplates: async () => {
-    if (get().templates.length > 0) return;
-    const created = await Promise.all(DEFAULT_TEMPLATES.map((t) => templatesApi.create(t)));
-    set({ templates: created });
+    const existingNames = new Set(get().templates.map((t) => t.name));
+    const missing = DEFAULT_TEMPLATES.filter((t) => !existingNames.has(t.name));
+    if (missing.length === 0) return;
+    const created = await Promise.all(missing.map((t) => templatesApi.create(t)));
+    set((s) => ({ templates: [...s.templates, ...created] }));
   },
 }));

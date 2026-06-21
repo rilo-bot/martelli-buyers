@@ -56,14 +56,64 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'emails', label: 'Emails', actions: ['view', 'create', 'edit', 'delete', 'send'] },
   { key: 'dueDiligence', label: 'Due Diligence', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'documents', label: 'Documents', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'meet', label: 'Meet', actions: ['view', 'create'] },
   { key: 'settings', label: 'Settings', actions: ['view', 'manage'] },
   { key: 'team', label: 'Team & Roles', actions: ['view', 'manage'] },
 ];
 
+/* ──────────────────── Buyer-journey tab visibility ───────────────────────
+ * Each tab on the Buyer Journey detail page can be shown or hidden per role.
+ * The gating permissions are "journeyTab:<tabKey>" strings so they live in the
+ * same role-permission matrix as every other permission — no separate system.
+ * ------------------------------------------------------------------------- */
+
+/** Module key under which the per-tab permissions are grouped. */
+export const JOURNEY_TAB_MODULE_KEY = 'journeyTab';
+
+export interface JourneyTabDef {
+  /** Tab id used in the URL (?tab=) and as the permission suffix. */
+  key: string;
+  label: string;
+}
+
+/** Buyer-journey detail tabs, in display order. */
+export const JOURNEY_TABS: JourneyTabDef[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'properties', label: 'Properties' },
+  { key: 'offers', label: 'Offers' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'comparables', label: 'Comparables' },
+  { key: 'invoices', label: 'Invoices' },
+  { key: 'purchase', label: 'Purchase' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'ai', label: 'AI Summaries' },
+  { key: 'timeline', label: 'Timeline' },
+  { key: 'emails', label: 'Emails' },
+];
+
+/** The permission string that gates a single journey tab. */
+export const journeyTabPerm = (tabKey: string): Permission => `${JOURNEY_TAB_MODULE_KEY}:${tabKey}`;
+
+/** Every journey-tab permission string (one per tab). */
+export const ALL_JOURNEY_TAB_PERMISSIONS: Permission[] = JOURNEY_TABS.map((t) => journeyTabPerm(t.key));
+
+/**
+ * Which journey tabs a user may see, given a permission predicate.
+ * Backward-compatible: a role that holds NONE of the tab permissions (e.g. one
+ * created before per-tab gating existed) sees every tab — gating only takes
+ * effect once at least one tab is explicitly granted to the role.
+ */
+export function visibleJourneyTabKeys(has: (perm: Permission) => boolean): Set<string> {
+  const held = JOURNEY_TABS.filter((t) => has(journeyTabPerm(t.key))).map((t) => t.key);
+  if (held.length === 0) return new Set(JOURNEY_TABS.map((t) => t.key));
+  return new Set(held);
+}
+
 /** Flat list of every valid permission string. */
-export const ALL_PERMISSIONS: Permission[] = PERMISSION_MODULES.flatMap((m) =>
-  m.actions.map((a) => `${m.key}:${a}`),
-);
+export const ALL_PERMISSIONS: Permission[] = [
+  ...PERMISSION_MODULES.flatMap((m) => m.actions.map((a) => `${m.key}:${a}`)),
+  ...ALL_JOURNEY_TAB_PERMISSIONS,
+];
 
 /** Always granted to any authenticated user, so a misconfigured role is never fully locked out. */
 export const ALWAYS_GRANTED: Permission[] = ['dashboard:view'];
@@ -127,14 +177,18 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
     ...OPERATIONAL_FULL.flatMap((m) => [`${m}:view`, `${m}:create`, `${m}:edit`, `${m}:delete`]),
     'invoices:view', 'invoices:create', 'invoices:edit', 'invoices:delete', 'invoices:send',
     'emails:view', 'emails:create', 'emails:edit', 'emails:delete', 'emails:send',
+    'meet:view', 'meet:create',
     'settings:view',
+    ...ALL_JOURNEY_TAB_PERMISSIONS,
   ],
   staff: [
     'dashboard:view',
     ...OPERATIONAL_FULL.flatMap((m) => [`${m}:view`, `${m}:create`, `${m}:edit`]),
     'invoices:view',
     'emails:view',
+    'meet:view', 'meet:create',
     'settings:view',
+    ...ALL_JOURNEY_TAB_PERMISSIONS,
   ],
 };
 
@@ -185,6 +239,46 @@ export interface Client {
   xeroSyncedAt: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/* ───────────────────────── RILO Meet (external API) ──────────────────────
+ * Video meetings created via the external RILO Meet API
+ * (https://decoded-studios-api.onrender.com). The API key stays server-side;
+ * the web client only ever talks to our `/api/meet` proxy. Shapes mirror the
+ * RILO Meet integration contract — fields are optional/loose because they come
+ * straight off an external service we don't control.
+ * ------------------------------------------------------------------------- */
+
+/** Lifecycle state of a RILO meeting. Loose union — unknown values pass through. */
+export type MeetingStatus = 'live' | 'scheduled' | 'ended' | (string & {});
+
+/** A meeting as returned by the RILO Meet API (via our proxy). */
+export interface Meeting {
+  meetingId: string;
+  status: MeetingStatus;
+  title?: string;
+  hostEmail?: string;
+  /** Shareable link participants open to join. */
+  meetingLinkUrl?: string;
+  /** Short human code embedded in the link. */
+  meetingCode?: string;
+  participants?: string[];
+  /** ISO start time — present only for scheduled meetings. */
+  scheduledStartAt?: string;
+  scheduledDurationMinutes?: number;
+  /** RILO Meet always flags externally-created meetings true. */
+  isExternal?: boolean;
+  createdAt?: string;
+}
+
+/** Payload for creating a meeting through the `/api/meet` proxy. */
+export interface CreateMeetingInput {
+  hostEmail: string;
+  title: string;
+  participants?: string[];
+  /** Omit for an instant meeting; set for a scheduled one. */
+  scheduledStartAt?: string;
+  scheduledDurationMinutes?: number;
 }
 
 /** A single required checklist item that must be completed before a lead can advance past a stage */
@@ -264,6 +358,10 @@ export interface Deal {
   agreementFeeText: string;
   agreementTermsText: string;
   agreementClauses: string;
+  /** Rich-HTML agreement body authored in the WYSIWYG editor. '' = not yet
+   *  migrated → the PDF falls back to the legacy PDFKit builder. Single source
+   *  of truth once seeded. */
+  agreementBodyHtml: string;
   invoiceIds: string[];
   assignedTo: string;
   aiConsentStatus: ConsentStatus;
@@ -271,6 +369,35 @@ export interface Deal {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A merge field offered in the agreement editor and resolved at PDF build. */
+export interface AgreementMergeField {
+  /** Token id, e.g. 'clientName'. */
+  token: string;
+  /** Human label shown in the editor chip + as the unresolved placeholder. */
+  label: string;
+}
+
+/**
+ * Merge fields the agreement editor can insert as inline chips. The server
+ * resolves each `token` against the deal/firm at PDF build; an unresolved token
+ * renders as a visible `[label]` placeholder rather than a blank. Single source
+ * of truth shared by the editor menu and the server resolver.
+ */
+export const AGREEMENT_MERGE_FIELDS: AgreementMergeField[] = [
+  { token: 'clientName', label: 'Client name' },
+  { token: 'clientEmail', label: 'Client email' },
+  { token: 'clientPhone', label: 'Client phone' },
+  { token: 'budget', label: 'Budget' },
+  { token: 'propertyType', label: 'Property type' },
+  { token: 'bedrooms', label: 'Bedrooms' },
+  { token: 'bathrooms', label: 'Bathrooms' },
+  { token: 'suburbs', label: 'Preferred suburbs' },
+  { token: 'requirements', label: 'Requirements' },
+  { token: 'firmName', label: 'Firm name' },
+  { token: 'firmLicence', label: 'Firm licence' },
+  { token: 'date', label: 'Today’s date' },
+];
 
 /** A recorded change on a Buyer Journey or its children, for the timeline + audit trail. */
 export interface AuditEvent {
@@ -527,10 +654,33 @@ export interface ComparableSale {
 export interface DDChecklistItem {
   id: string;
   label: string;
+  /** Group heading this item sits under (e.g. "Legalities"). '' = ungrouped. */
+  section: string;
   status: ChecklistItemStatus;
   notes: string;
   completedBy: string;
   completedAt: string;
+}
+
+/**
+ * One row of the org-wide Due Diligence audit-checklist template (configured in
+ * Settings → Due Diligence). Admins choose which items appear by toggling
+ * `enabled`; each new DD record snapshots the enabled items into its own
+ * {@link DDChecklistItem} list, so editing the template never alters records
+ * already created. Display order follows array order.
+ */
+export interface DDChecklistTemplateItem {
+  id: string;
+  label: string;
+  /**
+   * Group heading this item appears under in Settings and on DD records
+   * (e.g. "Internal DD Requirements", "Legalities"). Items sharing a section
+   * render together under one header. '' = ungrouped ("General"). Section order
+   * follows the first appearance of each section name in array order.
+   */
+  section: string;
+  /** When false the item is hidden — excluded from newly created DD records. */
+  enabled: boolean;
 }
 
 export interface ClientComment {
@@ -717,9 +867,99 @@ export interface CompanySettings {
   emailSignatureHtml: string;
   /** Master switch for the branded email shell. When false, emails send unwrapped. */
   emailBrandingEnabled: boolean;
+  /**
+   * Org-wide Due Diligence audit-checklist template. The enabled items are
+   * snapshotted into each new DD record's checklist. Defaults to
+   * {@link DD_CHECKLIST_TEMPLATE_DEFAULTS} (all items enabled).
+   */
+  ddChecklistTemplate: DDChecklistTemplateItem[];
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Default Due Diligence audit-checklist template — the items every org starts
+ * with, all enabled. Single source of truth for the Mongoose schema default,
+ * the DD record builder's fallback, and the Settings "reset to defaults".
+ */
+export const DD_CHECKLIST_TEMPLATE_DEFAULTS: DDChecklistTemplateItem[] = [
+  // Internal DD Requirements
+  { id: 'dd-internal-1', section: 'Internal DD Requirements', label: 'AML for buyer cleared by lawyer in writing', enabled: true },
+  { id: 'dd-internal-2', section: 'Internal DD Requirements', label: 'OIO for buyer confirmed by lawyer in writing', enabled: true },
+  { id: 'dd-internal-3', section: 'Internal DD Requirements', label: 'Finance and AML cleared by bank/mortgage broker in writing (if applicable)', enabled: true },
+
+  // Legalities
+  { id: 'dd-legal-1', section: 'Legalities', label: 'Download and save the document pack. Share with buyer and lawyer. The pack should include S&P, LIM, title, any further disclosures or letters, and rental appraisal.', enabled: true },
+  { id: 'dd-legal-2', section: 'Legalities', label: 'Check flats plan on Title (cross lease, Unit Title) for decks etc. Check for exclusive use areas incl car parking', enabled: true },
+  { id: 'dd-legal-3', section: 'Legalities', label: 'Review LIM report - any outstanding consents or notes.', enabled: true },
+  { id: 'dd-legal-4', section: 'Legalities', label: 'Buyers Agent review of LIM and Title, make general comments and recommendations, copying lawyer. Disclaimer on this email.', enabled: true },
+  { id: 'dd-legal-5', section: 'Legalities', label: 'Legal advice letter received from lawyer relating to this property. Includes LIM, Title S&P review, and any Body Corporate Minutes. Save to file.', enabled: true },
+  { id: 'dd-legal-6', section: 'Legalities', label: 'Council Files ordered and shared if required. Disclaimer required. Comment on these.', enabled: true },
+
+  // S&P Agreement
+  { id: 'dd-sp-1', section: 'S&P Agreement', label: 'Complete details including names (check its not in Trust), settlement date, deposit on unconditional date, price and', enabled: true },
+  { id: 'dd-sp-2', section: 'S&P Agreement', label: 'Review chattels list. Edit as necessary.', enabled: true },
+  { id: 'dd-sp-3', section: 'S&P Agreement', label: 'Ensure in writing that buyers understand 10% is payable, and confirm funds are availabe in NZD', enabled: true },
+  { id: 'dd-sp-4', section: 'S&P Agreement', label: 'Confirm any variations to agreement in writitting. Confirm agreement with agent and their vendor.', enabled: true },
+  { id: 'dd-sp-5', section: 'S&P Agreement', label: 'Confirm who will be present on auction day. If no parties, ensure signed bidding authority received and saved to file.', enabled: true },
+  { id: 'dd-sp-6', section: 'S&P Agreement', label: 'Cover email outlining what the S&P includes and ensuring they have replied understanding the terms they are signing up for, copying lawyer.', enabled: true },
+
+  // Insurance
+  { id: 'dd-ins-1', section: 'Insurance', label: 'Confirm with agent the current insurance providor, and ideally annual premium', enabled: true },
+  { id: 'dd-ins-2', section: 'Insurance', label: 'Request buyer obtains own independent quote, confirm', enabled: true },
+  { id: 'dd-ins-3', section: 'Insurance', label: 'Send agent request of disclosure for any water penetration or insurance claims. Share with buyer and lawyer, save to file.', enabled: true },
+
+  // Building Inspection
+  { id: 'dd-build-1', section: 'Building Inspection', label: 'Recommended Building Inspector Options list sent to client', enabled: true },
+  { id: 'dd-build-2', section: 'Building Inspection', label: 'Building inspection conducted.', enabled: true },
+  { id: 'dd-build-3', section: 'Building Inspection', label: 'Building inspection written report received and saved to file. Special note regarding Weatherside, asbestos, monolithic or fibre cement', enabled: true },
+  { id: 'dd-build-4', section: 'Building Inspection', label: 'Building inspection reviewed by buyer, broker, lawyer and bank (if required)', enabled: true },
+  { id: 'dd-build-5', section: 'Building Inspection', label: 'Further consultants discussed and booked (if required)', enabled: true },
+
+  // Local Government Websites (included in Summary Email)
+  { id: 'dd-gov-1', section: 'Local Government Websites (included in Summary Email)', label: 'Auckland Flood Tracker check and details shared with buyers', enabled: true },
+  { id: 'dd-gov-2', section: 'Local Government Websites (included in Summary Email)', label: 'Natural Hazards Portal address check and details shared with buyers', enabled: true },
+  { id: 'dd-gov-3', section: 'Local Government Websites (included in Summary Email)', label: 'Auckland Council Unitary Plan check and details shared with buyers.', enabled: true },
+  { id: 'dd-gov-4', section: 'Local Government Websites (included in Summary Email)', label: 'Disclaimer included in email for all three local websites, copying lawyer', enabled: true },
+
+  // Ownership and Area (Included in Summary Email)
+  { id: 'dd-own-1', section: 'Ownership and Area (Included in Summary Email)', label: 'Confirm details of the vendors and check their other ownership. Treat this sensitively as private details.', enabled: true },
+  { id: 'dd-own-2', section: 'Ownership and Area (Included in Summary Email)', label: 'Check road and immediate neighbouring roads for Housing New Zealand, or any distinctive names like CORT Housing', enabled: true },
+  { id: 'dd-own-3', section: 'Ownership and Area (Included in Summary Email)', label: 'Check the immediate neighbour ownership and any building consents recorded on CoreLogic', enabled: true },
+  { id: 'dd-own-4', section: 'Ownership and Area (Included in Summary Email)', label: 'Check for any nearby ownership that has development potential, or owned by a group that reads as a developer', enabled: true },
+  { id: 'dd-own-5', section: 'Ownership and Area (Included in Summary Email)', label: 'If there is a café, bar, bar or restaurant nearby, check their license hours and opening hours', enabled: true },
+  { id: 'dd-own-6', section: 'Ownership and Area (Included in Summary Email)', label: 'Check for view shafts and protected or borrowed views, check risks to these.', enabled: true },
+
+  // Comparable Sales (Included in Summary Email)
+  { id: 'dd-comp-1', section: 'Comparable Sales (Included in Summary Email)', label: 'Outline details of the size of the property, tenure and address.', enabled: true },
+  { id: 'dd-comp-2', section: 'Comparable Sales (Included in Summary Email)', label: 'Source minimum 3 comprable sales, outlining why they are comparable', enabled: true },
+  { id: 'dd-comp-3', section: 'Comparable Sales (Included in Summary Email)', label: 'Provide a suggested price range for the buyers. Include agents online price bands.', enabled: true },
+
+  // Finance
+  { id: 'dd-fin-1', section: 'Finance', label: 'Share S&P with buyer and mortgage broker, asking them to share with bank for approval. Confirm timeframe.', enabled: true },
+  { id: 'dd-fin-2', section: 'Finance', label: 'Confirm in writting that the bank is satisfied with the S&P', enabled: true },
+  { id: 'dd-fin-3', section: 'Finance', label: 'Confirm with broker or bank maximum budget range for this property', enabled: true },
+
+  // Rental
+  { id: 'dd-rent-1', section: 'Rental', label: 'Share details of Tenancies NZ live data website for specific suburb', enabled: true },
+  { id: 'dd-rent-2', section: 'Rental', label: 'Share current rental appraisal generated by agency. Confirm how water is metered.', enabled: true },
+  { id: 'dd-rent-3', section: 'Rental', label: 'Request details of current HH certificate, or conduct HH assessment for client (e.g Panda)', enabled: true },
+  { id: 'dd-rent-4', section: 'Rental', label: 'Request copies of marketing photos from the sales agent for rental listing purposes', enabled: true },
+  { id: 'dd-rent-5', section: 'Rental', label: 'Request two viewing times for rental open homes prior to settlement (can be difficult)', enabled: true },
+
+  // Swimming Pools and Spas
+  { id: 'dd-pool-1', section: 'Swimming Pools and Spas', label: 'Confirm with the agent pool heating system, water type, cover, and service history', enabled: true },
+  { id: 'dd-pool-2', section: 'Swimming Pools and Spas', label: 'Sauna / spa - confirm these are in working order, water type, and service history', enabled: true },
+  { id: 'dd-pool-3', section: 'Swimming Pools and Spas', label: 'Check when the last Council Inspection was, and that it was compliant. Speak to the building inspector about checking that the fencing and gates are compliant.', enabled: true },
+
+  // General/Other
+  { id: 'dd-gen-1', section: 'General/Other', label: 'Strategy to Purchase Recommendation', enabled: true },
+  { id: 'dd-gen-2', section: 'General/Other', label: 'Next Steps and Actions outlined', enabled: true },
+
+  // Post Purchase
+  { id: 'dd-post-1', section: 'Post Purchase', label: 'Send the Next Steps email and confirm a time for PSI, book this in and check if clients wish to attend', enabled: true },
+  { id: 'dd-post-2', section: 'Post Purchase', label: 'Save photos to file including floorplan. Mae sure the signed S&P is saved to file.', enabled: true },
+];
 
 /**
  * Field defaults for {@link CompanySettings}. Single source of truth for the

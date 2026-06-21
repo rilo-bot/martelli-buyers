@@ -80,11 +80,19 @@ export default function LandingPage() {
               <span className="brand-eyebrow mt-0.5 block text-[8px] text-muted-foreground">Buyers Agents</span>
             </div>
           </div>
-          <Link to="/login">
-            <Button size="sm" className="text-sm font-semibold px-5 shadow shadow-primary/20 gap-2">
-              Sign In <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link
+              to="/contact-us"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Contact
+            </Link>
+            <Link to="/login">
+              <Button size="sm" className="text-sm font-semibold px-5 shadow shadow-primary/20 gap-2">
+                Sign In <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 

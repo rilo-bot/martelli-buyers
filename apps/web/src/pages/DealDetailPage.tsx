@@ -1,12 +1,14 @@
-import { useState, useMemo } from 'react';
-import { useParams, Navigate, Link, useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useParams, Navigate, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { request } from '@/lib/api';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { usePropertiesStore } from '@/stores/propertiesStore';
 import { useOffMarketStore } from '@/stores/offMarketStore';
 import { useInvoicesStore } from '@/stores/invoicesStore';
 import { useCompanySettingsStore } from '@/stores/companySettingsStore';
-import { COMPANY_SETTINGS_DEFAULTS } from '@/types';
+import { COMPANY_SETTINGS_DEFAULTS, visibleJourneyTabKeys } from '@/types';
+import { usePermissions } from '@/lib/permissions';
 import { useCommentsStore } from '@/stores/commentsStore';
 import { useAISummariesStore } from '@/stores/aiSummariesStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -22,7 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw, Download, Copy, FileSignature, Building2, Search, Check, Pencil, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, Home, DollarSign, FileText, MessageSquare, CheckCircle, Send, Phone, Mail, Binary, Star, AlertCircle, Users, RefreshCw, Eye, Copy, FileSignature, Building2, Search, Check, Pencil, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -42,7 +44,9 @@ import { useXeroStore } from '@/stores/xeroStore';
 import { useOffersStore } from '@/stores/offersStore';
 import { useTasksStore } from '@/stores/tasksStore';
 import { usePurchasesStore } from '@/stores/purchasesStore';
-import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement, getAgreementContent } from '@/lib/documents';
+import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement, getAgreementContent, invoicePdfPreviewPath, agreementPdfPreviewPath } from '@/lib/documents';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
 import { pushInvoiceToXero, refreshInvoiceFromXero } from '@/lib/xero';
 import { OffersTab } from '@/pages/deal/OffersTab';
 import { TasksTab } from '@/pages/deal/TasksTab';
@@ -57,6 +61,7 @@ const STAGE_PILL_STYLES = STAGE_PILL;
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   // ── ALL hooks first, before any early return ──────────────────────────
   const deals = useDealsStore((s) => s.deals);
@@ -89,9 +94,18 @@ export default function DealDetailPage() {
   const dealForCrumb = useMemo(() => deals.find((d) => d.id === id), [deals, id]);
   useDetailBreadcrumb(dealForCrumb ? dealForCrumb.clientName : null);
 
+  // Per-role tab visibility: only tabs the user's role is granted are shown.
+  const { can } = usePermissions();
+  const allowedTabs = useMemo(() => visibleJourneyTabKeys(can), [can]);
+
   // Active tab is mirrored in the URL (?tab=) so refresh/deep-links land correctly.
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'overview';
+  const requestedTab = searchParams.get('tab') || 'overview';
+  // If the requested tab isn't permitted (e.g. a stale deep-link), fall back to
+  // the first tab this role can see.
+  const activeTab = allowedTabs.has(requestedTab)
+    ? requestedTab
+    : ([...allowedTabs][0] ?? 'overview');
   const setActiveTab = (tab: string) => {
     const next = new URLSearchParams(searchParams);
     if (tab === 'overview') next.delete('tab'); else next.set('tab', tab);
@@ -103,6 +117,8 @@ export default function DealDetailPage() {
   const [omSearch, setOmSearch] = useState('');
   const [linkingOmId, setLinkingOmId] = useState<string | null>(null);
   const [showAddInvoice, setShowAddInvoice] = useState(false);
+  const [viewAgreement, setViewAgreement] = useState(false);
+  const [viewInvoice, setViewInvoice] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [showAISummary, setShowAISummary] = useState(false);
   const [showReenableConsent, setShowReenableConsent] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
@@ -110,11 +126,6 @@ export default function DealDetailPage() {
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [xeroBusyId, setXeroBusyId] = useState<string | null>(null);
   const [sendingAgreement, setSendingAgreement] = useState(false);
-  const [showEditAgreement, setShowEditAgreement] = useState(false);
-  const [loadingAgreement, setLoadingAgreement] = useState(false);
-  const [savingAgreement, setSavingAgreement] = useState(false);
-  const [agreementForm, setAgreementForm] = useState({ feeText: '', termsText: '', clauses: '' });
-  const [agreementDefaults, setAgreementDefaults] = useState({ feeText: '', termsText: '' });
   const [commentText, setCommentText] = useState('');
   const [aiConsentError, setAiConsentError] = useState(false);
   const [aiForm, setAiForm] = useState({ type: 'call' as 'call' | 'meeting', title: '', participants: '', transcript: '' });
@@ -143,10 +154,29 @@ export default function DealDetailPage() {
   const purchases = usePurchasesStore((s) => s.purchases);
   const hasPurchase = useMemo(() => purchases.some((p) => p.dealId === id), [purchases, id]);
   const dealInvoices = useMemo(() => invoices.filter((inv) => inv.dealId === id), [invoices, id]);
+  // Comparables live per-property inside DD; fetch the journey-level aggregate so the
+  // tab label can show a live count like the other tabs. Mirrors ComparablesTab's source.
+  const [comparablesCount, setComparablesCount] = useState(0);
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    request<{ comparableSales?: unknown[] }[]>('GET', `/api/journeys/${id}/comparables`)
+      .then((data) => {
+        if (active) setComparablesCount(data.reduce((s, r) => s + (r.comparableSales?.length ?? 0), 0));
+      })
+      .catch(() => { if (active) setComparablesCount(0); });
+    return () => { active = false; };
+  }, [id]);
   const dealComments = useMemo(() => comments.filter((c) => c.dealId === id && !c.propertyId), [comments, id]);
   const dealSummaries = useMemo(() => summaries.filter((s) => s.dealId === id), [summaries, id]);
   const emailMessages = useEmailMessagesStore((s) => s.emails);
   const dealEmails = useMemo(() => emailMessages.filter((e) => e.dealId === id), [emailMessages, id]);
+
+  // Agents connected to this journey = source agents on the journey's properties.
+  const connectedAgents = useMemo(() => {
+    const agentIds = new Set(dealProperties.map((p) => p.agentId).filter(Boolean));
+    return agents.filter((a) => agentIds.has(a.id));
+  }, [agents, dealProperties]);
 
   const emailRecipients: EmailRecipient[] = useMemo(() => {
     const list: EmailRecipient[] = [];
@@ -158,13 +188,13 @@ export default function DealDetailPage() {
         type: 'client',
       });
     }
-    agents.forEach((a) => {
+    connectedAgents.forEach((a) => {
       if (a.email) {
         list.push({ id: a.id, name: `${a.firstName} ${a.lastName}`, email: a.email, type: 'agent' });
       }
     });
     return list;
-  }, [deal, agents]);
+  }, [deal, connectedAgents]);
 
   const emailVariables: Record<string, string> = useMemo(() => ({
     clientName: deal?.clientName ?? '',
@@ -364,40 +394,6 @@ export default function DealDetailPage() {
     }
   };
 
-  const openEditAgreement = async () => {
-    setShowEditAgreement(true);
-    setLoadingAgreement(true);
-    try {
-      const content = await getAgreementContent(id);
-      setAgreementForm({ feeText: content.feeText, termsText: content.termsText, clauses: content.clauses });
-      setAgreementDefaults(content.defaults);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not load the agreement text.');
-      setShowEditAgreement(false);
-    } finally {
-      setLoadingAgreement(false);
-    }
-  };
-
-  const handleSaveAgreement = async () => {
-    setSavingAgreement(true);
-    try {
-      // Store '' when the text still matches the generated default, so the PDF
-      // keeps tracking deal fields until the wording is genuinely customised.
-      await updateDeal(id, {
-        agreementFeeText: agreementForm.feeText.trim() === agreementDefaults.feeText.trim() ? '' : agreementForm.feeText.trim(),
-        agreementTermsText: agreementForm.termsText.trim() === agreementDefaults.termsText.trim() ? '' : agreementForm.termsText.trim(),
-        agreementClauses: agreementForm.clauses.trim(),
-      });
-      toast.success('Agreement updated. Preview the PDF to review your changes.');
-      setShowEditAgreement(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save the agreement.');
-    } finally {
-      setSavingAgreement(false);
-    }
-  };
-
   const handleCopySignLink = () => {
     const url = `${window.location.origin}/sign/${deal.agreementSignToken}`;
     navigator.clipboard.writeText(url).then(
@@ -565,22 +561,26 @@ export default function DealDetailPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="h-auto max-w-full flex-nowrap gap-1 overflow-x-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="properties">Properties ({dealProperties.length})</TabsTrigger>
-          <TabsTrigger value="offers">Offers ({dealOffers.length})</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks ({openTaskCount})</TabsTrigger>
-          <TabsTrigger value="comparables">Comparables</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices ({dealInvoices.length})</TabsTrigger>
-          <TabsTrigger value="purchase">
-            Purchase{hasPurchase && <Check className="ml-1 h-3.5 w-3.5 text-emerald-500" />}
-          </TabsTrigger>
-          <TabsTrigger value="comments">Comments ({dealComments.length})</TabsTrigger>
-          <TabsTrigger value="ai">AI Summaries ({dealSummaries.length})</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="emails">
-            <Mail className="h-3.5 w-3.5 mr-1" />
-            Emails{dealEmails.length > 0 ? ` (${dealEmails.length})` : ''}
-          </TabsTrigger>
+          {allowedTabs.has('overview') && <TabsTrigger value="overview">Overview</TabsTrigger>}
+          {allowedTabs.has('properties') && <TabsTrigger value="properties">Properties ({dealProperties.length})</TabsTrigger>}
+          {allowedTabs.has('offers') && <TabsTrigger value="offers">Offers ({dealOffers.length})</TabsTrigger>}
+          {allowedTabs.has('tasks') && <TabsTrigger value="tasks">Tasks ({openTaskCount})</TabsTrigger>}
+          {allowedTabs.has('comparables') && <TabsTrigger value="comparables">Comparables ({comparablesCount})</TabsTrigger>}
+          {allowedTabs.has('invoices') && <TabsTrigger value="invoices">Invoices ({dealInvoices.length})</TabsTrigger>}
+          {allowedTabs.has('purchase') && (
+            <TabsTrigger value="purchase">
+              Purchase{hasPurchase && <Check className="ml-1 h-3.5 w-3.5 text-emerald-500" />}
+            </TabsTrigger>
+          )}
+          {allowedTabs.has('comments') && <TabsTrigger value="comments">Comments ({dealComments.length})</TabsTrigger>}
+          {allowedTabs.has('ai') && <TabsTrigger value="ai">AI Summaries ({dealSummaries.length})</TabsTrigger>}
+          {allowedTabs.has('timeline') && <TabsTrigger value="timeline">Timeline</TabsTrigger>}
+          {allowedTabs.has('emails') && (
+            <TabsTrigger value="emails">
+              <Mail className="h-3.5 w-3.5 mr-1" />
+              Emails{dealEmails.length > 0 ? ` (${dealEmails.length})` : ''}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* OVERVIEW */}
@@ -662,13 +662,13 @@ export default function DealDetailPage() {
                       </Button>
                     )}
                     {deal.agreementStatus !== 'signed' && (
-                      <Button size="sm" variant="outline" onClick={openEditAgreement}>
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/journeys/${id}/agreement`)}>
                         <Pencil className="mr-1.5 h-3.5 w-3.5" />
                         Edit
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => downloadAgreementPdf(id)}>
-                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                    <Button size="sm" variant="outline" onClick={() => setViewAgreement(true)}>
+                      <Eye className="mr-1.5 h-3.5 w-3.5" />
                       {deal.agreementStatus === 'signed' ? 'Signed PDF' : 'Preview PDF'}
                     </Button>
                   </div>
@@ -1045,8 +1045,8 @@ export default function DealDetailPage() {
                             <p className="text-xs text-muted-foreground">incl. GST</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleDownloadInvoice(inv.id, inv.invoiceNumber)}>
-                              <Download className="mr-1.5 h-3.5 w-3.5" />
+                            <Button size="sm" variant="outline" onClick={() => setViewInvoice({ id: inv.id, invoiceNumber: inv.invoiceNumber })}>
+                              <Eye className="mr-1.5 h-3.5 w-3.5" />
                               PDF
                             </Button>
                             <Button
@@ -1403,8 +1403,8 @@ export default function DealDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* Agent cards */}
-              {agents.slice(0, 3).map((agent) => (
+              {/* Agent cards — only agents connected to this journey's properties */}
+              {connectedAgents.map((agent) => (
                 <Card key={agent.id} className="border-border/60 hover:border-primary/30 hover:shadow-sm transition-all">
                   <CardContent className="pt-4 pb-4">
                     <div className="flex items-center gap-3">
@@ -1435,14 +1435,14 @@ export default function DealDetailPage() {
                 </Card>
               ))}
 
-              {agents.length === 0 && (
+              {connectedAgents.length === 0 && (
                 <Card className="border-dashed border-border/60 col-span-full">
                   <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
                     <Users className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                    <p className="text-sm text-muted-foreground">No agents in the system yet.</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Add agents via the Agents page to email them from here.</p>
+                    <p className="text-sm text-muted-foreground">No agents connected to this journey yet.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Add a property with a source agent to email them from here.</p>
                     <Button asChild size="sm" variant="outline" className="mt-3">
-                      <Link to="/agents">Go to Agents</Link>
+                      <Link to="/properties">Go to Properties</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -1499,193 +1499,6 @@ export default function DealDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Agreement Sheet (right-side drawer, matching the rest of the app) */}
-      <Sheet open={showEditAgreement} onOpenChange={setShowEditAgreement}>
-        <SheetContent size="xl">
-          <SheetHeader>
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileSignature className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <SheetTitle>Edit agreement</SheetTitle>
-                <SheetDescription className="mt-0.5">
-                  Customise the wording for {deal.clientName}.
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <SheetBody className="bg-muted/20">
-            {loadingAgreement ? (
-              <div className="space-y-3 py-4">
-                <div className="h-24 animate-pulse rounded-xl bg-muted" />
-                <div className="h-32 animate-pulse rounded-xl bg-muted" />
-                <div className="h-28 animate-pulse rounded-xl bg-muted" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Auto-filled summary — clarifies what comes from the journey */}
-                <div className="rounded-xl border border-dashed border-border bg-card/60 p-4">
-                  <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <Building2 className="h-3.5 w-3.5" /> From the journey · auto-filled
-                  </p>
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Buyer</dt>
-                      <dd className="truncate font-medium">{deal.clientName || '—'}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Property</dt>
-                      <dd className="truncate font-medium">{deal.propertyType || 'As discussed'}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Budget</dt>
-                      <dd className="font-medium">${deal.budget.toLocaleString()}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Fee</dt>
-                      <dd className="font-medium">
-                        {deal.feeType === 'percentage' ? `${deal.fee}% + GST` : `$${deal.fee.toLocaleString()} + GST`}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p className="mt-3 border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
-                    To change these, edit the journey details — they flow into the agreement automatically.
-                  </p>
-                </div>
-
-                {/* Fee for Service */}
-                {(() => {
-                  const custom = agreementForm.feeText.trim() !== agreementDefaults.feeText.trim();
-                  return (
-                    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                      <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <DollarSign className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold leading-tight">Fee for Service</p>
-                          <p className="text-xs text-muted-foreground">How your fee is described to the buyer</p>
-                        </div>
-                        <div className="ml-auto flex items-center gap-2">
-                          {custom ? (
-                            <>
-                              <Badge variant="secondary" className="text-[10px]">Customised</Badge>
-                              <button
-                                type="button"
-                                onClick={() => setAgreementForm((f) => ({ ...f, feeText: agreementDefaults.feeText }))}
-                                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                              >
-                                <RotateCcw className="h-3 w-3" /> Reset
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Default</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <Textarea
-                          id="agr-fee"
-                          rows={3}
-                          className="resize-none"
-                          value={agreementForm.feeText}
-                          onChange={(e) => setAgreementForm((f) => ({ ...f, feeText: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Terms */}
-                {(() => {
-                  const custom = agreementForm.termsText.trim() !== agreementDefaults.termsText.trim();
-                  return (
-                    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                      <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <FileText className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold leading-tight">Terms</p>
-                          <p className="text-xs text-muted-foreground">Legal terms governing the engagement</p>
-                        </div>
-                        <div className="ml-auto flex items-center gap-2">
-                          {custom ? (
-                            <>
-                              <Badge variant="secondary" className="text-[10px]">Customised</Badge>
-                              <button
-                                type="button"
-                                onClick={() => setAgreementForm((f) => ({ ...f, termsText: agreementDefaults.termsText }))}
-                                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                              >
-                                <RotateCcw className="h-3 w-3" /> Reset
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Default</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <Textarea
-                          id="agr-terms"
-                          rows={6}
-                          className="resize-none"
-                          value={agreementForm.termsText}
-                          onChange={(e) => setAgreementForm((f) => ({ ...f, termsText: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Additional terms */}
-                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                  <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Plus className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold leading-tight">Additional terms</p>
-                      <p className="text-xs text-muted-foreground">Optional extra clauses for this client</p>
-                    </div>
-                    {agreementForm.clauses.trim() && (
-                      <Badge variant="secondary" className="ml-auto text-[10px]">Added</Badge>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <Textarea
-                      id="agr-clauses"
-                      rows={4}
-                      className="resize-none"
-                      placeholder="e.g. Search limited to the North Shore. Engagement valid for 90 days.&#10;&#10;Leave a blank line between separate clauses."
-                      value={agreementForm.clauses}
-                      onChange={(e) => setAgreementForm((f) => ({ ...f, clauses: e.target.value }))}
-                    />
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Appears as an “Additional Terms” section in the PDF. Leave blank to omit.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </SheetBody>
-
-          <SheetFooter className="items-center">
-            <p className="mr-auto hidden text-xs text-muted-foreground sm:block">
-              Changes apply the next time you preview or send.
-            </p>
-            <SheetClose asChild>
-              <Button type="button" variant="ghost">Cancel</Button>
-            </SheetClose>
-            <Button type="button" onClick={handleSaveAgreement} disabled={loadingAgreement || savingAgreement}>
-              {savingAgreement ? 'Saving…' : 'Save changes'}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
 
       {/* Send Email Dialog */}
       <SendEmailDialog
@@ -1696,6 +1509,30 @@ export default function DealDetailPage() {
         variables={emailVariables}
         contextLabel={deal.clientName}
       />
+
+      {viewAgreement && (
+        <DocumentViewer
+          open={viewAgreement}
+          onClose={() => setViewAgreement(false)}
+          title="Agency agreement"
+          mimeType="application/pdf"
+          previewPath={agreementPdfPreviewPath(id)}
+          canDownload={canDownloadDoc(deal.assignedTo, currentUser)}
+          onDownload={() => downloadAgreementPdf(id)}
+        />
+      )}
+
+      {viewInvoice && (
+        <DocumentViewer
+          open={!!viewInvoice}
+          onClose={() => setViewInvoice(null)}
+          title={`Invoice ${viewInvoice.invoiceNumber || ''}`.trim()}
+          mimeType="application/pdf"
+          previewPath={invoicePdfPreviewPath(viewInvoice.id)}
+          canDownload={canDownloadDoc(deal.assignedTo, currentUser)}
+          onDownload={() => handleDownloadInvoice(viewInvoice.id, viewInvoice.invoiceNumber)}
+        />
+      )}
     </div>
   );
 }

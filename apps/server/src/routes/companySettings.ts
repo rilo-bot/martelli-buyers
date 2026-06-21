@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Buffer } from 'node:buffer';
-import type { CompanySettings } from '@rilo/shared';
+import type { CompanySettings, DDChecklistTemplateItem } from '@rilo/shared';
 import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission } from '../lib/permissions';
@@ -16,6 +16,11 @@ const MAX_LOGO_BYTES = 500 * 1024;
 
 /** Max length of the stored (sanitised) email signature HTML. */
 const MAX_SIGNATURE_CHARS = 5000;
+
+/** Bounds for the DD audit-checklist template (keeps the settings doc small). */
+const MAX_DD_CHECKLIST_ITEMS = 100;
+const MAX_DD_CHECKLIST_LABEL = 200;
+const MAX_DD_CHECKLIST_SECTION = 120;
 
 // Editable string fields → max length. Values are trimmed and capped.
 const STRING_FIELDS: Record<string, number> = {
@@ -35,16 +40,19 @@ const LOGO_DATA_URL = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=]+)$/;
 
 export class ValidationError extends Error {}
 
+/** A normalised settings value — primitives, plus the DD checklist template array. */
+type SettingsValue = string | number | boolean | DDChecklistTemplateItem[];
+
 /**
  * Validate + normalise a PUT body into the set of fields to apply. Only keys
  * present in the body are returned, so the client may send a full object or a
  * subset. Throws {@link ValidationError} (→ 400) on any invalid value. Exported
  * so the live-preview endpoint can validate draft settings the same way.
  */
-export function sanitizeCompanySettings(body: unknown): Record<string, string | number | boolean> {
+export function sanitizeCompanySettings(body: unknown): Record<string, SettingsValue> {
   if (!body || typeof body !== 'object') throw new ValidationError('Invalid request body.');
   const src = body as Record<string, unknown>;
-  const out: Record<string, string | number | boolean> = {};
+  const out: Record<string, SettingsValue> = {};
 
   for (const [field, max] of Object.entries(STRING_FIELDS)) {
     if (src[field] === undefined) continue;
@@ -100,6 +108,35 @@ export function sanitizeCompanySettings(body: unknown): Record<string, string | 
     out.emailBrandingEnabled = Boolean(src.emailBrandingEnabled);
   }
 
+  // ── Due Diligence audit-checklist template ──
+  if (src.ddChecklistTemplate !== undefined) {
+    if (!Array.isArray(src.ddChecklistTemplate)) {
+      throw new ValidationError('Checklist template must be a list.');
+    }
+    if (src.ddChecklistTemplate.length > MAX_DD_CHECKLIST_ITEMS) {
+      throw new ValidationError(`Checklist cannot exceed ${MAX_DD_CHECKLIST_ITEMS} items.`);
+    }
+    const seen = new Set<string>();
+    const items: DDChecklistTemplateItem[] = src.ddChecklistTemplate.map((raw, idx) => {
+      if (!raw || typeof raw !== 'object') throw new ValidationError(`Checklist item ${idx + 1} is invalid.`);
+      const item = raw as Record<string, unknown>;
+      const id = typeof item.id === 'string' ? item.id.trim() : '';
+      if (!id) throw new ValidationError(`Checklist item ${idx + 1} is missing an id.`);
+      if (seen.has(id)) throw new ValidationError(`Duplicate checklist item id "${id}".`);
+      seen.add(id);
+      const label = typeof item.label === 'string' ? item.label.trim().slice(0, MAX_DD_CHECKLIST_LABEL) : '';
+      if (!label) throw new ValidationError(`Checklist item ${idx + 1} needs a label.`);
+      const section = typeof item.section === 'string' ? item.section.trim().slice(0, MAX_DD_CHECKLIST_SECTION) : '';
+      return { id, label, section, enabled: item.enabled === undefined ? true : Boolean(item.enabled) };
+    });
+    // At least one enabled item, or new DD records would have an empty checklist
+    // that can never be marked complete (blocking the buyer journey forever).
+    if (!items.some((i) => i.enabled)) {
+      throw new ValidationError('Keep at least one checklist item enabled.');
+    }
+    out.ddChecklistTemplate = items;
+  }
+
   return out;
 }
 
@@ -118,7 +155,7 @@ companySettingsRouter.put(
   '/',
   requirePermission('settings:manage'),
   asyncHandler(async (req, res) => {
-    let updates: Record<string, string | number | boolean>;
+    let updates: Record<string, SettingsValue>;
     try {
       updates = sanitizeCompanySettings(req.body);
     } catch (err) {
@@ -150,7 +187,7 @@ companySettingsRouter.post(
   '/preview.pdf',
   requirePermission('settings:manage'),
   asyncHandler(async (req, res) => {
-    let draft: Record<string, string | number | boolean>;
+    let draft: Record<string, SettingsValue>;
     try {
       draft = sanitizeCompanySettings(req.body);
     } catch (err) {
@@ -201,7 +238,7 @@ companySettingsRouter.post(
   '/email-preview',
   requirePermission('settings:manage'),
   asyncHandler(async (req, res) => {
-    let draft: Record<string, string | number | boolean>;
+    let draft: Record<string, SettingsValue>;
     try {
       draft = sanitizeCompanySettings(req.body);
     } catch (err) {

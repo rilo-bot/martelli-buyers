@@ -4,15 +4,18 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Download, Mail, Bell, ExternalLink, ArrowRight, Receipt, Loader2, Send } from 'lucide-react';
+import { Search, Eye, Mail, Bell, ExternalLink, ArrowRight, Receipt, Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useInvoicesStore } from '@/stores/invoicesStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useXeroStore } from '@/stores/xeroStore';
+import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/lib/permissions';
-import { downloadInvoicePdf } from '@/lib/documents';
+import { downloadInvoicePdf, invoicePdfPreviewPath } from '@/lib/documents';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
 import { pushInvoiceToXero } from '@/lib/xero';
 import type { Invoice, InvoiceStatus } from '@/types';
 
@@ -50,6 +53,7 @@ export default function InvoicesPage() {
   const hasEmail = useConfigStore((s) => s.hasEmail);
   const hasXero = useConfigStore((s) => s.hasXero);
   const xeroConnected = useXeroStore((s) => s.connected);
+  const currentUser = useAuthStore((s) => s.currentUser);
   const { can } = usePermissions();
   const canSend = can('invoices:send');
 
@@ -57,6 +61,9 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [xeroBusyId, setXeroBusyId] = useState<string | null>(null);
+  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+
+  const invoiceOwner = (inv: Invoice) => deals.find((d) => d.id === inv.dealId)?.assignedTo || '';
 
   const clientName = (dealId: string) => deals.find((d) => d.id === dealId)?.clientName || '—';
 
@@ -84,8 +91,8 @@ export default function InvoicesPage() {
   const handleDownload = async (inv: Invoice) => {
     try {
       await downloadInvoicePdf(inv.id, inv.invoiceNumber);
-    } catch {
-      toast.error('Failed to download invoice.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to download invoice.');
     }
   };
 
@@ -198,8 +205,8 @@ export default function InvoicesPage() {
                       <td className={cn('px-4 py-3', overdue ? 'text-rose-600 dark:text-rose-400 font-medium' : 'text-muted-foreground')}>{inv.dueDate || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Download PDF" onClick={() => handleDownload(inv)}>
-                            <Download className="h-3.5 w-3.5" />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Preview invoice" onClick={() => setViewInvoice(inv)}>
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
                           {hasEmail && canSend && inv.status !== 'paid' && (
                             <Button variant="ghost" size="icon" className="h-7 w-7" title={st === 'draft' ? 'Email invoice' : 'Send reminder'}
@@ -237,6 +244,18 @@ export default function InvoicesPage() {
             </table>
           </div>
         </Card>
+      )}
+
+      {viewInvoice && (
+        <DocumentViewer
+          open={!!viewInvoice}
+          onClose={() => setViewInvoice(null)}
+          title={`Invoice ${viewInvoice.invoiceNumber || ''}`.trim()}
+          mimeType="application/pdf"
+          previewPath={invoicePdfPreviewPath(viewInvoice.id)}
+          canDownload={canDownloadDoc(invoiceOwner(viewInvoice), currentUser)}
+          onDownload={() => handleDownload(viewInvoice)}
+        />
       )}
     </div>
   );

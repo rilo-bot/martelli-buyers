@@ -4,7 +4,7 @@ import {
 } from './base';
 import type { CompanySettings } from '@rilo/shared';
 
-interface ChecklistItem { label: string; status: string }
+interface ChecklistItem { label: string; status: string; section?: string }
 interface Comparable {
   address: string; suburb: string; salePrice: number; saleDate: string;
   bedrooms: number; bathrooms: number; landSize: number;
@@ -42,18 +42,31 @@ export async function buildDdReportPdf(record: DDLike, settings?: Partial<Compan
   keyValue(doc, 'Address', record.address);
   keyValue(doc, 'Report date', niceDate(record.updatedAt || ''));
 
-  // Checklist summary
+  // Checklist summary — grouped under section headings, mirroring the app.
   const done = record.checklistItems.filter((i) => i.status === 'completed').length;
   heading(doc, `Audit Checklist (${done}/${record.checklistItems.length})`);
   if (record.checklistItems.length) {
-    table(
-      doc,
-      [
-        { header: 'Item', width: 0.78 },
-        { header: 'Status', width: 0.22, align: 'right' },
-      ],
-      record.checklistItems.map((i) => [i.label, STATUS_LABEL[i.status] ?? i.status]),
-    );
+    const groups: { section: string; items: ChecklistItem[] }[] = [];
+    const byName = new Map<string, (typeof groups)[number]>();
+    for (const item of record.checklistItems) {
+      const section = item.section || 'General';
+      let group = byName.get(section);
+      if (!group) { group = { section, items: [] }; byName.set(section, group); groups.push(group); }
+      group.items.push(item);
+    }
+    groups.forEach((group) => {
+      doc.moveDown(0.4);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text(group.section);
+      doc.moveDown(0.2);
+      table(
+        doc,
+        [
+          { header: 'Item', width: 0.78 },
+          { header: 'Status', width: 0.22, align: 'right' },
+        ],
+        group.items.map((i) => [i.label, STATUS_LABEL[i.status] ?? i.status]),
+      );
+    });
   } else {
     paragraph(doc, 'No checklist items recorded.');
   }
