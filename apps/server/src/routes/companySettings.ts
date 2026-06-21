@@ -20,6 +20,7 @@ const MAX_SIGNATURE_CHARS = 5000;
 /** Bounds for the DD audit-checklist template (keeps the settings doc small). */
 const MAX_DD_CHECKLIST_ITEMS = 100;
 const MAX_DD_CHECKLIST_LABEL = 200;
+const MAX_DD_CHECKLIST_SECTION = 120;
 
 // Editable string fields → max length. Values are trimmed and capped.
 const STRING_FIELDS: Record<string, number> = {
@@ -125,7 +126,8 @@ export function sanitizeCompanySettings(body: unknown): Record<string, SettingsV
       seen.add(id);
       const label = typeof item.label === 'string' ? item.label.trim().slice(0, MAX_DD_CHECKLIST_LABEL) : '';
       if (!label) throw new ValidationError(`Checklist item ${idx + 1} needs a label.`);
-      return { id, label, enabled: item.enabled === undefined ? true : Boolean(item.enabled) };
+      const section = typeof item.section === 'string' ? item.section.trim().slice(0, MAX_DD_CHECKLIST_SECTION) : '';
+      return { id, label, section, enabled: item.enabled === undefined ? true : Boolean(item.enabled) };
     });
     // At least one enabled item, or new DD records would have an empty checklist
     // that can never be marked complete (blocking the buyer journey forever).

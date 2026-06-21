@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, Navigate, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Navigate, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { request } from '@/lib/api';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useClientsStore } from '@/stores/clientsStore';
@@ -61,6 +61,7 @@ const STAGE_PILL_STYLES = STAGE_PILL;
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   // ── ALL hooks first, before any early return ──────────────────────────
   const deals = useDealsStore((s) => s.deals);
@@ -125,11 +126,6 @@ export default function DealDetailPage() {
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [xeroBusyId, setXeroBusyId] = useState<string | null>(null);
   const [sendingAgreement, setSendingAgreement] = useState(false);
-  const [showEditAgreement, setShowEditAgreement] = useState(false);
-  const [loadingAgreement, setLoadingAgreement] = useState(false);
-  const [savingAgreement, setSavingAgreement] = useState(false);
-  const [agreementForm, setAgreementForm] = useState({ feeText: '', termsText: '', clauses: '' });
-  const [agreementDefaults, setAgreementDefaults] = useState({ feeText: '', termsText: '' });
   const [commentText, setCommentText] = useState('');
   const [aiConsentError, setAiConsentError] = useState(false);
   const [aiForm, setAiForm] = useState({ type: 'call' as 'call' | 'meeting', title: '', participants: '', transcript: '' });
@@ -395,40 +391,6 @@ export default function DealDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to send agreement.');
     } finally {
       setSendingAgreement(false);
-    }
-  };
-
-  const openEditAgreement = async () => {
-    setShowEditAgreement(true);
-    setLoadingAgreement(true);
-    try {
-      const content = await getAgreementContent(id);
-      setAgreementForm({ feeText: content.feeText, termsText: content.termsText, clauses: content.clauses });
-      setAgreementDefaults(content.defaults);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not load the agreement text.');
-      setShowEditAgreement(false);
-    } finally {
-      setLoadingAgreement(false);
-    }
-  };
-
-  const handleSaveAgreement = async () => {
-    setSavingAgreement(true);
-    try {
-      // Store '' when the text still matches the generated default, so the PDF
-      // keeps tracking deal fields until the wording is genuinely customised.
-      await updateDeal(id, {
-        agreementFeeText: agreementForm.feeText.trim() === agreementDefaults.feeText.trim() ? '' : agreementForm.feeText.trim(),
-        agreementTermsText: agreementForm.termsText.trim() === agreementDefaults.termsText.trim() ? '' : agreementForm.termsText.trim(),
-        agreementClauses: agreementForm.clauses.trim(),
-      });
-      toast.success('Agreement updated. Preview the PDF to review your changes.');
-      setShowEditAgreement(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save the agreement.');
-    } finally {
-      setSavingAgreement(false);
     }
   };
 
@@ -700,7 +662,7 @@ export default function DealDetailPage() {
                       </Button>
                     )}
                     {deal.agreementStatus !== 'signed' && (
-                      <Button size="sm" variant="outline" onClick={openEditAgreement}>
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/journeys/${id}/agreement`)}>
                         <Pencil className="mr-1.5 h-3.5 w-3.5" />
                         Edit
                       </Button>
@@ -1537,193 +1499,6 @@ export default function DealDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Agreement Sheet (right-side drawer, matching the rest of the app) */}
-      <Sheet open={showEditAgreement} onOpenChange={setShowEditAgreement}>
-        <SheetContent size="xl">
-          <SheetHeader>
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileSignature className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <SheetTitle>Edit agreement</SheetTitle>
-                <SheetDescription className="mt-0.5">
-                  Customise the wording for {deal.clientName}.
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <SheetBody className="bg-muted/20">
-            {loadingAgreement ? (
-              <div className="space-y-3 py-4">
-                <div className="h-24 animate-pulse rounded-xl bg-muted" />
-                <div className="h-32 animate-pulse rounded-xl bg-muted" />
-                <div className="h-28 animate-pulse rounded-xl bg-muted" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Auto-filled summary — clarifies what comes from the journey */}
-                <div className="rounded-xl border border-dashed border-border bg-card/60 p-4">
-                  <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <Building2 className="h-3.5 w-3.5" /> From the journey · auto-filled
-                  </p>
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Buyer</dt>
-                      <dd className="truncate font-medium">{deal.clientName || '—'}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Property</dt>
-                      <dd className="truncate font-medium">{deal.propertyType || 'As discussed'}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Budget</dt>
-                      <dd className="font-medium">${deal.budget.toLocaleString()}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className="text-xs text-muted-foreground">Fee</dt>
-                      <dd className="font-medium">
-                        {deal.feeType === 'percentage' ? `${deal.fee}% + GST` : `$${deal.fee.toLocaleString()} + GST`}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p className="mt-3 border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
-                    To change these, edit the journey details — they flow into the agreement automatically.
-                  </p>
-                </div>
-
-                {/* Fee for Service */}
-                {(() => {
-                  const custom = agreementForm.feeText.trim() !== agreementDefaults.feeText.trim();
-                  return (
-                    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                      <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <DollarSign className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold leading-tight">Fee for Service</p>
-                          <p className="text-xs text-muted-foreground">How your fee is described to the buyer</p>
-                        </div>
-                        <div className="ml-auto flex items-center gap-2">
-                          {custom ? (
-                            <>
-                              <Badge variant="secondary" className="text-[10px]">Customised</Badge>
-                              <button
-                                type="button"
-                                onClick={() => setAgreementForm((f) => ({ ...f, feeText: agreementDefaults.feeText }))}
-                                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                              >
-                                <RotateCcw className="h-3 w-3" /> Reset
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Default</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <Textarea
-                          id="agr-fee"
-                          rows={3}
-                          className="resize-none"
-                          value={agreementForm.feeText}
-                          onChange={(e) => setAgreementForm((f) => ({ ...f, feeText: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Terms */}
-                {(() => {
-                  const custom = agreementForm.termsText.trim() !== agreementDefaults.termsText.trim();
-                  return (
-                    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                      <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <FileText className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold leading-tight">Terms</p>
-                          <p className="text-xs text-muted-foreground">Legal terms governing the engagement</p>
-                        </div>
-                        <div className="ml-auto flex items-center gap-2">
-                          {custom ? (
-                            <>
-                              <Badge variant="secondary" className="text-[10px]">Customised</Badge>
-                              <button
-                                type="button"
-                                onClick={() => setAgreementForm((f) => ({ ...f, termsText: agreementDefaults.termsText }))}
-                                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                              >
-                                <RotateCcw className="h-3 w-3" /> Reset
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Default</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <Textarea
-                          id="agr-terms"
-                          rows={6}
-                          className="resize-none"
-                          value={agreementForm.termsText}
-                          onChange={(e) => setAgreementForm((f) => ({ ...f, termsText: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Additional terms */}
-                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                  <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Plus className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold leading-tight">Additional terms</p>
-                      <p className="text-xs text-muted-foreground">Optional extra clauses for this client</p>
-                    </div>
-                    {agreementForm.clauses.trim() && (
-                      <Badge variant="secondary" className="ml-auto text-[10px]">Added</Badge>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <Textarea
-                      id="agr-clauses"
-                      rows={4}
-                      className="resize-none"
-                      placeholder="e.g. Search limited to the North Shore. Engagement valid for 90 days.&#10;&#10;Leave a blank line between separate clauses."
-                      value={agreementForm.clauses}
-                      onChange={(e) => setAgreementForm((f) => ({ ...f, clauses: e.target.value }))}
-                    />
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Appears as an “Additional Terms” section in the PDF. Leave blank to omit.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </SheetBody>
-
-          <SheetFooter className="items-center">
-            <p className="mr-auto hidden text-xs text-muted-foreground sm:block">
-              Changes apply the next time you preview or send.
-            </p>
-            <SheetClose asChild>
-              <Button type="button" variant="ghost">Cancel</Button>
-            </SheetClose>
-            <Button type="button" onClick={handleSaveAgreement} disabled={loadingAgreement || savingAgreement}>
-              {savingAgreement ? 'Saving…' : 'Save changes'}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
 
       {/* Send Email Dialog */}
       <SendEmailDialog

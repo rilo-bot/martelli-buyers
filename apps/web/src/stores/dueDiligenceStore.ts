@@ -138,6 +138,7 @@ export const useDueDiligenceStore = create<DueDiligenceState>()((set, get) => ({
       .map((item) => ({
         id: item.id,
         label: item.label,
+        section: item.section ?? '',
         status: 'pending' as ChecklistItemStatus,
         notes: '',
         completedBy: '',

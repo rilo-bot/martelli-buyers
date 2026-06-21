@@ -73,6 +73,13 @@ export const env = {
     scopes: process.env.XERO_SCOPES
       ?? 'openid profile email accounting.transactions accounting.contacts offline_access',
   },
+  MEET: {
+    // RILO Meet external API (video meetings). The key is server-side only and
+    // is forwarded as the `x-rilo-meet-key` header — never exposed to the client.
+    // While the key is blank, the Meet page stays gated ("Not configured").
+    apiKey: process.env.RILO_MEET_API_KEY ?? '',
+    baseUrl: (process.env.RILO_MEET_BASE_URL ?? 'https://decoded-studios-api.onrender.com').replace(/\/+$/, ''),
+  },
   MICROSOFT: {
     // Microsoft Graph OAuth 2.0 app (Entra/Azure AD) for the Outlook email sync.
     // Until both id+secret are set, the Outlook card stays "Not configured".
@@ -109,6 +116,9 @@ export const hasXero = Boolean(env.XERO.clientId && env.XERO.clientSecret);
 
 /** True when Microsoft Graph OAuth credentials are configured for Outlook sync. */
 export const hasOutlook = Boolean(env.MICROSOFT.clientId && env.MICROSOFT.clientSecret);
+
+/** True when a RILO Meet API key is configured (enables the Meet module). */
+export const hasMeet = Boolean(env.MEET.apiKey);
 
 /** True when the given email is the configured super admin (case-insensitive). */
 export function isSuperAdminEmail(email: string | undefined | null): boolean {

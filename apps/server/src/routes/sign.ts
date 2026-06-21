@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Deal } from '../models';
 import { asyncHandler } from '../middleware/error';
-import { buildAgreementPdf } from '../lib/pdf/agreement';
+import { renderAgreementPdf } from '../lib/pdf/agreementHtml';
 import { getCompanySettingsDto } from '../lib/companySettings';
 import { recordEvent } from '../lib/audit';
 import { hasS3, env } from '../env';
@@ -56,7 +56,7 @@ signRouter.get(
       res.status(404).json({ error: 'Invalid signing link.' });
       return;
     }
-    const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
+    const buf = await renderAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="agency-agreement.pdf"');
     // The signing page embeds this PDF in an iframe. In prod the web app and API
@@ -97,7 +97,7 @@ signRouter.post(
         const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
         const { env } = await import('../env');
         const { publicUrl, publicKey } = await import('../lib/s3');
-        const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: true }, await getCompanySettingsDto());
+        const buf = await renderAgreementPdf(deal.toJSON() as never, { signed: true }, await getCompanySettingsDto());
         const key = publicKey(`agreements/${deal.id}/signed-agreement.pdf`);
         const client = new S3Client({
           region: env.S3.region,

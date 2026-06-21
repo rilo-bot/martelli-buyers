@@ -65,6 +65,7 @@ const DDChecklistItemSchema = new Schema(
   {
     id: { type: String, required: true },
     label: { type: String, default: '' },
+    section: { type: String, default: '' },
     status: { type: String, default: 'pending' },
     notes: { type: String, default: '' },
     completedBy: { type: String, default: '' },
@@ -78,6 +79,7 @@ const DDChecklistTemplateItemSchema = new Schema(
   {
     id: { type: String, required: true },
     label: { type: String, default: '' },
+    section: { type: String, default: '' },
     enabled: { type: Boolean, default: true },
   },
   sub,
@@ -249,6 +251,10 @@ const DealSchema = new Schema(
     agreementFeeText: { type: String, default: '' },
     agreementTermsText: { type: String, default: '' },
     agreementClauses: { type: String, default: '' },
+    // Rich-HTML agreement body from the WYSIWYG editor. '' = not yet migrated,
+    // so the PDF build falls back to the legacy PDFKit builder. Seeded lazily on
+    // first editor open, then the single source of truth.
+    agreementBodyHtml: { type: String, default: '' },
     invoiceIds: { type: [String], default: [] },
     assignedTo: { type: String, default: '' },
     aiConsentStatus: { type: String, enum: ['pending', 'granted', 'declined'], default: 'pending' },

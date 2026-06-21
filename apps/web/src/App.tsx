@@ -12,12 +12,14 @@ import { applyPersistedTheme } from '@/stores/themeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useBootstrapData } from '@/lib/bootstrap';
 import LoginPage from '@/pages/LoginPage';
+import ContactUsPage from '@/pages/ContactUsPage';
 import InviteAcceptPage from '@/pages/InviteAcceptPage';
 import DashboardPage from '@/pages/DashboardPage';
 import LeadsPage from '@/pages/LeadsPage';
 import LeadDetailPage from '@/pages/LeadDetailPage';
 import DealsPage from '@/pages/DealsPage';
 import DealDetailPage from '@/pages/DealDetailPage';
+import AgreementEditorPage from '@/pages/AgreementEditorPage';
 import ClientsPage from '@/pages/ClientsPage';
 import ClientDetailPage from '@/pages/ClientDetailPage';
 import PropertiesPage from '@/pages/PropertiesPage';
@@ -25,6 +27,7 @@ import PropertyDetailPage from '@/pages/PropertyDetailPage';
 import AgentsPage from '@/pages/AgentsPage';
 import EmailsPage from '@/pages/EmailsPage';
 import InboxPage from '@/pages/InboxPage';
+import MeetPage from '@/pages/MeetPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
 import TeamPage from '@/pages/TeamPage';
@@ -95,6 +98,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/contact-us" element={<ContactUsPage />} />
         <Route path="/invite/:token" element={<InviteAcceptPage />} />
         <Route path="/sign/:token" element={<SignAgreementPage />} />
         <Route element={<ProtectedLayout />}>
@@ -105,8 +109,10 @@ export default function App() {
               (old links/bookmarks) — both render the same pages. */}
           <Route path="/journeys" element={<DealsPage />} />
           <Route path="/journeys/:id" element={<DealDetailPage />} />
+          <Route path="/journeys/:id/agreement" element={<AgreementEditorPage />} />
           <Route path="/deals" element={<DealsPage />} />
           <Route path="/deals/:id" element={<DealDetailPage />} />
+          <Route path="/deals/:id/agreement" element={<AgreementEditorPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route path="/properties" element={<PropertiesPage />} />
@@ -118,6 +124,14 @@ export default function App() {
             element={
               <RequirePermission perm="emails:view">
                 <InboxPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/meet"
+            element={
+              <RequirePermission perm="meet:view">
+                <MeetPage />
               </RequirePermission>
             }
           />

@@ -24,7 +24,7 @@ import { downloadDdReport, ddReportPreviewPath } from '@/lib/documents';
 import { uploadFile } from '@/lib/upload';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { canDownloadDoc } from '@/lib/docAccess';
-import type { EvidenceItem } from '@/types';
+import type { EvidenceItem, DDChecklistItem } from '@/types';
 
 const ACCEPT_EVIDENCE = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt';
 const isImageUrl = (url: string) => /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|$)/i.test(url);
@@ -220,6 +220,24 @@ export default function DueDiligencePage() {
   const totalItems = useMemo(() => selectedRecord?.checklistItems.length ?? 0, [selectedRecord]);
   const ddComplete = totalItems > 0 && resolvedItems === totalItems;
 
+  // Group checklist items by section for display, preserving the order each
+  // section first appears in. Ungrouped items ('') fall under "General".
+  const checklistSections = useMemo(() => {
+    const groups: { section: string; items: DDChecklistItem[] }[] = [];
+    const byName = new Map<string, (typeof groups)[number]>();
+    for (const item of selectedRecord?.checklistItems ?? []) {
+      const section = item.section || 'General';
+      let group = byName.get(section);
+      if (!group) {
+        group = { section, items: [] };
+        byName.set(section, group);
+        groups.push(group);
+      }
+      group.items.push(item);
+    }
+    return groups;
+  }, [selectedRecord]);
+
   // ---- Detail view ----
   if (selectedRecord) {
     return (
@@ -303,8 +321,18 @@ export default function DueDiligencePage() {
                   <span className="text-sm text-muted-foreground font-medium">{resolvedItems}/{totalItems} resolved</span>
                 </div>
               </div>
-              <div className="space-y-2">
-                {selectedRecord.checklistItems.map((item) => {
+              <div className="space-y-6">
+                {checklistSections.map((group) => {
+                  const groupResolved = group.items.filter((i) => i.status === 'completed' || i.status === 'na').length;
+                  return (
+                  <div key={group.section} className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                      <h3 className="text-sm font-semibold text-foreground">{group.section}</h3>
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        {groupResolved}/{group.items.length}
+                      </span>
+                    </div>
+                    {group.items.map((item) => {
                   const done = item.status === 'completed';
                   const na = item.status === 'na';
                   const notesOpen = expandedNotes.has(item.id);
@@ -383,6 +411,9 @@ export default function DueDiligencePage() {
                         </div>
                       </CardContent>
                     </Card>
+                  );
+                    })}
+                  </div>
                   );
                 })}
               </div>

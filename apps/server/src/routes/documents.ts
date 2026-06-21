@@ -9,7 +9,7 @@ import { sendMail } from '../lib/mailer';
 import { env, hasEmail } from '../env';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
 import { buildDdReportPdf } from '../lib/pdf/ddReport';
-import { buildAgreementPdf, defaultFeeText, DEFAULT_TERMS } from '../lib/pdf/agreement';
+import { renderAgreementPdf, seedAgreementHtml, ensureAgreementScaffold } from '../lib/pdf/agreementHtml';
 import { sendInvoiceEmail } from '../lib/invoiceEmail';
 import { getCompanySettingsDto } from '../lib/companySettings';
 import { recordEvent } from '../lib/audit';
@@ -256,9 +256,10 @@ documentsRouter.get(
 /* ───────────────────────── agreement ─────────────────────────────────── */
 
 /**
- * GET /api/documents/agreement/:dealId/content — the editable agreement text
- * for the admin editor: the effective value (override or default) per section,
- * plus the defaults so the UI can show "Reset to default".
+ * GET /api/documents/agreement/:dealId/content — the editable rich-HTML body for
+ * the WYSIWYG editor. On first open (empty body) we seed it from the legacy
+ * defaults + deal data and persist it once, so the field becomes the single
+ * source of truth. Signed agreements are returned locked (read-only).
  */
 documentsRouter.get(
   '/agreement/:dealId/content',
@@ -269,13 +270,24 @@ documentsRouter.get(
       res.status(404).json({ error: 'Buyer journey not found.' });
       return;
     }
-    const d = deal.toJSON() as never;
-    const defaults = { feeText: defaultFeeText(d), termsText: DEFAULT_TERMS };
+    // Lazy seed / upgrade (skip signed deals — those stay frozen on the render
+    // they were signed against). New deals get the full body; older ones get any
+    // missing scaffold (header, signature block, footer) added non-destructively.
+    if (deal.agreementStatus !== 'signed') {
+      const settings = await getCompanySettingsDto();
+      if (!deal.agreementBodyHtml) {
+        deal.set('agreementBodyHtml', seedAgreementHtml(deal.toJSON() as never, settings));
+        await deal.save();
+      } else {
+        const { html, changed } = ensureAgreementScaffold(deal.agreementBodyHtml, settings);
+        if (changed) {
+          deal.set('agreementBodyHtml', html);
+          await deal.save();
+        }
+      }
+    }
     res.json({
-      feeText: deal.agreementFeeText?.trim() || defaults.feeText,
-      termsText: deal.agreementTermsText?.trim() || defaults.termsText,
-      clauses: deal.agreementClauses || '',
-      defaults,
+      bodyHtml: deal.agreementBodyHtml || '',
       locked: deal.agreementStatus === 'signed',
     });
   }),
@@ -296,7 +308,7 @@ documentsRouter.get(
       res.status(403).json({ error: 'Only the assigned agent or an admin can download this agreement. You can preview it instead.' });
       return;
     }
-    const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
+    const buf = await renderAgreementPdf(deal.toJSON() as never, { signed: deal.agreementStatus === 'signed' }, await getCompanySettingsDto());
     sendPdf(res, buf, 'agency-agreement.pdf', download);
   }),
 );
@@ -335,7 +347,7 @@ documentsRouter.post(
     const signUrl = `${env.CLIENT_ORIGIN}/sign/${token}`;
 
     if (hasEmail) {
-      const buf = await buildAgreementPdf(deal.toJSON() as never, { signed: false }, await getCompanySettingsDto());
+      const buf = await renderAgreementPdf(deal.toJSON() as never, { signed: false }, await getCompanySettingsDto());
       await sendMail({
         to: deal.clientEmail,
         subject: 'Your Buyer’s Agency Agreement — please review and sign',
