@@ -254,6 +254,38 @@ export function Sidebar() {
             </span>
           </NavLink>
 
+          {/* Collapsed logo mark (desktop only) — fills the gap left by the hidden wordmark.
+              Inline SVG so it always renders and adapts to the theme. */}
+          <NavLink
+            to="/dashboard"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Martelli & Co"
+            className={cn(
+              'absolute inset-0 hidden items-center justify-center',
+              collapsed && 'lg:flex'
+            )}
+          >
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 64 64"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              role="img"
+              aria-label="Martelli & Co"
+            >
+              <circle cx="32" cy="32" r="32" fill={isDark ? '#EBE8E0' : '#768255'} />
+              <path
+                d="M19 44V22.5L32 37L45 22.5V44"
+                stroke={isDark ? '#23261C' : '#FAF8EF'}
+                strokeWidth="5.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+          </NavLink>
+
           <div className="flex-1" />
 
           {/* Collapse toggle */}
@@ -312,7 +344,12 @@ export function Sidebar() {
                 ref={accountMenuRef}
                 role="menu"
                 aria-label="Account"
-                className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg z-[70]"
+                className={cn(
+                  'absolute bottom-full mb-2 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-lg z-[70]',
+                  // Mobile drawer is full width, so stretch the menu. On the collapsed desktop rail
+                  // (~68px) a stretched menu clips labels, so anchor left and give it a fixed width.
+                  collapsed ? 'left-0 right-0 lg:right-auto lg:w-48' : 'left-0 right-0'
+                )}
               >
                 <button
                   type="button"

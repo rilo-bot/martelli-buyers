@@ -8,9 +8,10 @@ import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
  * including Render's free tier.
  */
 
-// Logo azure accent (matches the web Design System v3 --primary). Also the
-// default brand colour, so an un-customised document themes identically.
-export const ACCENT = '#1e6fb0';
+// Martelli sage/eucalyptus green (matches the web Design System --primary,
+// hsl(76 21% 42%)). Also the default brand colour, so an un-customised
+// document themes identically to the rest of the brand.
+export const ACCENT = '#768255';
 export const INK = '#111827';
 export const MUTED = '#6b7280';
 export const LINE = '#e5e7eb';
@@ -147,9 +148,27 @@ export function header(doc: Doc, docLabel: string, settings?: Partial<CompanySet
     }
   }
 
-  // Default path: firm-name wordmark in the accent colour.
-  doc.fillColor(b.accent).font('Helvetica-Bold').fontSize(20).text(b.firmName, PAGE_MARGIN, PAGE_MARGIN);
-  doc.fillColor(MUTED).font('Helvetica').fontSize(9).text(`${b.firmAddress}  ·  ${b.firmLicence}`);
+  // Default path: brand wordmark in the accent colour, mirroring the app's
+  // sidebar lockup — "Martelli" (bold) + "& Co" (light) over a wide-tracked
+  // "BUYERS AGENTS" eyebrow. Falls back to a plain firm-name wordmark if the
+  // firm name has been customised away from the Martelli default.
+  if (b.firmName === COMPANY_SETTINGS_DEFAULTS.firmName) {
+    doc
+      .fillColor(b.accent)
+      .font('Helvetica-Bold')
+      .fontSize(20)
+      .text('Martelli ', PAGE_MARGIN, PAGE_MARGIN, { continued: true })
+      .font('Helvetica')
+      .text('& Co');
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7.5)
+      .text('BUYERS AGENTS', PAGE_MARGIN, doc.y + 2, { characterSpacing: 2.5 });
+  } else {
+    doc.fillColor(b.accent).font('Helvetica-Bold').fontSize(20).text(b.firmName, PAGE_MARGIN, PAGE_MARGIN);
+  }
+  doc.fillColor(MUTED).font('Helvetica').fontSize(9).text(`${b.firmAddress}  ·  ${b.firmLicence}`, PAGE_MARGIN, doc.y + 4);
   drawLabel();
   doc.moveDown(1);
   rule(doc);

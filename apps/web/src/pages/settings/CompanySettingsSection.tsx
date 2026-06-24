@@ -207,16 +207,21 @@ export function CompanySettingsSection() {
                 onChange={(e) => set('brandColor', e.target.value)}
                 className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent p-0.5"
               />
-              <Input value={form.brandColor} maxLength={7} onChange={(e) => set('brandColor', e.target.value)} placeholder="#1e6fb0" className="w-32 font-mono" />
+              <Input value={form.brandColor} maxLength={7} onChange={(e) => set('brandColor', e.target.value)} placeholder="#768255" className="w-32 font-mono" />
             </div>
           </Field>
 
-          <Field label="Logo" hint="PNG or JPEG, up to 500 KB. Replaces the company-name wordmark at the top of documents.">
+          <Field label="Logo" hint="PNG or JPEG, up to 500 KB. Leave empty to use the default Martelli wordmark (shown), or upload your own to replace it at the top of documents.">
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-40 items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/40">
                 {form.logoDataUrl
                   ? <img src={form.logoDataUrl} alt="Logo preview" className="max-h-full max-w-full object-contain" />
-                  : <span className="text-[11px] text-muted-foreground">No logo</span>}
+                  : (
+                    <div className="brand-wordmark leading-none text-center" aria-label="Default Martelli & Co wordmark">
+                      <span className="block text-[15px] text-foreground"><span className="bw-name">Martelli</span> <span className="bw-co">&amp; Co</span></span>
+                      <span className="brand-eyebrow mt-0.5 block text-[7px] text-muted-foreground">Buyers Agents</span>
+                    </div>
+                  )}
               </div>
               <div className="flex flex-col gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => logoRef.current?.click()}>
