@@ -1,5 +1,5 @@
-import { SYSTEM_ROLES, DEFAULT_ROLE_PERMISSIONS, type SystemRole } from '@rilo/shared';
-import { QualificationStage, Property, Role, User } from './models';
+import { SYSTEM_ROLES, DEFAULT_ROLE_PERMISSIONS, COMPANY_SETTINGS_DEFAULTS, type SystemRole } from '@rilo/shared';
+import { QualificationStage, Property, Role, User, CompanySettings } from './models';
 import { env } from './env';
 
 // Mirrors the prototype's DEFAULT_STAGES so a fresh DB starts with a sensible
@@ -73,6 +73,21 @@ async function migratePropertyStatuses(): Promise<void> {
   if (migrated > 0) console.log(`[seed] migrated ${migrated} property statuses to the new set`);
 }
 
+// One-time: replace the legacy azure accent with the Martelli sage-green
+// default. Idempotent — only matches the old colour, so it's a no-op once
+// migrated and never overrides an accent an admin has chosen themselves.
+const LEGACY_BRAND_COLOR = '#1e6fb0';
+
+async function migrateBrandColor(): Promise<void> {
+  const res = await CompanySettings.updateMany(
+    { brandColor: LEGACY_BRAND_COLOR },
+    { $set: { brandColor: COMPANY_SETTINGS_DEFAULTS.brandColor } },
+  );
+  if ((res.modifiedCount ?? 0) > 0) {
+    console.log(`[seed] migrated ${res.modifiedCount} company-settings brand colour to ${COMPANY_SETTINGS_DEFAULTS.brandColor}`);
+  }
+}
+
 // Pretty labels for the built-in roles.
 const SYSTEM_ROLE_META: Record<SystemRole, { name: string; description: string }> = {
   admin: { name: 'Admin', description: 'Full access, including user management.' },
@@ -125,6 +140,7 @@ async function ensureSuperAdmin(): Promise<void> {
 
 export async function seedDefaults(): Promise<void> {
   await migratePropertyStatuses();
+  await migrateBrandColor();
   await seedRoles();
   await ensureSuperAdmin();
 

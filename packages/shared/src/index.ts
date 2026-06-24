@@ -973,7 +973,7 @@ export const COMPANY_SETTINGS_DEFAULTS = {
   firmLicence: 'Licensed REAA 2008',
   gstNumber: '',
   bankDetails: '',
-  brandColor: '#1e6fb0',
+  brandColor: '#768255',
   logoDataUrl: '',
   invoiceTitle: 'Tax Invoice',
   invoicePaymentTerms: '7 working days from issue',
