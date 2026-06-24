@@ -4,7 +4,7 @@ import type { CompanySettings, DDChecklistTemplateItem } from '@rilo/shared';
 import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission } from '../lib/permissions';
-import { getCompanySettings } from '../lib/companySettings';
+import { getCompanySettings, settingsToClient } from '../lib/companySettings';
 import { imageRenders } from '../lib/pdf/base';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
 import { sanitizeEmailHtml, renderBrandedEmail } from '../lib/email/render';
@@ -146,7 +146,7 @@ companySettingsRouter.get(
   requirePermission('settings:view'),
   asyncHandler(async (_req, res) => {
     const doc = await getCompanySettings();
-    res.json(doc.toJSON());
+    res.json(settingsToClient(doc));
   }),
 );
 
@@ -174,7 +174,7 @@ companySettingsRouter.put(
     const doc = await getCompanySettings();
     doc.set(updates);
     await doc.save();
-    res.json(doc.toJSON());
+    res.json(settingsToClient(doc));
   }),
 );
 

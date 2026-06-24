@@ -4,6 +4,7 @@ import { AGREEMENT_MERGE_FIELDS } from '@rilo/shared';
 import { buildAgreementPdf, defaultFeeText, DEFAULT_TERMS } from './agreement';
 import { resolveBranding, money, niceDate, type Branding } from './base';
 import { renderHtmlToPdf } from './htmlToPdf';
+import { normalizeHtmlAssetUrls } from '../s3';
 
 /**
  * HTML→PDF agreement builder. The whole agreement is one rich-HTML document
@@ -265,7 +266,7 @@ export async function buildAgreementHtmlPdf(
 ): Promise<Buffer> {
   const brand = resolveBranding(settings);
   const vars = dealVariables(deal, brand);
-  const resolved = resolveMergeFields(deal.agreementBodyHtml || '', vars);
+  const resolved = resolveMergeFields(normalizeHtmlAssetUrls(deal.agreementBodyHtml || ''), vars);
   let safeBody = sanitizeHtml(resolved, SANITIZE_AGREEMENT_OPTS);
   // Swap the signature placeholder for the real section (after sanitise: it may
   // embed the signature image data-URL).
@@ -303,12 +304,12 @@ export async function renderAgreementPdf(
 
 /**
  * Editable header: a logo box (prefilled from the hosted email logo if any — it
- * must be https for the editor + PDF; base64 logos aren't carried over) and the
- * firm identity. The author can replace the logo by clicking the box.
+ * must be an http(s) URL for the editor + PDF; base64 logos aren't carried over)
+ * and the firm identity. The author can replace the logo by clicking the box.
  */
 function headerHtml(brand: Branding, settings?: Partial<CompanySettings>): string {
   const logoUrl = (settings?.emailLogoUrl || '').trim();
-  const logoBox = /^https:\/\//i.test(logoUrl)
+  const logoBox = /^https?:\/\//i.test(logoUrl)
     ? `<div class="logo-box"><img src="${esc(logoUrl)}" alt="Logo"></div>`
     : '<div class="logo-box"></div>';
   return [

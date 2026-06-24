@@ -13,11 +13,20 @@ function s3(): S3Client {
   return client;
 }
 
-/** Base URL objects are publicly served from (CDN/custom domain or the bucket's regional URL). */
-function baseUrl(): string {
-  const custom = env.S3.publicBaseUrl.trim().replace(/\/+$/, '');
-  if (custom) return custom;
+/** The bucket's own regional S3 origin (used to recognise legacy stored URLs). */
+function s3Origin(): string {
   return `https://${env.S3.bucket}.s3.${env.S3.region}.amazonaws.com`;
+}
+
+/** Per-segment encode/decode so keys containing slashes round-trip in a URL path. */
+function encodeKey(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/');
+}
+function decodeKey(path: string): string {
+  return path
+    .split('/')
+    .map((seg) => { try { return decodeURIComponent(seg); } catch { return seg; } })
+    .join('/');
 }
 
 /**
@@ -30,20 +39,67 @@ export function publicKey(key: string): string {
   return prefix ? `${prefix}/${key}` : key;
 }
 
-/** Permanent public URL for a stored object (bucket policy grants public read). */
+/**
+ * Permanent URL for a stored object. When a CDN/custom domain is configured
+ * (S3_PUBLIC_BASE_URL) we serve straight from it. Otherwise the bucket is
+ * private, so we route the object through this API's public image proxy
+ * (/api/files/<key>), which streams it with the server's own credentials — no
+ * public bucket policy required. The proxy only serves images, so non-image
+ * uploads (catalogued documents) stay private behind the authenticated routes.
+ */
 export function publicUrl(key: string): string {
-  return `${baseUrl()}/${key.split('/').map(encodeURIComponent).join('/')}`;
+  const cdn = env.S3.publicBaseUrl.trim().replace(/\/+$/, '');
+  if (cdn) return `${cdn}/${encodeKey(key)}`;
+  return `${env.SERVER_PUBLIC_URL}/api/files/${encodeKey(key)}`;
 }
 
-/** Recover the object key from a public URL (for deletes). Returns '' if it doesn't belong to us. */
+/**
+ * Recover the object key from any URL `publicUrl` may have produced — the image
+ * proxy, a configured CDN, or a legacy raw-S3 URL (for records saved before the
+ * proxy). Returns '' if the URL doesn't belong to us.
+ */
 export function keyFromUrl(url: string): string {
-  const prefix = `${baseUrl()}/`;
-  if (!url.startsWith(prefix)) return '';
-  return url
-    .slice(prefix.length)
-    .split('/')
-    .map((seg) => decodeURIComponent(seg))
-    .join('/');
+  const bases = [
+    `${env.SERVER_PUBLIC_URL}/api/files`,
+    env.S3.publicBaseUrl.trim().replace(/\/+$/, ''),
+    s3Origin(),
+  ].filter(Boolean);
+  for (const base of bases) {
+    const prefix = `${base}/`;
+    if (url.startsWith(prefix)) return decodeKey(url.slice(prefix.length));
+  }
+  return '';
+}
+
+/** Decode an /api/files/<key> path segment back into an S3 object key. */
+export function keyFromProxyPath(path: string): string {
+  return decodeKey(path.replace(/^\/+/, ''));
+}
+
+/**
+ * Rewrite a stored asset URL to its current public form. Records saved before
+ * the image proxy hold a raw-S3 (or old-CDN) URL; this maps them onto the proxy
+ * URL so existing logos/photos resolve without a re-upload. Empty, data:, or
+ * foreign URLs pass through unchanged. Idempotent.
+ */
+export function normalizeAssetUrl(url: string): string {
+  if (!url) return url;
+  const key = keyFromUrl(url);
+  return key ? publicUrl(key) : url;
+}
+
+/**
+ * Rewrite embedded asset URLs (img `src`, link `href`) within a block of HTML to
+ * their current public form. Logos/images saved into rich text before the image
+ * proxy hold raw-S3 URLs; this maps them onto the proxy so they resolve in the
+ * editor, the PDF and email. Non-asset URLs are left untouched. Idempotent.
+ */
+export function normalizeHtmlAssetUrls(html: string): string {
+  if (!html) return html;
+  return html.replace(/((?:src|href)=")([^"]+)(")/gi, (match, pre, url, post) => {
+    const next = normalizeAssetUrl(url);
+    return next === url ? match : `${pre}${next}${post}`;
+  });
 }
 
 /** Presigned PUT URL for a direct browser → S3 upload (~5 min). */

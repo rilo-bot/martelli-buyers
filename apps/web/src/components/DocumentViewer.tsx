@@ -139,7 +139,7 @@ export function DocumentViewer({
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-muted/30 p-4 [user-select:none]">
+        <div className="relative flex-1 overflow-auto bg-muted/30 p-4 [user-select:none]">
           {!previewable ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <FileWarning className="mb-3 h-10 w-10 text-muted-foreground/60" />
@@ -150,10 +150,6 @@ export function DocumentViewer({
                   : 'Only the document owner can download this file.'}
               </p>
             </div>
-          ) : loading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
           ) : error ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <FileWarning className="mb-3 h-10 w-10 text-destructive/70" />
@@ -162,7 +158,17 @@ export function DocumentViewer({
           ) : imageUrl ? (
             <img src={imageUrl} alt={title} className="mx-auto max-w-full rounded shadow-sm" draggable={false} />
           ) : (
-            <div ref={pagesRef} />
+            // The pages container must stay mounted while loading so the render
+            // effect can find it via the ref; the spinner overlays it instead of
+            // replacing it (otherwise pagesRef.current is null and nothing draws).
+            <>
+              {loading && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              <div ref={pagesRef} />
+            </>
           )}
         </div>
 

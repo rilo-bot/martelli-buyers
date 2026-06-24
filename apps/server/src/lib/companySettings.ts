@@ -1,5 +1,17 @@
 import { CompanySettings } from '../models';
 import type { CompanySettings as CompanySettingsDTO } from '@rilo/shared';
+import { normalizeAssetUrl } from './s3';
+
+/**
+ * Return the settings as a plain object for the client/builders, mapping the
+ * hosted email logo onto its current public (proxy) URL so logos saved before
+ * the image proxy still resolve.
+ */
+export function settingsToClient(doc: { toJSON: () => unknown }): CompanySettingsDTO {
+  const json = doc.toJSON() as CompanySettingsDTO & { emailLogoUrl?: string };
+  if (typeof json.emailLogoUrl === 'string') json.emailLogoUrl = normalizeAssetUrl(json.emailLogoUrl);
+  return json;
+}
 
 /**
  * The org-wide company settings document. Single-tenant, so there is at most
@@ -21,7 +33,7 @@ export async function getCompanySettings() {
 export async function getCompanySettingsDto(): Promise<CompanySettingsDTO | undefined> {
   try {
     const doc = await getCompanySettings();
-    return doc.toJSON() as unknown as CompanySettingsDTO;
+    return settingsToClient(doc);
   } catch {
     return undefined;
   }

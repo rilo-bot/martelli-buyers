@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PenLine, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadFile } from '@/lib/upload';
+import { useAuthStore } from '@/stores/authStore';
 import { SignatureDialog, type SignatureResult } from '../SignatureDialog';
 
 /**
@@ -27,6 +28,7 @@ declare module '@tiptap/core' {
 function SignatureView({ node, updateAttributes, editor }: NodeViewProps) {
   const src = node.attrs.src as string | null;
   const name = node.attrs.name as string | null;
+  const currentUserName = useAuthStore((s) => s.currentUser?.name ?? '');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const signed = Boolean(src || name);
@@ -97,7 +99,7 @@ function SignatureView({ node, updateAttributes, editor }: NodeViewProps) {
           open={open}
           onClose={() => setOpen(false)}
           onConfirm={onConfirm}
-          initialName={name || ''}
+          initialName={name || currentUserName}
           busy={busy}
         />
       )}

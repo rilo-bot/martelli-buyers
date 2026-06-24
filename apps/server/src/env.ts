@@ -15,6 +15,15 @@ export const env = {
   isProd: NODE_ENV === 'production',
   PORT: Number(process.env.PORT ?? 3001),
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+  // Public origin of THIS API server. Used to build absolute URLs for assets
+  // streamed through the image proxy (/api/files) so they resolve in the app,
+  // in generated PDFs (fetched by headless Chromium) and in outbound emails.
+  // Defaults to localhost for dev; set to the deployed API origin in production.
+  // A scheme-less value (e.g. Render's bare `host`) is assumed https.
+  SERVER_PUBLIC_URL: (() => {
+    const raw = (process.env.SERVER_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 3001}`).trim().replace(/\/+$/, '');
+    return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  })(),
   MONGODB_URI: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/rilo'),
   SESSION_SECRET: required('SESSION_SECRET', 'dev-insecure-secret-change-me'),
   OTP_TTL_MIN: Number(process.env.OTP_TTL_MIN ?? 10),

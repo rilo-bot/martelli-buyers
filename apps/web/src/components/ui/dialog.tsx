@@ -124,6 +124,15 @@ export function DialogContent({
   const { open, setOpen, titleId, descId } = useDialogContext()
   const panelRef = React.useRef<HTMLDivElement>(null)
 
+  // Hold the latest setOpen in a ref so the open effect below can depend on
+  // `open` ALONE. Parents often pass an inline onOpenChange, which makes setOpen
+  // a new function every render; if the effect depended on it, it would re-run
+  // (and re-grab focus to the first focusable element) on every keystroke.
+  const setOpenRef = React.useRef(setOpen)
+  React.useEffect(() => {
+    setOpenRef.current = setOpen
+  }, [setOpen])
+
   React.useEffect(() => {
     if (!open) return
 
@@ -132,7 +141,7 @@ export function DialogContent({
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setOpen(false)
+        setOpenRef.current(false)
         return
       }
       // Trap Tab within the dialog.
@@ -176,7 +185,7 @@ export function DialogContent({
         previouslyFocused.focus()
       }
     }
-  }, [open, setOpen])
+  }, [open])
 
   if (!open) return null
 

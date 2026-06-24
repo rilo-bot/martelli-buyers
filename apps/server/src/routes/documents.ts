@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Invoice, DueDiligence, Deal, Document } from '../models';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission, canDownloadDoc } from '../lib/permissions';
-import { presignDownload, getObjectStream, keyFromUrl, hasS3 } from '../lib/s3';
+import { presignDownload, getObjectStream, keyFromUrl, normalizeHtmlAssetUrls, hasS3 } from '../lib/s3';
 import { sendMail } from '../lib/mailer';
 import { env, hasEmail } from '../env';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
@@ -287,7 +287,7 @@ documentsRouter.get(
       }
     }
     res.json({
-      bodyHtml: deal.agreementBodyHtml || '',
+      bodyHtml: normalizeHtmlAssetUrls(deal.agreementBodyHtml || ''),
       locked: deal.agreementStatus === 'signed',
     });
   }),

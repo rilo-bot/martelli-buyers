@@ -15,6 +15,7 @@ import { uploadsRouter } from './routes/uploads';
 import { documentsRouter } from './routes/documents';
 import { signRouter } from './routes/sign';
 import { publicRouter } from './routes/public';
+import { filesRouter } from './routes/files';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
 import { timelineRouter } from './routes/timeline';
@@ -76,6 +77,11 @@ app.use('/api/sign', signRouter);
 // Public website forms (e.g. the /contact-us enquiry form). No session — these
 // are submitted by prospects on the marketing site and land as CRM leads.
 app.use('/api/public', publicRouter);
+
+// Public image proxy for embedded assets (logos, photos, avatars). No session —
+// the app, generated PDFs and outbound emails all load images from here. Serves
+// images only; private documents stay behind the authenticated routes below.
+app.use('/api/files', filesRouter);
 
 // Everything below requires a session.
 app.use('/api', requireAuth);
