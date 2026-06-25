@@ -9,7 +9,8 @@ const api = resource<Document>('documents');
 
 /** Where an uploaded file should be attached, plus how to catalogue it. */
 export interface AttachTarget {
-  entityType: DocumentEntityType;
+  /** '' for a standalone (unlinked) library document. */
+  entityType: DocumentEntityType | '';
   entityId: string;
   /** Denormalised Buyer Journey id, when the entity belongs to one. */
   dealId?: string;
@@ -17,6 +18,8 @@ export interface AttachTarget {
   uploadedBy?: string;
   /** Override the catalogued name (defaults to the file's name). */
   name?: string;
+  description?: string;
+  tags?: string[];
   onProgress?: (percent: number) => void;
 }
 
@@ -27,6 +30,8 @@ interface DocumentsState {
   fetch: () => Promise<void>;
   /** Upload a file to S3 then create its Document record linked to the target. */
   uploadAndAttach: (file: File, target: AttachTarget) => Promise<Document>;
+  /** Update a document's metadata (name, category, tags, description, link). */
+  updateDocument: (id: string, patch: Partial<Document>) => Promise<Document>;
   deleteDocument: (id: string) => Promise<void>;
   /**
    * Resolve a short-lived presigned URL to view/download a document. The bucket
@@ -59,12 +64,14 @@ export const useDocumentsStore = create<DocumentsState>()((set, get) => ({
 
   uploadAndAttach: async (file, target) => {
     const { url, key } = await uploadFileWithKey(file, {
-      scope: target.entityType,
-      scopeId: target.entityId,
+      // Standalone library docs have no entity — bucket scope falls back to 'library'.
+      scope: target.entityType || 'library',
+      scopeId: target.entityId || undefined,
       onProgress: target.onProgress,
     });
     const doc = await api.create({
       name: target.name?.trim() || file.name,
+      description: target.description?.trim() || '',
       url,
       storageKey: key,
       mimeType: file.type,
@@ -74,9 +81,15 @@ export const useDocumentsStore = create<DocumentsState>()((set, get) => ({
       entityId: target.entityId,
       dealId: target.dealId ?? '',
       uploadedBy: target.uploadedBy ?? '',
-      tags: [],
+      tags: target.tags ?? [],
     });
     set((s) => ({ documents: [...s.documents, doc] }));
+    return doc;
+  },
+
+  updateDocument: async (id, patch) => {
+    const doc = await api.update(id, patch);
+    set((s) => ({ documents: s.documents.map((d) => (d.id === id ? doc : d)) }));
     return doc;
   },
 

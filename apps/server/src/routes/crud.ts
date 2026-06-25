@@ -375,7 +375,11 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
     '/',
     requirePermission(permFor(module, 'create')),
     asyncHandler(async (req, res) => {
-      const doc = await modelRef.create(sanitize(req.body ?? {}));
+      const body = sanitize(req.body ?? {});
+      // A document's owner (used by the download gate) is the session user — never
+      // client-supplied, so it can't be spoofed to obtain someone else's file.
+      if (resource === 'documents') body.uploadedBy = req.session.userId ?? '';
+      const doc = await modelRef.create(body);
       if (AUDITED.has(resource)) await auditCreate(resource, doc, req.session.userId ?? '');
       const afterCreate = AFTER_CREATE[resource];
       if (afterCreate) {
@@ -394,6 +398,11 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
     requirePermission(permFor(module, 'edit')),
     asyncHandler(async (req, res) => {
       const patch = sanitize(req.body ?? {});
+      // The stored file and its owner are immutable once uploaded; only metadata
+      // and the attachment link may be edited. Strip any attempt to change them.
+      if (resource === 'documents') {
+        for (const k of ['url', 'storageKey', 'uploadedBy', 'size', 'mimeType']) delete patch[k];
+      }
       // Capture the pre-update doc when this resource records timeline events.
       const before = AUDITED.has(resource) ? await modelRef.findById(req.params.id) : null;
       // Buyer-journey stage gate: enforce DD completion before crossing past it.

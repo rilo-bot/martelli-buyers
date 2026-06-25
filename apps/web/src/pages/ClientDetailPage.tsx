@@ -32,6 +32,7 @@ import type { EmailRecipient } from '@/components/SendEmailDialog';
 import { EmailList } from '@/components/EmailList';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { canDownloadDoc } from '@/lib/docAccess';
+import { EntityDocuments } from '@/components/documents/EntityDocuments';
 import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
 import { useXeroStore } from '@/stores/xeroStore';
 import { pushClientToXero } from '@/lib/xero';
@@ -432,206 +433,6 @@ function LeadsListSection({ leads }: { leads: Lead[] }) {
   );
 }
 
-/* ─── Documents list ─── */
-function DocumentsSection({ clientId }: { clientId: string }) {
-  const documents = useDocumentsStore((s) => s.documents);
-  const uploadAndAttach = useDocumentsStore((s) => s.uploadAndAttach);
-  const deleteDocument = useDocumentsStore((s) => s.deleteDocument);
-  const previewPath = useDocumentsStore((s) => s.previewPath);
-  const triggerFileDownload = useDocumentsStore((s) => s.triggerFileDownload);
-  const currentUser = useAuthStore((s) => s.currentUser);
-  const hasS3 = useConfigStore((s) => s.hasS3);
-  const { can } = usePermissions();
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [viewDoc, setViewDoc] = useState<Document | null>(null);
-
-  const canUpload = hasS3 && can('documents:create');
-  const canDelete = can('documents:delete');
-
-  const docs = useMemo(
-    () => documents
-      .filter((d) => d.entityType === 'client' && d.entityId === clientId)
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-    [documents, clientId],
-  );
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (files.length === 0) return;
-    setUploading(true);
-    let failed = 0;
-    for (const file of files) {
-      try {
-        await uploadAndAttach(file, {
-          entityType: 'client',
-          entityId: clientId,
-          uploadedBy: currentUser?.id ?? '',
-        });
-      } catch {
-        failed += 1;
-      }
-    }
-    setUploading(false);
-    if (failed > 0) toast.error(`${failed} file${failed === 1 ? '' : 's'} failed to upload.`);
-    else toast.success(`${files.length} document${files.length === 1 ? '' : 's'} uploaded.`);
-  };
-
-  // Open the in-app viewer (preview-only for non-owners; the bucket is private
-  // and only owners/admins can obtain a saveable URL — enforced server-side).
-  const handleDownload = async (doc: Document) => {
-    try {
-      await triggerFileDownload(doc.id);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not download document.');
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await deleteDocument(deleteTarget.id);
-      setDeleteTarget(null);
-      toast.success('Document removed.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove document.');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Paperclip className="h-4 w-4 text-primary" />
-            Documents
-            <span className="text-muted-foreground font-normal text-sm">({docs.length})</span>
-          </CardTitle>
-          {canUpload && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Uploading…</>
-              ) : (
-                <><Paperclip className="mr-1.5 h-3.5 w-3.5" /> Upload</>
-              )}
-            </Button>
-          )}
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={handleUpload}
-          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-        />
-      </CardHeader>
-
-      <CardContent className="pt-0">
-        {!hasS3 ? (
-          <p className="text-xs text-muted-foreground">File uploads aren’t configured on the server.</p>
-        ) : docs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/8 border border-dashed border-primary/30 mb-3">
-              <UploadCloud className="h-6 w-6 text-primary/40" />
-            </div>
-            <p className="text-sm font-medium">No documents yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {canUpload
-                ? 'Upload ID, agreements or contracts for this client.'
-                : 'Documents attached to this client will appear here.'}
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-border/60 rounded-lg border border-border/60 overflow-hidden">
-            {docs.map((doc) => (
-              <li key={doc.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors">
-                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{doc.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatBytes(doc.size)} ·{' '}
-                    {new Date(doc.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
-                  onClick={() => setViewDoc(doc)}
-                  title="Preview"
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                {canDelete && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setDeleteTarget(doc)}
-                    title="Remove"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-
-      {/* Delete confirm */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove Document</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Remove <strong className="text-foreground">{deleteTarget?.name}</strong>? This deletes the file permanently and cannot be undone.
-          </p>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost" disabled={deleting}>Cancel</Button>
-            </DialogClose>
-            <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
-              {deleting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Removing…</>
-              ) : (
-                'Remove Document'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {viewDoc && (
-        <DocumentViewer
-          open={!!viewDoc}
-          onClose={() => setViewDoc(null)}
-          title={viewDoc.name}
-          mimeType={viewDoc.mimeType}
-          previewPath={previewPath(viewDoc.id)}
-          canDownload={canDownloadDoc(viewDoc.uploadedBy, currentUser)}
-          onDownload={() => handleDownload(viewDoc)}
-        />
-      )}
-    </Card>
-  );
-}
-
 /* ─── Main page ─── */
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -972,7 +773,7 @@ export default function ClientDetailPage() {
       </Card>
 
       {/* Documents */}
-      <DocumentsSection clientId={client.id} />
+      <EntityDocuments entityType="client" entityId={client.id} />
 
       {/* Linked Outlook emails */}
       <Card>

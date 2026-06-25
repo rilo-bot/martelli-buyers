@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageTransition, Stagger, StaggerItem } from '@/components/motion';
 import { MediaUploader } from '@/components/MediaUploader';
+import { EntityDocuments } from '@/components/documents/EntityDocuments';
 import {
   ArrowLeft, MapPin, DollarSign, Send, MessageSquare, BedDouble, Bath, Car,
   ExternalLink, Star, Trash2, Check, Loader2,
@@ -183,6 +184,7 @@ export default function PropertyDetailPage() {
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="media">Media ({photos.length})</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="comments">Comments ({propertyComments.length})</TabsTrigger>
           <TabsTrigger value="visibility">Client Visibility</TabsTrigger>
         </TabsList>
@@ -268,6 +270,11 @@ export default function PropertyDetailPage() {
             scope="property"
             scopeId={id}
           />
+        </TabsContent>
+
+        {/* DOCUMENTS */}
+        <TabsContent value="documents">
+          <EntityDocuments entityType="property" entityId={id} dealId={property.dealId} />
         </TabsContent>
 
         {/* COMMENTS */}

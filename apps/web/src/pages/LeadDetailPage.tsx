@@ -19,6 +19,7 @@ import { LeadStageManager } from '@/pages/leads/LeadStageManager';
 import { WonDialog, type WonFormState } from '@/pages/leads/LeadDialogs';
 import { useWonConversion } from '@/pages/leads/useWonConversion';
 import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
+import { EntityDocuments } from '@/components/documents/EntityDocuments';
 import type { Lead, LeadStatus } from '@/types';
 
 interface EditForm {
@@ -381,6 +382,9 @@ export default function LeadDetailPage() {
           </CardContent>
         </Card>
       </form>
+
+      {/* Documents */}
+      <EntityDocuments entityType="lead" entityId={lead.id} />
 
       {/* Mark as Won dialog (shared with the Leads list) */}
       <WonDialog

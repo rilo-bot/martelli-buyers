@@ -30,6 +30,7 @@ import InboxPage from '@/pages/InboxPage';
 import MeetPage from '@/pages/MeetPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
+import DocumentsPage from '@/pages/DocumentsPage';
 import TeamPage from '@/pages/TeamPage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignAgreementPage from '@/pages/SignAgreementPage';
@@ -103,6 +104,7 @@ export default function App() {
         <Route path="/sign/:token" element={<SignAgreementPage />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           {/* "Buyer Journeys" is the canonical name; /deals kept for back-compat

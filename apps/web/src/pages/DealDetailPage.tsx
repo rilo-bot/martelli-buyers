@@ -47,6 +47,7 @@ import { usePurchasesStore } from '@/stores/purchasesStore';
 import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement, getAgreementContent, invoicePdfPreviewPath, agreementPdfPreviewPath } from '@/lib/documents';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { canDownloadDoc } from '@/lib/docAccess';
+import { EntityDocuments } from '@/components/documents/EntityDocuments';
 import { pushInvoiceToXero, refreshInvoiceFromXero } from '@/lib/xero';
 import { OffersTab } from '@/pages/deal/OffersTab';
 import { TasksTab } from '@/pages/deal/TasksTab';
@@ -754,6 +755,7 @@ export default function DealDetailPage() {
               </CardContent>
             </Card>
           </div>
+          <EntityDocuments entityType="deal" entityId={deal.id} dealId={deal.id} className="mt-6" />
         </TabsContent>
 
         {/* PROPERTIES */}

@@ -13,13 +13,16 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import {
   Video, Plus, Loader2, Copy, ExternalLink, CalendarClock, Users, Link2, AlertTriangle, Check,
+  LayoutGrid, CalendarDays,
 } from 'lucide-react';
 import { Stagger, StaggerItem } from '@/components/motion';
+import MeetCalendar from '@/components/MeetCalendar';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Meeting, MeetingStatus } from '@/types';
 
 type StatusFilter = 'all' | 'live' | 'scheduled';
+type ViewMode = 'list' | 'calendar';
 
 const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -47,6 +50,15 @@ function formatSchedule(iso?: string): string {
   });
 }
 
+const isSameDayLocal = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/** Format a Date as the local value a `datetime-local` input expects. */
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const EMPTY_FORM = {
   title: '',
   hostEmail: '',
@@ -68,6 +80,7 @@ export default function MeetPage() {
   const { can } = usePermissions();
 
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [view, setView] = useState<ViewMode>('calendar');
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -88,8 +101,17 @@ export default function MeetPage() {
 
   const liveCount = useMemo(() => meetings.filter((m) => m.status === 'live').length, [meetings]);
 
-  const openCreate = () => {
-    setForm({ ...EMPTY_FORM, hostEmail: currentUser?.email ?? '' });
+  const openCreate = (date?: Date) => {
+    // Seed a scheduled meeting when launched from a calendar day. Default the
+    // time to the next clean hour so the picker isn't stuck at midnight.
+    let scheduledFields = {};
+    if (date) {
+      const start = new Date(date);
+      const now = new Date();
+      start.setHours(isSameDayLocal(date, now) ? now.getHours() + 1 : 9, 0, 0, 0);
+      scheduledFields = { scheduled: true, scheduledStartAt: toLocalInputValue(start) };
+    }
+    setForm({ ...EMPTY_FORM, hostEmail: currentUser?.email ?? '', ...scheduledFields });
     setShowCreate(true);
   };
 
@@ -161,7 +183,7 @@ export default function MeetPage() {
           </p>
         </div>
         {can('meet:create') && hasMeet && (
-          <Button onClick={openCreate} className="shadow-md shadow-primary/25 h-9">
+          <Button onClick={() => openCreate()} className="shadow-md shadow-primary/25 h-9">
             <Plus className="mr-2 h-3.5 w-3.5" />
             New Meeting
           </Button>
@@ -186,33 +208,61 @@ export default function MeetPage() {
         </Card>
       ) : (
         <>
-          {/* Filter tabs */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {STATUS_FILTERS.map((f) => {
-              const active = filter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setFilter(f.key)}
-                  aria-pressed={active}
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-all h-9',
-                    active ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-card border-border hover:bg-muted text-muted-foreground',
-                  )}
-                >
-                  {f.label}
-                  {f.key === 'live' && liveCount > 0 && (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-success/15 px-1.5 text-[11px] font-bold text-success">
-                      {liveCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Toolbar: status filters + view switcher */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {STATUS_FILTERS.map((f) => {
+                const active = filter === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setFilter(f.key)}
+                    aria-pressed={active}
+                    className={cn(
+                      'flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-all h-9',
+                      active ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-card border-border hover:bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {f.label}
+                    {f.key === 'live' && liveCount > 0 && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-success/15 px-1.5 text-[11px] font-bold text-success">
+                        {liveCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* View switcher */}
+            <div className="inline-flex h-9 items-center rounded-lg border border-border bg-card p-0.5" role="tablist" aria-label="View mode">
+              {([
+                { key: 'list' as const, label: 'List', Icon: LayoutGrid },
+                { key: 'calendar' as const, label: 'Calendar', Icon: CalendarDays },
+              ]).map(({ key, label, Icon }) => {
+                const active = view === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setView(key)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-all',
+                      active ? 'bg-primary/10 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* List */}
+          {/* Body: list or calendar */}
           {!loaded && loading ? (
             <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -228,6 +278,15 @@ export default function MeetPage() {
                 </Card>
               ))}
             </Stagger>
+          ) : view === 'calendar' ? (
+            <MeetCalendar
+              meetings={filtered}
+              onOpen={(m) => m.meetingLinkUrl && window.open(m.meetingLinkUrl, '_blank', 'noopener')}
+              onCopy={copyLink}
+              copiedId={copiedId}
+              onCreate={can('meet:create') ? openCreate : undefined}
+              canCreate={can('meet:create')}
+            />
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/6 border-2 border-dashed border-primary/20 mb-5">
@@ -242,7 +301,7 @@ export default function MeetPage() {
                   : 'Try a different filter, or start a new meeting.'}
               </p>
               {can('meet:create') && (
-                <Button className="mt-5 shadow-md shadow-primary/20" onClick={openCreate}>
+                <Button className="mt-5 shadow-md shadow-primary/20" onClick={() => openCreate()}>
                   <Plus className="mr-2 h-4 w-4" />Start a meeting
                 </Button>
               )}
