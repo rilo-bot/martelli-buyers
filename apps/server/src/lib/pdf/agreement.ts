@@ -46,6 +46,8 @@ function decodePngDataUrl(dataUrl?: string): Buffer | null {
 }
 
 function feeText(deal: DealLike): string {
+  // No fee set yet (e.g. a lead-stage agreement) → neutral wording rather than "$0".
+  if (!deal.fee || deal.fee <= 0) return 'as agreed between the parties, plus GST';
   return deal.feeType === 'percentage'
     ? `${deal.fee}% of the purchase price, plus GST`
     : `${money(deal.fee)}, plus GST`;

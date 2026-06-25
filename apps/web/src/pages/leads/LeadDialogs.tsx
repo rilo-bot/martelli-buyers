@@ -11,7 +11,14 @@ import { toast } from 'sonner';
 import { LEAD_SOURCE_OPTIONS, PROPERTY_TYPE_OPTIONS } from './leadShared';
 import type { Lead, Client, QualificationStage } from '@/types';
 
-export type NewLeadInput = Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'stageProgress'>;
+export type NewLeadInput = Omit<
+  Lead,
+  'id' | 'createdAt' | 'updatedAt' | 'stageProgress'
+  // Agreement fields are server-defaulted (authored later on the lead), not set at creation.
+  | 'agreementStatus' | 'agreementUrl' | 'agreementSignToken' | 'agreementSentAt'
+  | 'agreementSignerName' | 'agreementSignedAt' | 'agreementSignerIp'
+  | 'agreementSignatureImage' | 'agreementBodyHtml'
+>;
 
 const EMPTY_FORM = {
   firstName: '', lastName: '', email: '', phone: '', source: '', notes: '',

@@ -17,6 +17,8 @@ import InviteAcceptPage from '@/pages/InviteAcceptPage';
 import DashboardPage from '@/pages/DashboardPage';
 import LeadsPage from '@/pages/LeadsPage';
 import LeadDetailPage from '@/pages/LeadDetailPage';
+import LeadAgreementEditorPage from '@/pages/LeadAgreementEditorPage';
+import EnquiriesPage from '@/pages/EnquiriesPage';
 import DealsPage from '@/pages/DealsPage';
 import DealDetailPage from '@/pages/DealDetailPage';
 import AgreementEditorPage from '@/pages/AgreementEditorPage';
@@ -107,6 +109,15 @@ export default function App() {
           <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
+          <Route path="/leads/:id/agreement" element={<LeadAgreementEditorPage />} />
+          <Route
+            path="/enquiries"
+            element={
+              <RequirePermission perm="enquiries:view">
+                <EnquiriesPage />
+              </RequirePermission>
+            }
+          />
           {/* "Buyer Journeys" is the canonical name; /deals kept for back-compat
               (old links/bookmarks) — both render the same pages. */}
           <Route path="/journeys" element={<DealsPage />} />

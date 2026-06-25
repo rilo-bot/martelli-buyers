@@ -60,3 +60,19 @@ export interface AgreementContent {
 export function getAgreementContent(dealId: string): Promise<AgreementContent> {
   return request('GET', `/api/documents/agreement/${dealId}/content`)
 }
+
+/* ── Lead agreement (signed during the lead phase, before conversion) ───── */
+
+export const leadAgreementPdfPreviewPath = (leadId: string): string => `/api/documents/lead-agreement/${leadId}.pdf`
+
+export function downloadLeadAgreementPdf(leadId: string): Promise<void> {
+  return downloadPdf(`/api/documents/lead-agreement/${leadId}.pdf?download=1`, 'agency-agreement.pdf')
+}
+
+export function sendLeadAgreement(leadId: string): Promise<{ ok: boolean; signUrl: string; emailed: boolean }> {
+  return request('POST', `/api/documents/lead-agreement/${leadId}/send`)
+}
+
+export function getLeadAgreementContent(leadId: string): Promise<AgreementContent> {
+  return request('GET', `/api/documents/lead-agreement/${leadId}/content`)
+}

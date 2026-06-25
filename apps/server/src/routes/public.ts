@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error';
-import { Lead } from '../models';
+import { ContactEnquiry } from '../models';
 
 export const publicRouter = Router();
 
@@ -11,21 +11,16 @@ function clean(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
-/** Split "Jane Mary Smith" → { firstName: 'Jane', lastName: 'Mary Smith' }. */
-function splitName(full: string): { firstName: string; lastName: string } {
-  const parts = full.split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return { firstName: parts[0] ?? '', lastName: '' };
-  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
-}
-
 /**
- * Public website contact form → CRM lead.
+ * Public website contact form → CRM contact enquiry.
  *
  * Unauthenticated by design: it's mounted before the session gate so prospective
- * buyers on the marketing site can submit. Every submission becomes a Lead with
- * status 'new' and source 'Website', so it lands in the team's Leads inbox with
- * the full enquiry preserved in the notes. Inputs are validated and length-capped
- * to keep the endpoint from being used to store arbitrary data.
+ * buyers on the marketing site can submit. Every submission becomes a
+ * ContactEnquiry with status 'new' and source 'Website' — it lands in the team's
+ * Enquiries inbox (NOT the qualified Leads pipeline) so the public form can't
+ * flood leads. Staff review each enquiry and convert the worthwhile ones into a
+ * Lead from there. Inputs are validated and length-capped to keep the endpoint
+ * from being used to store arbitrary data.
  */
 publicRouter.post(
   '/contact',
@@ -59,40 +54,20 @@ publicRouter.post(
       return;
     }
 
-    const { firstName, lastName } = splitName(name);
-
-    // Capture every submitted field in the notes so nothing the prospect typed is
-    // lost, even where the Lead schema has no dedicated column (enquiry type,
-    // budget range, consent).
-    const headers = [
-      enquiryType && `Enquiry type: ${enquiryType}`,
-      budget && `Budget range: ${budget}`,
-      location && `Preferred location: ${location}`,
-    ].filter((line): line is string => Boolean(line));
-
-    const notes = [
-      ...headers,
-      headers.length ? '' : undefined,
-      message,
-      '',
-      '— Submitted via website contact form (consent given).',
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join('\n');
-
-    const lead = await Lead.create({
-      firstName,
-      lastName,
+    const enquiry = await ContactEnquiry.create({
+      name,
       email,
       phone,
+      enquiryType,
+      budget,
+      location,
+      message,
+      consent,
       source: 'Website',
       status: 'new',
-      notes,
-      // Keep the preferred location searchable on the lead too.
-      preferredSuburbs: location ? [location] : [],
     });
 
     // Return only a minimal acknowledgement — never echo CRM internals publicly.
-    res.status(201).json({ ok: true, id: lead.id });
+    res.status(201).json({ ok: true, id: enquiry.id });
   }),
 );

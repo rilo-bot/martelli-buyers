@@ -78,6 +78,18 @@ leadsRouter.post(
         bedrooms: lead.bedrooms,
         bathrooms: lead.bathrooms,
         assignedTo: lead.assignedTo ?? '',
+        // Carry the lead's (usually signed) agency agreement onto the journey so
+        // it stays visible there for reference. Authoring/signing happens on the
+        // lead — the journey only ever shows this read-only.
+        agreementStatus: lead.get('agreementStatus') ?? 'pending',
+        agreementUrl: lead.get('agreementUrl') ?? '',
+        agreementSignToken: lead.get('agreementSignToken') ?? '',
+        agreementSentAt: lead.get('agreementSentAt') ?? '',
+        agreementSignerName: lead.get('agreementSignerName') ?? '',
+        agreementSignedAt: lead.get('agreementSignedAt') ?? '',
+        agreementSignerIp: lead.get('agreementSignerIp') ?? '',
+        agreementSignatureImage: lead.get('agreementSignatureImage') ?? '',
+        agreementBodyHtml: lead.get('agreementBodyHtml') ?? '',
       });
     } catch (err) {
       if (clientCreated) await Client.findByIdAndDelete(client.id).catch(() => {});

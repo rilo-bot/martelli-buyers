@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useLeadsStore } from '@/stores/leadsStore';
+import { useEnquiriesStore } from '@/stores/enquiriesStore';
 import { useDealsStore } from '@/stores/dealsStore';
 import { useOffersStore } from '@/stores/offersStore';
 import { useTasksStore } from '@/stores/tasksStore';
@@ -45,6 +46,7 @@ export function useBootstrapData() {
       [useOutlookStore.getState().fetchStatus, null],
       [useEmailMessagesStore.getState().fetch, 'emails:view'],
       [useLeadsStore.getState().fetch, 'leads:view'],
+      [useEnquiriesStore.getState().fetch, 'enquiries:view'],
       [useDealsStore.getState().fetch, 'journeys:view'],
       [useOffersStore.getState().fetch, 'journeys:view'],
       [useTasksStore.getState().fetch, 'journeys:view'],

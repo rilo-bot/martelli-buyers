@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useParams, Navigate, Link } from 'react-router-dom';
+import { useParams, Navigate, Link, useNavigate } from 'react-router-dom';
 import { useLeadsStore } from '@/stores/leadsStore';
 import { useClientsStore } from '@/stores/clientsStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
 import { getStagePillClass, getStageDotClass } from '@/pages/SettingsPage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,9 +12,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
-import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { usePermissions } from '@/lib/permissions';
+import { DocumentViewer } from '@/components/DocumentViewer';
+import { canDownloadDoc } from '@/lib/docAccess';
+import { sendLeadAgreement, leadAgreementPdfPreviewPath, downloadLeadAgreementPdf } from '@/lib/documents';
 import { LEAD_SOURCE_OPTIONS, STATUS_OPTIONS, STATUS_STYLES } from '@/pages/leads/leadShared';
 import { LeadStageManager } from '@/pages/leads/LeadStageManager';
 import { WonDialog, type WonFormState } from '@/pages/leads/LeadDialogs';
@@ -383,6 +388,9 @@ export default function LeadDetailPage() {
         </Card>
       </form>
 
+      {/* Agency agreement */}
+      <LeadAgreementCard lead={lead} />
+
       {/* Documents */}
       <EntityDocuments entityType="lead" entityId={lead.id} />
 
@@ -396,5 +404,110 @@ export default function LeadDetailPage() {
         onConfirm={handleConfirmWon}
       />
     </div>
+  );
+}
+
+/* ─── Agency agreement (authored + e-signed during the lead phase) ─── */
+function LeadAgreementCard({ lead }: { lead: Lead }) {
+  const navigate = useNavigate();
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const { can } = usePermissions();
+  const [sending, setSending] = useState(false);
+  const [viewing, setViewing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const canEdit = can('leads:edit');
+  const status = lead.agreementStatus;
+  const signUrl = lead.agreementSignToken ? `${window.location.origin}/sign/${lead.agreementSignToken}` : '';
+
+  const handleSend = async () => {
+    setSending(true);
+    try {
+      const { emailed } = await sendLeadAgreement(lead.id);
+      await useLeadsStore.getState().fetch();
+      toast.success(emailed
+        ? 'Agreement emailed to the buyer for signing.'
+        : 'Agreement ready — email is not configured, share the signing link manually.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send agreement.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(signUrl).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 2000); },
+      () => toast.error('Could not copy link.'),
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileSignature className="h-4 w-4 text-primary" /> Agency Agreement
+          <Badge variant={status === 'signed' ? 'default' : status === 'sent' ? 'secondary' : 'outline'}>
+            {status === 'signed' ? 'Signed' : status === 'sent' ? 'Sent' : 'Pending'}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && status !== 'signed' && (
+            <Button size="sm" onClick={handleSend} disabled={sending}>
+              {sending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileSignature className="mr-1.5 h-3.5 w-3.5" />}
+              {sending ? 'Sending…' : status === 'sent' ? 'Resend' : 'Generate & Send'}
+            </Button>
+          )}
+          {canEdit && status !== 'signed' && (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/leads/${lead.id}/agreement`)}>
+              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit agreement
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => setViewing(true)}>
+            <Eye className="mr-1.5 h-3.5 w-3.5" /> {status === 'signed' ? 'Signed PDF' : 'Preview PDF'}
+          </Button>
+        </div>
+
+        {status === 'sent' && signUrl && (
+          <div className="space-y-2">
+            {lead.agreementSentAt && (
+              <p className="text-xs text-muted-foreground">
+                Sent {new Date(lead.agreementSentAt).toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Input readOnly value={signUrl} className="h-8 text-xs" />
+              <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={copyLink} title="Copy signing link">
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {status === 'signed' && (
+          <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <p className="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300">
+              Signed by <span className="font-semibold">{lead.agreementSignerName}</span>
+              {lead.agreementSignedAt && ` on ${new Date(lead.agreementSignedAt).toLocaleDateString('en-NZ', { year: 'numeric', month: 'long', day: 'numeric' })}`}.
+            </p>
+          </div>
+        )}
+      </CardContent>
+
+      {viewing && (
+        <DocumentViewer
+          open={viewing}
+          onClose={() => setViewing(false)}
+          title="Agency agreement"
+          mimeType="application/pdf"
+          previewPath={leadAgreementPdfPreviewPath(lead.id)}
+          canDownload={canDownloadDoc(lead.assignedTo, currentUser)}
+          onDownload={() => downloadLeadAgreementPdf(lead.id)}
+        />
+      )}
+    </Card>
   );
 }

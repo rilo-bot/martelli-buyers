@@ -211,6 +211,46 @@ const LeadSchema = new Schema(
     preferredSuburbs: { type: [String], default: [] },
     assignedTo: { type: String, default: '' },
     clientId: { type: String, default: '' },
+    // Buyer's agency agreement (authored + e-signed during the lead phase).
+    agreementStatus: { type: String, enum: ['pending', 'sent', 'signed'], default: 'pending' },
+    agreementUrl: { type: String, default: '' },
+    agreementSignToken: { type: String, default: '', index: true },
+    agreementSentAt: { type: String, default: '' },
+    agreementSignerName: { type: String, default: '' },
+    agreementSignedAt: { type: String, default: '' },
+    agreementSignerIp: { type: String, default: '' },
+    agreementSignatureImage: { type: String, default: '' },
+    agreementBodyHtml: { type: String, default: '' },
+  },
+  baseOpts,
+);
+
+/**
+ * Raw website "Contact Us" submission. Lands here first (not as a Lead) so the
+ * public form can't flood the qualified pipeline. Staff review enquiries and
+ * convert the worthwhile ones into Leads via /api/enquiries/:id/convert, which
+ * stamps status 'converted' + convertedLeadId.
+ */
+const ContactEnquirySchema = new Schema(
+  {
+    name: { type: String, default: '' },
+    email: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    enquiryType: { type: String, default: '' },
+    budget: { type: String, default: '' },
+    location: { type: String, default: '' },
+    message: { type: String, default: '' },
+    consent: { type: Boolean, default: false },
+    source: { type: String, default: 'Website' },
+    status: {
+      type: String,
+      enum: ['new', 'reviewed', 'converted', 'archived'],
+      default: 'new',
+    },
+    // Set when an enquiry is converted; links back to the created Lead.
+    convertedLeadId: { type: String, default: '' },
+    assignedTo: { type: String, default: '' },
+    notes: { type: String, default: '' },
   },
   baseOpts,
 );
@@ -723,6 +763,7 @@ export const OtpToken = model('OtpToken', OtpTokenSchema);
 export const Role = model('Role', RoleSchema);
 
 export const Lead = model('Lead', LeadSchema);
+export const ContactEnquiry = model('ContactEnquiry', ContactEnquirySchema);
 export const Deal = model('Deal', DealSchema);
 export const Client = model('Client', ClientSchema);
 export const Offer = model('Offer', OfferSchema);
@@ -761,6 +802,7 @@ export type AnyModel = mongoose.Model<any>;
  */
 export const RESOURCE_MODULE: Record<string, string> = {
   leads: 'leads',
+  enquiries: 'enquiries',
   deals: 'journeys',
   clients: 'clients',
   offers: 'journeys',
@@ -787,6 +829,7 @@ export const RESOURCE_MODULE: Record<string, string> = {
 /** Maps REST resource path → Mongoose model for the generic CRUD router. */
 export const RESOURCES: Record<string, AnyModel> = {
   leads: Lead,
+  enquiries: ContactEnquiry,
   deals: Deal,
   clients: Client,
   offers: Offer,

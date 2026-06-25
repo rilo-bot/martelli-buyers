@@ -30,6 +30,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Pipeline',
     links: [
+      { to: '/enquiries', label: 'Enquiries', icon: Inbox, perm: 'enquiries:view' },
       { to: '/leads', label: 'Leads', icon: Users, perm: 'leads:view' },
       { to: '/clients', label: 'Clients', icon: UserCheck, perm: 'clients:view' },
       { to: '/journeys', label: 'Buyer Journeys', icon: FileText, perm: 'journeys:view' },

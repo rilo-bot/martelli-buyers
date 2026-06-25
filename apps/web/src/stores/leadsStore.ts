@@ -4,12 +4,21 @@ import type { Lead, LeadStatus, LeadStageProgress } from '@/types';
 
 const api = resource<Lead>('leads');
 
+// Agreement fields are authored later on the lead and server-defaulted, so they
+// aren't required when creating a lead.
+type LeadAgreementKey =
+  | 'agreementStatus' | 'agreementUrl' | 'agreementSignToken' | 'agreementSentAt'
+  | 'agreementSignerName' | 'agreementSignedAt' | 'agreementSignerIp'
+  | 'agreementSignatureImage' | 'agreementBodyHtml';
+type NewLead = Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'stageProgress' | LeadAgreementKey>
+  & { stageProgress?: LeadStageProgress };
+
 interface LeadsState {
   leads: Lead[];
   loading: boolean;
   loaded: boolean;
   fetch: () => Promise<void>;
-  addLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'stageProgress'> & { stageProgress?: LeadStageProgress }) => Promise<Lead>;
+  addLead: (lead: NewLead) => Promise<Lead>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
   deleteLead: (id: string) => Promise<void>;
   updateLeadStatus: (id: string, status: LeadStatus) => Promise<void>;

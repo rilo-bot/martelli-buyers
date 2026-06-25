@@ -18,6 +18,7 @@ import { publicRouter } from './routes/public';
 import { filesRouter } from './routes/files';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
+import { enquiriesRouter } from './routes/enquiries';
 import { timelineRouter } from './routes/timeline';
 import { journeysRouter } from './routes/journeys';
 import { xeroRouter } from './routes/xero';
@@ -129,6 +130,10 @@ app.use('/api/meet', meetRouter);
 // Lead-specific actions (e.g. atomic "mark won" conversion). Mounted before the
 // generic CRUD router so /leads/:id/win resolves to this handler.
 app.use('/api/leads', leadsRouter);
+
+// Contact-enquiry actions (convert an enquiry into a Lead). Mounted before the
+// generic CRUD router so /enquiries/:id/convert resolves to this handler.
+app.use('/api/enquiries', enquiriesRouter);
 
 // Read-only Buyer Journey timeline / audit events.
 app.use('/api/timeline', timelineRouter);

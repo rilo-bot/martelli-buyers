@@ -48,6 +48,7 @@ export interface PermissionModule {
 export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'dashboard', label: 'Dashboard', actions: ['view'] },
   { key: 'leads', label: 'Leads', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'enquiries', label: 'Contact Enquiries', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'clients', label: 'Clients', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'journeys', label: 'Buyer Journeys', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'properties', label: 'Properties', actions: ['view', 'create', 'edit', 'delete'] },
@@ -167,7 +168,7 @@ export function canManageRole(roleKey: string, requesterIsSuperAdmin: boolean): 
   return requesterIsSuperAdmin || roleKey !== ADMIN_ROLE_KEY;
 }
 
-const OPERATIONAL_FULL = ['leads', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence', 'documents'];
+const OPERATIONAL_FULL = ['leads', 'enquiries', 'clients', 'journeys', 'properties', 'agents', 'dueDiligence', 'documents'];
 
 /** Default permission set per built-in role. Super admin always gets everything regardless. */
 export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
@@ -327,6 +328,47 @@ export interface Lead {
   preferredSuburbs: string[];
   assignedTo: string;
   clientId: string;
+  // Buyer's agency agreement — authored, sent and e-signed during the lead phase
+  // (signing a lead is what converts it to a client + buyer journey). On Won, the
+  // signed agreement is carried over to the created deal for read-only reference.
+  agreementStatus: 'pending' | 'sent' | 'signed';
+  agreementUrl: string;
+  agreementSignToken: string;
+  agreementSentAt: string;
+  agreementSignerName: string;
+  agreementSignedAt: string;
+  agreementSignerIp: string;
+  agreementSignatureImage: string;
+  /** Rich-HTML agreement body authored in the WYSIWYG editor ('' until seeded). */
+  agreementBodyHtml: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Lifecycle of a raw website contact enquiry before/at conversion to a Lead. */
+export type ContactEnquiryStatus = 'new' | 'reviewed' | 'converted' | 'archived';
+
+/**
+ * A raw "Contact Us" form submission. Captured into its own collection (not the
+ * Leads pipeline) so the public form can't flood qualified leads. Staff convert
+ * the worthwhile ones into Leads, which stamps status 'converted' + convertedLeadId.
+ */
+export interface ContactEnquiry {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  enquiryType: string;
+  budget: string;
+  location: string;
+  message: string;
+  consent: boolean;
+  source: string;
+  status: ContactEnquiryStatus;
+  /** Set once converted — links to the created Lead. */
+  convertedLeadId: string;
+  assignedTo: string;
+  notes: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { Invoice, DueDiligence, Deal, Document } from '../models';
+import { Invoice, DueDiligence, Deal, Document, Lead } from '../models';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission, canDownloadDoc } from '../lib/permissions';
 import { presignDownload, getObjectStream, keyFromUrl, normalizeHtmlAssetUrls, hasS3 } from '../lib/s3';
@@ -352,6 +352,120 @@ documentsRouter.post(
         to: deal.clientEmail,
         subject: 'Your Buyer’s Agency Agreement — please review and sign',
         text: `Hi ${deal.clientName || 'there'},\n\nPlease review and sign your buyer's agency agreement using the secure link below:\n\n${signUrl}\n\nA copy is attached for your records. You are welcome to seek independent legal advice before signing.\n\nKind regards,\nMartelli Buyers Agents`,
+        attachments: [{ filename: 'agency-agreement.pdf', content: buf, type: 'application/pdf' }],
+      });
+    }
+
+    res.json({ ok: true, signUrl, emailed: hasEmail });
+  }),
+);
+
+/* ─────────────────── lead agreement (pre-conversion) ─────────────────────
+ * The buyer's agency agreement is authored, sent and e-signed while the record
+ * is still a Lead — signing it is what converts the lead to a client + journey.
+ * These mirror the deal endpoints above but operate on a Lead; the PDF builder
+ * runs off a deal-shaped adapter (name/contact/requirements from the lead, with
+ * neutral default fee wording since the fee is agreed later on the journey).
+ * --------------------------------------------------------------------------- */
+
+type LeadDoc = InstanceType<typeof Lead>;
+
+/** Adapt a Lead into the deal-shaped object the agreement builder expects. */
+function leadAgreementSubject(lead: LeadDoc): Record<string, unknown> {
+  return {
+    ...(lead.toJSON() as Record<string, unknown>),
+    clientName: `${lead.get('firstName') ?? ''} ${lead.get('lastName') ?? ''}`.trim(),
+    clientEmail: lead.get('email') ?? '',
+    clientPhone: lead.get('phone') ?? '',
+    brief: lead.get('notes') ?? '',
+    // No fee at the lead stage → the builder renders neutral default fee wording.
+    fee: 0,
+    feeType: '',
+  };
+}
+
+/** GET /api/documents/lead-agreement/:leadId/content — editable body for the WYSIWYG editor. */
+documentsRouter.get(
+  '/lead-agreement/:leadId/content',
+  requirePermission('leads:view'),
+  asyncHandler(async (req, res) => {
+    const lead = await Lead.findById(req.params.leadId);
+    if (!lead) {
+      res.status(404).json({ error: 'Lead not found.' });
+      return;
+    }
+    if (lead.agreementStatus !== 'signed') {
+      const settings = await getCompanySettingsDto();
+      if (!lead.agreementBodyHtml) {
+        lead.set('agreementBodyHtml', seedAgreementHtml(leadAgreementSubject(lead) as never, settings));
+        await lead.save();
+      } else {
+        const { html, changed } = ensureAgreementScaffold(lead.agreementBodyHtml, settings);
+        if (changed) {
+          lead.set('agreementBodyHtml', html);
+          await lead.save();
+        }
+      }
+    }
+    res.json({
+      bodyHtml: normalizeHtmlAssetUrls(lead.agreementBodyHtml || ''),
+      locked: lead.agreementStatus === 'signed',
+    });
+  }),
+);
+
+/** GET /api/documents/lead-agreement/:leadId.pdf — staff preview of the lead agreement. */
+documentsRouter.get(
+  '/lead-agreement/:leadId.pdf',
+  requirePermission('leads:view'),
+  asyncHandler(async (req, res) => {
+    const lead = await Lead.findById(req.params.leadId);
+    if (!lead) {
+      res.status(404).json({ error: 'Lead not found.' });
+      return;
+    }
+    const download = wantsDownload(req);
+    if (download && !canDownloadDoc(req, lead.get('assignedTo') ?? '')) {
+      res.status(403).json({ error: 'Only the assigned agent or an admin can download this agreement. You can preview it instead.' });
+      return;
+    }
+    const buf = await renderAgreementPdf(leadAgreementSubject(lead) as never, { signed: lead.agreementStatus === 'signed' }, await getCompanySettingsDto());
+    sendPdf(res, buf, 'agency-agreement.pdf', download);
+  }),
+);
+
+/** POST /api/documents/lead-agreement/:leadId/send — create a sign link + email the buyer. */
+documentsRouter.post(
+  '/lead-agreement/:leadId/send',
+  requirePermission('leads:edit'),
+  asyncHandler(async (req, res) => {
+    const lead = await Lead.findById(req.params.leadId);
+    if (!lead) {
+      res.status(404).json({ error: 'Lead not found.' });
+      return;
+    }
+    if (!lead.get('email')) {
+      res.status(400).json({ error: 'No email on this lead.' });
+      return;
+    }
+    // Reuse an existing token so resends keep the same link.
+    let token = lead.agreementSignToken;
+    if (!token) token = randomUUID().replace(/-/g, '');
+    lead.set('agreementSignToken', token);
+    lead.set('agreementStatus', lead.agreementStatus === 'signed' ? 'signed' : 'sent');
+    lead.set('agreementSentAt', new Date().toISOString());
+    // Reflect "agreement sent" on the lead pipeline status (unless already won/lost).
+    if (!['won', 'lost'].includes(lead.get('status'))) lead.set('status', 'agreement_sent');
+    await lead.save();
+
+    const signUrl = `${env.CLIENT_ORIGIN}/sign/${token}`;
+
+    if (hasEmail) {
+      const buf = await renderAgreementPdf(leadAgreementSubject(lead) as never, { signed: false }, await getCompanySettingsDto());
+      await sendMail({
+        to: lead.get('email'),
+        subject: 'Your Buyer’s Agency Agreement — please review and sign',
+        text: `Hi ${lead.get('firstName') || 'there'},\n\nPlease review and sign your buyer's agency agreement using the secure link below:\n\n${signUrl}\n\nA copy is attached for your records. You are welcome to seek independent legal advice before signing.\n\nKind regards,\nMartelli Buyers Agents`,
         attachments: [{ filename: 'agency-agreement.pdf', content: buf, type: 'application/pdf' }],
       });
     }

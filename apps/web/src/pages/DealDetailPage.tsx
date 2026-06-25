@@ -44,7 +44,7 @@ import { useXeroStore } from '@/stores/xeroStore';
 import { useOffersStore } from '@/stores/offersStore';
 import { useTasksStore } from '@/stores/tasksStore';
 import { usePurchasesStore } from '@/stores/purchasesStore';
-import { downloadInvoicePdf, downloadAgreementPdf, sendAgreement, getAgreementContent, invoicePdfPreviewPath, agreementPdfPreviewPath } from '@/lib/documents';
+import { downloadInvoicePdf, downloadAgreementPdf, invoicePdfPreviewPath, agreementPdfPreviewPath } from '@/lib/documents';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { canDownloadDoc } from '@/lib/docAccess';
 import { EntityDocuments } from '@/components/documents/EntityDocuments';
@@ -126,7 +126,6 @@ export default function DealDetailPage() {
   const [emailRecipientOverride, setEmailRecipientOverride] = useState<EmailRecipient | undefined>(undefined);
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [xeroBusyId, setXeroBusyId] = useState<string | null>(null);
-  const [sendingAgreement, setSendingAgreement] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [aiConsentError, setAiConsentError] = useState(false);
   const [aiForm, setAiForm] = useState({ type: 'call' as 'call' | 'meeting', title: '', participants: '', transcript: '' });
@@ -379,19 +378,6 @@ export default function DealDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to refresh from Xero.');
     } finally {
       setXeroBusyId(null);
-    }
-  };
-
-  const handleSendAgreement = async () => {
-    setSendingAgreement(true);
-    try {
-      const { emailed } = await sendAgreement(id);
-      await useDealsStore.getState().fetch();
-      toast.success(emailed ? 'Agreement emailed to the client for signing.' : 'Agreement ready — email is not configured, share the signing link manually.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send agreement.');
-    } finally {
-      setSendingAgreement(false);
     }
   };
 
@@ -656,23 +642,14 @@ export default function DealDetailPage() {
                     <Badge variant={deal.agreementStatus === 'signed' ? 'default' : deal.agreementStatus === 'sent' ? 'secondary' : 'outline'}>
                       {deal.agreementStatus === 'signed' ? 'Signed' : deal.agreementStatus === 'sent' ? 'Sent' : 'Pending'}
                     </Badge>
-                    {deal.agreementStatus !== 'signed' && (
-                      <Button size="sm" onClick={handleSendAgreement} disabled={sendingAgreement}>
-                        <FileSignature className="mr-1.5 h-3.5 w-3.5" />
-                        {sendingAgreement ? 'Sending…' : deal.agreementStatus === 'sent' ? 'Resend' : 'Generate & Send'}
-                      </Button>
-                    )}
-                    {deal.agreementStatus !== 'signed' && (
-                      <Button size="sm" variant="outline" onClick={() => navigate(`/journeys/${id}/agreement`)}>
-                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                        Edit
-                      </Button>
-                    )}
                     <Button size="sm" variant="outline" onClick={() => setViewAgreement(true)}>
                       <Eye className="mr-1.5 h-3.5 w-3.5" />
                       {deal.agreementStatus === 'signed' ? 'Signed PDF' : 'Preview PDF'}
                     </Button>
                   </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    The agency agreement is created and signed on the originating lead. It’s shown here for reference only.
+                  </p>
 
                   {deal.agreementStatus === 'sent' && deal.agreementSignToken && (
                     <div className="mt-3 space-y-2">
