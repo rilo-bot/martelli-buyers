@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Navigate, Link, useNavigate } from 'react-router-dom';
 import { useLeadsStore } from '@/stores/leadsStore';
 import { useClientsStore } from '@/stores/clientsStore';
@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2, Video, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2, Video, CalendarClock, ExternalLink, Plus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
@@ -27,7 +27,7 @@ import { WonDialog, type WonFormState } from '@/pages/leads/LeadDialogs';
 import { useWonConversion } from '@/pages/leads/useWonConversion';
 import { useDetailBreadcrumb } from '@/stores/breadcrumbStore';
 import { EntityDocuments } from '@/components/documents/EntityDocuments';
-import type { Lead, LeadStatus } from '@/types';
+import type { Lead, LeadStatus, Meeting } from '@/types';
 
 interface EditForm {
   firstName: string;
@@ -73,6 +73,10 @@ export default function LeadDetailPage() {
   const findClientByEmail = useClientsStore((s) => s.findClientByEmail);
   const stages = useQualificationStagesStore((s) => s.stages);
   const convertToWon = useWonConversion();
+  const meetings = useMeetStore((s) => s.meetings);
+  const fetchMeetings = useMeetStore((s) => s.fetch);
+  const hasMeet = useConfigStore((s) => s.hasMeet);
+  const { can } = usePermissions();
 
   const sortedStages = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
 
@@ -82,8 +86,17 @@ export default function LeadDetailPage() {
   const [form, setForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [meetOpen, setMeetOpen] = useState(false);
 
   useDetailBreadcrumb(lead ? `${lead.firstName} ${lead.lastName}`.trim() : null);
+
+  // Load meetings once Meet is configured so the header strip can show this
+  // lead's scheduled calls. Done lazily here (not at bootstrap) so a slow
+  // external service never blocks the page.
+  const canViewMeet = can('meet:view');
+  useEffect(() => {
+    if (hasMeet && canViewMeet) fetchMeetings().catch(() => {});
+  }, [hasMeet, canViewMeet, fetchMeetings]);
 
   // ── Guards (after all hooks) ─────────────────────────────────────────────
   if (!id) return <Navigate to="/leads" replace />;
@@ -92,6 +105,18 @@ export default function LeadDetailPage() {
   const linkedClient = lead.clientId ? clients.find((c) => c.id === lead.clientId) : null;
   const stageProgress = lead.stageProgress ?? {};
   const statusStyle = STATUS_STYLES[lead.status];
+
+  // This lead's meetings = any meeting the buyer is a participant of (they're
+  // pre-added when a call is booked from here). Surface upcoming/live ones.
+  // RILO may return participants as plain emails OR objects, so extract defensively.
+  const leadEmail = lead.email.trim().toLowerCase();
+  const leadMeetings = leadEmail
+    ? meetings.filter((m) => (m.participants ?? []).some((p) => participantEmail(p) === leadEmail))
+    : [];
+  const upcomingMeetings = leadMeetings
+    .filter((m) => m.status === 'scheduled' || m.status === 'live')
+    .sort((a, b) => (a.scheduledStartAt ?? '').localeCompare(b.scheduledStartAt ?? ''));
+  const canCreateMeet = can('meet:create');
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const startEditing = () => {
@@ -214,7 +239,12 @@ export default function LeadDetailPage() {
               </div>
             </div>
 
-            <div className="flex flex-col items-stretch gap-2 shrink-0 sm:w-44">
+            <div className="flex flex-col items-stretch gap-2.5 shrink-0 sm:w-48">
+              {hasMeet && canCreateMeet && (
+                <Button size="sm" onClick={() => setMeetOpen(true)} className="shadow-sm shadow-primary/20">
+                  <Video className="mr-1.5 h-3.5 w-3.5" /> New meeting
+                </Button>
+              )}
               <div className="space-y-1">
                 <Label htmlFor="lead-status" className="text-[11px] uppercase tracking-wide text-muted-foreground">Pipeline status</Label>
                 <Select id="lead-status" value={lead.status} onChange={(e) => handleStatusChange(e.target.value as LeadStatus)} className="text-sm">
@@ -222,7 +252,7 @@ export default function LeadDetailPage() {
                 </Select>
               </div>
               {lead.status !== 'won' && lead.status !== 'lost' && (
-                <Button size="sm" onClick={openWonDialog} className="shadow-sm shadow-primary/20">
+                <Button size="sm" variant="outline" onClick={openWonDialog}>
                   <Trophy className="mr-1.5 h-3.5 w-3.5" /> Mark as Won
                 </Button>
               )}
@@ -230,6 +260,15 @@ export default function LeadDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Scheduled meetings strip — the buyer's upcoming RILO Meet calls */}
+      {hasMeet && (upcomingMeetings.length > 0 || canCreateMeet) && (
+        <LeadMeetingsStrip
+          meetings={upcomingMeetings}
+          canCreate={canCreateMeet}
+          onNew={() => setMeetOpen(true)}
+        />
+      )}
 
       {/* Linked client banner */}
       {linkedClient && (
@@ -407,9 +446,6 @@ export default function LeadDetailPage() {
         </Card>
       </form>
 
-      {/* Meetings (RILO Meet) */}
-      <LeadMeetCard lead={lead} />
-
       {/* Agency agreement */}
       <LeadAgreementCard lead={lead} />
 
@@ -425,6 +461,9 @@ export default function LeadDetailPage() {
         onOpenChange={setShowWonDialog}
         onConfirm={handleConfirmWon}
       />
+
+      {/* Schedule / start a meeting with this buyer (RILO Meet) */}
+      <MeetCreateSheet lead={lead} open={meetOpen} onOpenChange={setMeetOpen} onCreated={() => fetchMeetings().catch(() => {})} />
     </div>
   );
 }
@@ -534,35 +573,119 @@ function LeadAgreementCard({ lead }: { lead: Lead }) {
   );
 }
 
-/* ─── Meetings (RILO Meet) — start/schedule a call with this buyer ─── */
+/* ─── Meetings (RILO Meet) ───────────────────────────────────────────────── */
+
+/**
+ * Lower-cased email for a participant entry. The Meet API is inconsistent —
+ * a participant may be a plain email string or an object ({ email | address }).
+ * Anything unrecognised yields '' so matching/`.some` never throws.
+ */
+function participantEmail(p: unknown): string {
+  if (typeof p === 'string') return p.toLowerCase();
+  if (p && typeof p === 'object') {
+    const o = p as { email?: unknown; address?: unknown };
+    const e = typeof o.email === 'string' ? o.email : typeof o.address === 'string' ? o.address : '';
+    return e.toLowerCase();
+  }
+  return '';
+}
+
+/** Friendly "Wed 3 Jul, 2:30 pm" for a scheduled start. */
+function formatMeetingWhen(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * The buyer's upcoming meetings, shown directly under the header. Each card
+ * opens/joins the RILO room; the leading "New meeting" tile books another.
+ */
+function LeadMeetingsStrip({ meetings, canCreate, onNew }: { meetings: Meeting[]; canCreate: boolean; onNew: () => void }) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <CalendarClock className="h-4 w-4 text-primary" /> Meetings
+          {meetings.length > 0 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground tabular-nums">{meetings.length}</span>
+          )}
+        </h2>
+        {canCreate && (
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onNew}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> New meeting
+          </Button>
+        )}
+      </div>
+
+      {meetings.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No meetings scheduled with this buyer yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          {meetings.map((m) => {
+            const when = formatMeetingWhen(m.scheduledStartAt);
+            const live = m.status === 'live';
+            const participantCount = m.participants?.length ?? 0;
+            return (
+              <div key={m.meetingId} className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/40 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold leading-tight line-clamp-1">{m.title || 'Untitled meeting'}</p>
+                  <span className={cn(
+                    'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                    live ? 'bg-success/15 text-success' : 'bg-info/15 text-info',
+                  )}>
+                    {live ? 'Live' : 'Scheduled'}
+                  </span>
+                </div>
+                <div className="space-y-1 text-[11px] text-muted-foreground">
+                  {when && (
+                    <span className="flex items-center gap-1.5">
+                      <CalendarClock className="h-3 w-3 shrink-0" />
+                      {when}{m.scheduledDurationMinutes ? ` · ${m.scheduledDurationMinutes} min` : ''}
+                    </span>
+                  )}
+                  {participantCount > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <Users className="h-3 w-3 shrink-0" />{participantCount} participant{participantCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  className="mt-auto h-8 text-xs"
+                  disabled={!m.meetingLinkUrl}
+                  onClick={() => m.meetingLinkUrl && window.open(m.meetingLinkUrl, '_blank', 'noopener')}
+                >
+                  <ExternalLink className="mr-1.5 h-3 w-3" />{live ? 'Join' : 'Open'}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const MEET_FORM_DEFAULTS = { scheduled: false, scheduledStartAt: '', scheduledDurationMinutes: '45' };
 
-function LeadMeetCard({ lead }: { lead: Lead }) {
+/** Controlled create/schedule sheet, pre-filled for a given lead. */
+function MeetCreateSheet({
+  lead, open, onOpenChange, onCreated,
+}: { lead: Lead; open: boolean; onOpenChange: (o: boolean) => void; onCreated: () => void }) {
   const currentUser = useAuthStore((s) => s.currentUser);
-  const hasMeet = useConfigStore((s) => s.hasMeet);
-  const configLoaded = useConfigStore((s) => s.loaded);
   const createMeeting = useMeetStore((s) => s.create);
-  const { can } = usePermissions();
 
-  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    title: '', hostEmail: '', participants: '', ...MEET_FORM_DEFAULTS,
-  });
+  const [form, setForm] = useState({ title: '', hostEmail: '', participants: '', ...MEET_FORM_DEFAULTS });
 
-  if (!can('meet:create')) return null;
-
-  const openSheet = () => {
+  // Re-seed the form from the lead each time the sheet opens.
+  useEffect(() => {
+    if (!open) return;
     const name = `${lead.firstName} ${lead.lastName}`.trim() || 'buyer';
-    setForm({
-      title: `Meeting with ${name}`,
-      hostEmail: currentUser?.email ?? '',
-      participants: lead.email,
-      ...MEET_FORM_DEFAULTS,
-    });
-    setOpen(true);
-  };
+    setForm({ title: `Meeting with ${name}`, hostEmail: currentUser?.email ?? '', participants: lead.email, ...MEET_FORM_DEFAULTS });
+  }, [open, lead.firstName, lead.lastName, lead.email, currentUser?.email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -585,7 +708,8 @@ function LeadMeetCard({ lead }: { lead: Lead }) {
     setSaving(true);
     try {
       const meeting = await createMeeting(payload);
-      setOpen(false);
+      onOpenChange(false);
+      onCreated();
       if (meeting?.meetingLinkUrl && !form.scheduled) {
         toast.success('Meeting created.', {
           action: { label: 'Join', onClick: () => window.open(meeting.meetingLinkUrl, '_blank', 'noopener') },
@@ -601,78 +725,53 @@ function LeadMeetCard({ lead }: { lead: Lead }) {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Video className="h-4 w-4 text-primary" /> Meetings
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {configLoaded && !hasMeet ? (
-          <p className="text-sm text-muted-foreground">
-            RILO Meet isn’t configured, so video meetings are unavailable. Ask an admin to add the
-            server key to enable instant and scheduled calls.
-          </p>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button size="sm" onClick={openSheet}>
-              <Video className="mr-1.5 h-3.5 w-3.5" /> New meeting
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Start an instant video call or schedule one with {lead.firstName || 'the buyer'} — they’re pre-added as a participant.
-            </p>
-          </div>
-        )}
-      </CardContent>
-
-      <Sheet open={open} onOpenChange={(o) => { if (!saving) setOpen(o); }}>
-        <SheetContent size="lg">
-          <SheetHeader><SheetTitle>New Meeting</SheetTitle></SheetHeader>
-          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-            <SheetBody className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="lm-title">Title *</Label>
-                <Input id="lm-title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} autoFocus />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="lm-host">Host email *</Label>
-                <Input id="lm-host" type="email" value={form.hostEmail} onChange={(e) => setForm((f) => ({ ...f, hostEmail: e.target.value }))} placeholder="you@yourfirm.com" />
-                <p className="text-[11px] text-muted-foreground">Must be an existing RILO user.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="lm-participants">Participants</Label>
-                <Textarea id="lm-participants" rows={2} value={form.participants} onChange={(e) => setForm((f) => ({ ...f, participants: e.target.value }))} placeholder="buyer@example.com" />
-                <p className="text-[11px] text-muted-foreground">Comma- or space-separated emails. They wait in the lobby until the host admits them.</p>
-              </div>
-              <label className="flex items-center gap-2.5 rounded-lg border border-border px-3 py-2.5 text-sm cursor-pointer hover:bg-muted transition-colors">
-                <input type="checkbox" checked={form.scheduled} onChange={(e) => setForm((f) => ({ ...f, scheduled: e.target.checked }))} className="rounded" />
-                <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">Schedule for later</span>
-              </label>
-              {form.scheduled && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="lm-start">Start time *</Label>
-                    <Input id="lm-start" type="datetime-local" value={form.scheduledStartAt} onChange={(e) => setForm((f) => ({ ...f, scheduledStartAt: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="lm-duration">Duration (min) *</Label>
-                    <Input id="lm-duration" type="number" min={1} value={form.scheduledDurationMinutes} onChange={(e) => setForm((f) => ({ ...f, scheduledDurationMinutes: e.target.value }))} />
-                  </div>
+    <Sheet open={open} onOpenChange={(o) => { if (!saving) onOpenChange(o); }}>
+      <SheetContent size="lg">
+        <SheetHeader><SheetTitle>New Meeting</SheetTitle></SheetHeader>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <SheetBody className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="lm-title">Title *</Label>
+              <Input id="lm-title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lm-host">Host email *</Label>
+              <Input id="lm-host" type="email" value={form.hostEmail} onChange={(e) => setForm((f) => ({ ...f, hostEmail: e.target.value }))} placeholder="you@yourfirm.com" />
+              <p className="text-[11px] text-muted-foreground">Must be an existing RILO user.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lm-participants">Participants</Label>
+              <Textarea id="lm-participants" rows={2} value={form.participants} onChange={(e) => setForm((f) => ({ ...f, participants: e.target.value }))} placeholder="buyer@example.com" />
+              <p className="text-[11px] text-muted-foreground">Comma- or space-separated emails. They wait in the lobby until the host admits them.</p>
+            </div>
+            <label className="flex items-center gap-2.5 rounded-lg border border-border px-3 py-2.5 text-sm cursor-pointer hover:bg-muted transition-colors">
+              <input type="checkbox" checked={form.scheduled} onChange={(e) => setForm((f) => ({ ...f, scheduled: e.target.checked }))} className="rounded" />
+              <CalendarClock className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">Schedule for later</span>
+            </label>
+            {form.scheduled && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="lm-start">Start time *</Label>
+                  <Input id="lm-start" type="datetime-local" value={form.scheduledStartAt} onChange={(e) => setForm((f) => ({ ...f, scheduledStartAt: e.target.value }))} />
                 </div>
-              )}
-            </SheetBody>
-            <SheetFooter>
-              <SheetClose asChild><Button type="button" variant="ghost" disabled={saving}>Cancel</Button></SheetClose>
-              <Button type="submit" disabled={saving || !form.title.trim() || !form.hostEmail.trim()} className="shadow-sm shadow-primary/20">
-                {saving
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating…</>
-                  : <><Video className="mr-2 h-4 w-4" />{form.scheduled ? 'Schedule Meeting' : 'Start Meeting'}</>}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
-    </Card>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lm-duration">Duration (min) *</Label>
+                  <Input id="lm-duration" type="number" min={1} value={form.scheduledDurationMinutes} onChange={(e) => setForm((f) => ({ ...f, scheduledDurationMinutes: e.target.value }))} />
+                </div>
+              </div>
+            )}
+          </SheetBody>
+          <SheetFooter>
+            <SheetClose asChild><Button type="button" variant="ghost" disabled={saving}>Cancel</Button></SheetClose>
+            <Button type="submit" disabled={saving || !form.title.trim() || !form.hostEmail.trim()} className="shadow-sm shadow-primary/20">
+              {saving
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating…</>
+                : <><Video className="mr-2 h-4 w-4" />{form.scheduled ? 'Schedule Meeting' : 'Start Meeting'}</>}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }
