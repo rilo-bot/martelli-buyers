@@ -26,6 +26,10 @@ import {
   STAGE_PILL,
   STAGE_BAR_ACCENT,
 } from '@/lib/statusStyles';
+import { PROPERTY_TYPE_OPTIONS } from './leads/leadShared';
+
+const popularPropertyTypes = PROPERTY_TYPE_OPTIONS.filter((o) => o.group === 'popular');
+const standardPropertyTypes = PROPERTY_TYPE_OPTIONS.filter((o) => o.group === 'standard');
 
 export default function DealsPage() {
   const deals = useDealsStore((s) => s.deals);
@@ -45,7 +49,7 @@ export default function DealsPage() {
   const [form, setForm] = useState({
     clientName: '', clientEmail: '', clientPhone: '', brief: '',
     budget: '', fee: '', feeType: 'fixed' as 'fixed' | 'percentage',
-    propertyType: '', bedrooms: '3', bathrooms: '2', preferredSuburbs: '', clientId: '',
+    propertyType: '', propertyTypeOther: '', bedrooms: '3', bathrooms: '2', preferredSuburbs: '', clientId: '',
   });
 
   const debouncedSearch = useDebouncedValue(search, 200);
@@ -81,7 +85,7 @@ export default function DealsPage() {
       fee: Number(form.fee) || 0,
       feeType: form.feeType,
       preferredSuburbs: form.preferredSuburbs.split(',').map((s) => s.trim()).filter(Boolean),
-      propertyType: form.propertyType.trim(),
+      propertyType: (form.propertyType === 'Other' ? form.propertyTypeOther : form.propertyType).trim(),
       bedrooms: Number(form.bedrooms) || 3,
       bathrooms: Number(form.bathrooms) || 2,
       agreementStatus: 'pending',
@@ -94,7 +98,7 @@ export default function DealsPage() {
       aiConsentDate: '',
     });
     if (form.clientId) addDealToClient(form.clientId, deal.id);
-    setForm({ clientName: '', clientEmail: '', clientPhone: '', brief: '', budget: '', fee: '', feeType: 'fixed', propertyType: '', bedrooms: '3', bathrooms: '2', preferredSuburbs: '', clientId: '' });
+    setForm({ clientName: '', clientEmail: '', clientPhone: '', brief: '', budget: '', fee: '', feeType: 'fixed', propertyType: '', propertyTypeOther: '', bedrooms: '3', bathrooms: '2', preferredSuburbs: '', clientId: '' });
     setShowAddDialog(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create buyer journey.');
@@ -324,7 +328,15 @@ export default function DealsPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="propertyType">Property type</Label>
-                <Input id="propertyType" value={form.propertyType} onChange={(e) => setForm((f) => ({ ...f, propertyType: e.target.value }))} placeholder="House" />
+                <Select id="propertyType" value={form.propertyType} onChange={(e) => setForm((f) => ({ ...f, propertyType: e.target.value, propertyTypeOther: '' }))} className="h-10 w-full">
+                  <option value="">Select a property type...</option>
+                  <optgroup label="— Popular —">
+                    {popularPropertyTypes.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </optgroup>
+                  <optgroup label="— More options —">
+                    {standardPropertyTypes.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </optgroup>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="bedrooms">Beds</Label>
@@ -335,6 +347,12 @@ export default function DealsPage() {
                 <Input id="bathrooms" type="number" min="1" value={form.bathrooms} onChange={(e) => setForm((f) => ({ ...f, bathrooms: e.target.value }))} />
               </div>
             </div>
+            {form.propertyType === 'Other' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="propertyTypeOther">Specify property type</Label>
+                <Input id="propertyTypeOther" value={form.propertyTypeOther} onChange={(e) => setForm((f) => ({ ...f, propertyTypeOther: e.target.value }))} placeholder="Please describe the property type..." />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="preferredSuburbs">Preferred suburbs (comma-separated)</Label>
               <Input id="preferredSuburbs" value={form.preferredSuburbs} onChange={(e) => setForm((f) => ({ ...f, preferredSuburbs: e.target.value }))} placeholder="Remuera, Newmarket, Parnell" />

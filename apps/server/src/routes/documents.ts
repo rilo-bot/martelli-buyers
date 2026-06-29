@@ -23,6 +23,8 @@ export const documentsRouter = Router();
 function sendPdf(res: Response, buf: Buffer, filename: string, attachment = false): void {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${attachment ? 'attachment' : 'inline'}; filename="${filename}"`);
+  // Generated on the fly from editable content — never let a stale render cache.
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Length', buf.length);
   res.end(buf);
 }

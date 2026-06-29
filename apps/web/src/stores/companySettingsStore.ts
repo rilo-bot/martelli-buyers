@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { request } from '@/lib/api';
-import type { CompanySettings } from '@/types';
+import type { CompanySettings, ContactFormConfig } from '@/types';
+
+/** The admin-editable slice of the contact form (publish/token stay server-side). */
+export interface ContactFormEditableInput {
+  fields: ContactFormConfig['fields'];
+  styles: ContactFormConfig['styles'];
+  content: ContactFormConfig['content'];
+  allowedOrigins: string[];
+}
 
 /**
  * Org-wide company settings (identity, branding, invoice template). A singleton
@@ -14,6 +22,12 @@ interface CompanySettingsState {
   loaded: boolean;
   fetch: () => Promise<void>;
   save: (updates: Partial<CompanySettings>) => Promise<CompanySettings>;
+  // Contact form builder — managed via dedicated server routes so the publish
+  // state + token stay server-owned.
+  saveContactForm: (input: ContactFormEditableInput) => Promise<ContactFormConfig>;
+  publishContactForm: () => Promise<ContactFormConfig>;
+  unpublishContactForm: () => Promise<ContactFormConfig>;
+  regenerateContactFormToken: () => Promise<ContactFormConfig>;
 }
 
 export const useCompanySettingsStore = create<CompanySettingsState>()((set) => ({
@@ -35,5 +49,29 @@ export const useCompanySettingsStore = create<CompanySettingsState>()((set) => (
     const settings = await request<CompanySettings>('PUT', '/api/company-settings', updates);
     set({ settings });
     return settings;
+  },
+
+  saveContactForm: async (input) => {
+    const cf = await request<ContactFormConfig>('PUT', '/api/company-settings/contact-form', input);
+    set((s) => (s.settings ? { settings: { ...s.settings, contactForm: cf } } : {}));
+    return cf;
+  },
+
+  publishContactForm: async () => {
+    const cf = await request<ContactFormConfig>('POST', '/api/company-settings/contact-form/publish');
+    set((s) => (s.settings ? { settings: { ...s.settings, contactForm: cf } } : {}));
+    return cf;
+  },
+
+  unpublishContactForm: async () => {
+    const cf = await request<ContactFormConfig>('POST', '/api/company-settings/contact-form/unpublish');
+    set((s) => (s.settings ? { settings: { ...s.settings, contactForm: cf } } : {}));
+    return cf;
+  },
+
+  regenerateContactFormToken: async () => {
+    const cf = await request<ContactFormConfig>('POST', '/api/company-settings/contact-form/regenerate-token');
+    set((s) => (s.settings ? { settings: { ...s.settings, contactForm: cf } } : {}));
+    return cf;
   },
 }));

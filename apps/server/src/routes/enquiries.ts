@@ -22,11 +22,15 @@ function buildNotes(enquiry: {
   budget: string;
   location: string;
   message: string;
+  extraFields?: Record<string, string> | null;
 }): string {
+  const extras = enquiry.extraFields && typeof enquiry.extraFields === 'object' ? enquiry.extraFields : {};
   const headers = [
     enquiry.enquiryType && `Enquiry type: ${enquiry.enquiryType}`,
     enquiry.budget && `Budget range: ${enquiry.budget}`,
     enquiry.location && `Preferred location: ${enquiry.location}`,
+    // Custom/extra form fields, preserved verbatim from the submission.
+    ...Object.entries(extras).map(([k, v]) => (v ? `${k}: ${v}` : '')),
   ].filter((line): line is string => Boolean(line));
 
   return [
@@ -83,6 +87,7 @@ enquiriesRouter.post(
         budget: enquiry.get('budget'),
         location,
         message: enquiry.get('message'),
+        extraFields: enquiry.get('extraFields') as Record<string, string> | undefined,
       }),
       // Keep the preferred location searchable on the lead too.
       preferredSuburbs: location ? [location] : [],

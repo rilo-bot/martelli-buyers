@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useBootstrapData } from '@/lib/bootstrap';
 import LoginPage from '@/pages/LoginPage';
 import ContactUsPage from '@/pages/ContactUsPage';
+import EmbedContactFormPage from '@/pages/EmbedContactFormPage';
 import InviteAcceptPage from '@/pages/InviteAcceptPage';
 import DashboardPage from '@/pages/DashboardPage';
 import LeadsPage from '@/pages/LeadsPage';
@@ -102,6 +103,8 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/contact-us" element={<ContactUsPage />} />
+        {/* Chrome-less form host for the embeddable iframe widget (public). */}
+        <Route path="/embed/f/:token" element={<EmbedContactFormPage />} />
         <Route path="/invite/:token" element={<InviteAcceptPage />} />
         <Route path="/sign/:token" element={<SignAgreementPage />} />
         <Route element={<ProtectedLayout />}>

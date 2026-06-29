@@ -16,8 +16,11 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 
 // Editable fields only (everything on CompanySettings except the server-managed
 // id/createdAt/updatedAt). gstRate is kept as a string for smooth text editing.
-// ddChecklistTemplate is managed in its own Settings → Due Diligence section.
-type FormState = Omit<CompanySettings, 'id' | 'createdAt' | 'updatedAt' | 'gstRate' | 'ddChecklistTemplate'> & { gstRate: string };
+// ddChecklistTemplate and contactForm are managed in their own Settings sections.
+type FormState = Omit<
+  CompanySettings,
+  'id' | 'createdAt' | 'updatedAt' | 'gstRate' | 'ddChecklistTemplate' | 'contactForm'
+> & { gstRate: string };
 
 const D = COMPANY_SETTINGS_DEFAULTS;
 

@@ -1,5 +1,11 @@
 import mongoose, { Schema, model } from 'mongoose';
-import { COMPANY_SETTINGS_DEFAULTS, DD_CHECKLIST_TEMPLATE_DEFAULTS } from '@rilo/shared';
+import {
+  COMPANY_SETTINGS_DEFAULTS,
+  DD_CHECKLIST_TEMPLATE_DEFAULTS,
+  CONTACT_FORM_FIELD_CATALOG,
+  CONTACT_FORM_STYLE_DEFAULTS,
+  CONTACT_FORM_CONTENT_DEFAULTS,
+} from '@rilo/shared';
 
 /* ───────────────────────── shared options ───────────────────────────── */
 
@@ -251,6 +257,8 @@ const ContactEnquirySchema = new Schema(
     convertedLeadId: { type: String, default: '' },
     assignedTo: { type: String, default: '' },
     notes: { type: String, default: '' },
+    // Submitted values for fields with no dedicated column (custom + extras).
+    extraFields: { type: Schema.Types.Mixed, default: () => ({}) },
   },
   baseOpts,
 );
@@ -536,6 +544,85 @@ const OutlookConnectionSchema = new Schema(
   baseOpts,
 );
 
+// ── Contact form builder sub-schemas (embedded on CompanySettings) ──
+const ContactFormFieldSchema = new Schema(
+  {
+    key: { type: String, required: true },
+    type: { type: String, default: 'text' },
+    label: { type: String, default: '' },
+    placeholder: { type: String, default: '' },
+    required: { type: Boolean, default: false },
+    enabled: { type: Boolean, default: true },
+    options: { type: [String], default: undefined },
+    system: { type: Boolean, default: false },
+    fullWidth: { type: Boolean, default: undefined },
+  },
+  sub,
+);
+
+const ContactFormContactDetailSchema = new Schema(
+  {
+    label: { type: String, default: '' },
+    value: { type: String, default: '' },
+    href: { type: String, default: '' },
+  },
+  sub,
+);
+
+const ContactFormStylesSchema = new Schema(
+  {
+    accentColor: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.accentColor },
+    backgroundColor: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.backgroundColor },
+    surfaceColor: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.surfaceColor },
+    textColor: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.textColor },
+    buttonTextColor: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.buttonTextColor },
+    borderColor: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.borderColor },
+    font: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.font },
+    cornerRadius: { type: Number, default: CONTACT_FORM_STYLE_DEFAULTS.cornerRadius },
+    maxWidth: { type: Number, default: CONTACT_FORM_STYLE_DEFAULTS.maxWidth },
+    padding: { type: Number, default: CONTACT_FORM_STYLE_DEFAULTS.padding },
+    borderWidth: { type: Number, default: CONTACT_FORM_STYLE_DEFAULTS.borderWidth },
+    shadow: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.shadow },
+    layout: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.layout },
+    labelStyle: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.labelStyle },
+    buttonStyle: { type: String, default: CONTACT_FORM_STYLE_DEFAULTS.buttonStyle },
+    showLogo: { type: Boolean, default: CONTACT_FORM_STYLE_DEFAULTS.showLogo },
+  },
+  sub,
+);
+
+const ContactFormContentSchema = new Schema(
+  {
+    eyebrow: { type: String, default: CONTACT_FORM_CONTENT_DEFAULTS.eyebrow },
+    heading: { type: String, default: CONTACT_FORM_CONTENT_DEFAULTS.heading },
+    intro: { type: String, default: CONTACT_FORM_CONTENT_DEFAULTS.intro },
+    submitLabel: { type: String, default: CONTACT_FORM_CONTENT_DEFAULTS.submitLabel },
+    successHeading: { type: String, default: CONTACT_FORM_CONTENT_DEFAULTS.successHeading },
+    successMessage: { type: String, default: CONTACT_FORM_CONTENT_DEFAULTS.successMessage },
+    contactDetails: {
+      type: [ContactFormContactDetailSchema],
+      default: () => CONTACT_FORM_CONTENT_DEFAULTS.contactDetails.map((d) => ({ ...d })),
+    },
+  },
+  sub,
+);
+
+// Token managed server-side (publish/regenerate only); '' until first publish.
+const ContactFormConfigSchema = new Schema(
+  {
+    published: { type: Boolean, default: false },
+    token: { type: String, default: '' },
+    allowedOrigins: { type: [String], default: [] },
+    fields: {
+      type: [ContactFormFieldSchema],
+      default: () => CONTACT_FORM_FIELD_CATALOG.map((f) => ({ ...f })),
+    },
+    styles: { type: ContactFormStylesSchema, default: () => ({}) },
+    content: { type: ContactFormContentSchema, default: () => ({}) },
+  },
+  sub,
+);
+
 // Single org-wide company settings (one document): identity, branding and
 // invoice-template text consumed by the PDF builders. Defaults mirror today's
 // hardcoded output so PDFs are unchanged until an admin customises them.
@@ -561,6 +648,7 @@ const CompanySettingsSchema = new Schema(
       type: [DDChecklistTemplateItemSchema],
       default: () => DD_CHECKLIST_TEMPLATE_DEFAULTS.map((i) => ({ ...i })),
     },
+    contactForm: { type: ContactFormConfigSchema, default: () => ({}) },
   },
   baseOpts,
 );

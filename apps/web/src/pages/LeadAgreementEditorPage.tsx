@@ -28,6 +28,10 @@ export default function LeadAgreementEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // Bumped each time we open the preview so the PDF URL changes and the browser
+  // can't serve a cached (stale) render.
+  const [previewNonce, setPreviewNonce] = useState(0);
+  const [preparingPreview, setPreparingPreview] = useState(false);
 
   const bodyRef = useRef('');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,15 +52,17 @@ export default function LeadAgreementEditorPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  const persist = async () => {
-    if (!id) return;
+  const persist = async (): Promise<boolean> => {
+    if (!id) return false;
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     setSaving(true);
     try {
       await updateLead(id, { agreementBodyHtml: bodyRef.current });
       setDirty(false);
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save changes.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -70,6 +76,22 @@ export default function LeadAgreementEditorPage() {
   };
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+  // Flush any pending autosave BEFORE previewing, so the PDF reflects the latest
+  // edits (otherwise the debounced save hasn't persisted yet and the render is stale).
+  const openPreview = async () => {
+    setPreparingPreview(true);
+    try {
+      if (saveTimer.current || dirty) {
+        const ok = await persist();
+        if (!ok) return; // don't show a stale render if the save failed
+      }
+      setPreviewNonce((n) => n + 1);
+      setShowPreview(true);
+    } finally {
+      setPreparingPreview(false);
+    }
+  };
 
   if (!id) return null;
 
@@ -96,8 +118,9 @@ export default function LeadAgreementEditorPage() {
               {status}
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={() => setShowPreview(true)}>
-            <Eye className="mr-1.5 h-4 w-4" /> Preview PDF
+          <Button variant="outline" size="sm" onClick={openPreview} disabled={preparingPreview}>
+            {preparingPreview ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Eye className="mr-1.5 h-4 w-4" />}
+            Preview PDF
           </Button>
           {!locked && (
             <Button size="sm" onClick={persist} disabled={saving || !dirty}>
@@ -129,7 +152,7 @@ export default function LeadAgreementEditorPage() {
           onClose={() => setShowPreview(false)}
           title="Agreement preview"
           mimeType="application/pdf"
-          previewPath={leadAgreementPdfPreviewPath(id)}
+          previewPath={`${leadAgreementPdfPreviewPath(id)}?t=${previewNonce}`}
           canDownload
           onDownload={() => downloadLeadAgreementPdf(id)}
         />

@@ -14,7 +14,7 @@ import { aiRouter } from './routes/ai';
 import { uploadsRouter } from './routes/uploads';
 import { documentsRouter } from './routes/documents';
 import { signRouter } from './routes/sign';
-import { publicRouter } from './routes/public';
+import { contactFormPublicRouter } from './routes/contactFormPublic';
 import { filesRouter } from './routes/files';
 import { crudRouter } from './routes/crud';
 import { leadsRouter } from './routes/leads';
@@ -38,6 +38,13 @@ const app = express();
 if (env.isProd) app.set('trust proxy', 1);
 
 app.use(helmet());
+
+// Public contact-form surface (config read, submit, embed.js). Mounted BEFORE
+// the cookie-scoped CORS below because embeds are cross-origin and need their
+// own permissive, origin-reflecting CORS. It only matches /api/public/form* and
+// /api/public/embed.js; everything else falls through to the routes below.
+app.use('/api/public', contactFormPublicRouter);
+
 app.use(
   cors({
     origin: env.CLIENT_ORIGIN,
@@ -75,9 +82,8 @@ app.use('/api/auth', authRouter);
 // Public agreement e-signing (token-scoped, no session — clients sign here).
 app.use('/api/sign', signRouter);
 
-// Public website forms (e.g. the /contact-us enquiry form). No session — these
-// are submitted by prospects on the marketing site and land as CRM leads.
-app.use('/api/public', publicRouter);
+// (The public contact-form surface at /api/public/form* is mounted above, before
+// the cookie-CORS, so embeds can use origin-reflecting CORS.)
 
 // Public image proxy for embedded assets (logos, photos, avatars). No session —
 // the app, generated PDFs and outbound emails all load images from here. Serves

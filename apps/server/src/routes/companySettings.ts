@@ -5,6 +5,7 @@ import { COMPANY_SETTINGS_DEFAULTS } from '@rilo/shared';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission } from '../lib/permissions';
 import { getCompanySettings, settingsToClient } from '../lib/companySettings';
+import { sanitizeContactFormEditable, makeFormToken, ContactFormError } from '../lib/contactForm';
 import { imageRenders } from '../lib/pdf/base';
 import { buildInvoicePdf } from '../lib/pdf/invoice';
 import { sanitizeEmailHtml, renderBrandedEmail } from '../lib/email/render';
@@ -251,5 +252,83 @@ companySettingsRouter.post(
     });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end(html);
+  }),
+);
+
+/* ── Contact form builder ─────────────────────────────────────────────────
+ * The form config lives on CompanySettings. These routes manage the editable
+ * slice (fields/styles/content/allowedOrigins) and the server-owned publish
+ * state (published flag + token). The public renderer/embed read it via the
+ * unauthenticated /api/public/form routes. */
+
+/** GET /api/company-settings/contact-form — the current form config. */
+companySettingsRouter.get(
+  '/contact-form',
+  requirePermission('settings:view'),
+  asyncHandler(async (_req, res) => {
+    const doc = await getCompanySettings();
+    res.json(settingsToClient(doc).contactForm);
+  }),
+);
+
+/** PUT /api/company-settings/contact-form — save fields/styles/content/origins. */
+companySettingsRouter.put(
+  '/contact-form',
+  requirePermission('settings:manage'),
+  asyncHandler(async (req, res) => {
+    let editable;
+    try {
+      editable = sanitizeContactFormEditable(req.body);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof ContactFormError ? err.message : 'Invalid contact form.' });
+      return;
+    }
+    const doc = await getCompanySettings();
+    // Set the editable slice only — published/token stay under the routes below.
+    doc.set({
+      'contactForm.fields': editable.fields,
+      'contactForm.styles': editable.styles,
+      'contactForm.content': editable.content,
+      'contactForm.allowedOrigins': editable.allowedOrigins,
+    });
+    await doc.save();
+    res.json(settingsToClient(doc).contactForm);
+  }),
+);
+
+/** POST /api/company-settings/contact-form/publish — go live; mint a token if needed. */
+companySettingsRouter.post(
+  '/contact-form/publish',
+  requirePermission('settings:manage'),
+  asyncHandler(async (_req, res) => {
+    const doc = await getCompanySettings();
+    doc.set('contactForm.published', true);
+    if (!doc.get('contactForm.token')) doc.set('contactForm.token', makeFormToken());
+    await doc.save();
+    res.json(settingsToClient(doc).contactForm);
+  }),
+);
+
+/** POST /api/company-settings/contact-form/unpublish — take embeds offline. */
+companySettingsRouter.post(
+  '/contact-form/unpublish',
+  requirePermission('settings:manage'),
+  asyncHandler(async (_req, res) => {
+    const doc = await getCompanySettings();
+    doc.set('contactForm.published', false);
+    await doc.save();
+    res.json(settingsToClient(doc).contactForm);
+  }),
+);
+
+/** POST /api/company-settings/contact-form/regenerate-token — revoke + reissue. */
+companySettingsRouter.post(
+  '/contact-form/regenerate-token',
+  requirePermission('settings:manage'),
+  asyncHandler(async (_req, res) => {
+    const doc = await getCompanySettings();
+    doc.set('contactForm.token', makeFormToken());
+    await doc.save();
+    res.json(settingsToClient(doc).contactForm);
   }),
 );

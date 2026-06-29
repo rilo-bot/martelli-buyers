@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { Settings2, Plug, ClipboardList, Building2, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Settings2, Plug, ClipboardList, Building2, ShieldCheck, MessageSquare, type LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { usePermissions } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ import { IntegrationsSection } from '@/pages/settings/IntegrationsSection';
 import { LeadSettings } from '@/pages/settings/LeadSettings';
 import { CompanySettingsSection } from '@/pages/settings/CompanySettingsSection';
 import { DueDiligenceSettings } from '@/pages/settings/DueDiligenceSettings';
+import { ContactFormSettings } from '@/pages/settings/ContactFormSettings';
 
 // Re-exported for back-compat: several Leads pages import these from here.
 export { getStagePillClass, getStageDotClass } from '@/pages/settings/stageColors';
@@ -20,6 +21,7 @@ const SECTIONS: Section[] = [
   { id: 'integrations', label: 'Integrations', desc: 'Xero, email, storage, AI', icon: Plug, perm: 'settings:manage', render: () => <IntegrationsSection /> },
   { id: 'leads', label: 'Lead Settings', desc: 'Qualification stages', icon: ClipboardList, perm: 'settings:manage', render: () => <LeadSettings /> },
   { id: 'due-diligence', label: 'Due Diligence', desc: 'Audit checklist items', icon: ShieldCheck, perm: 'settings:manage', render: () => <DueDiligenceSettings /> },
+  { id: 'contact-form', label: 'Contact Form', desc: 'Public form & embed', icon: MessageSquare, perm: 'settings:manage', render: () => <ContactFormSettings /> },
 ];
 
 export default function SettingsPage() {

@@ -369,6 +369,12 @@ export interface ContactEnquiry {
   convertedLeadId: string;
   assignedTo: string;
   notes: string;
+  /**
+   * Values submitted for fields with no dedicated column — custom builder fields
+   * plus any predefined extras (company, timeframe). Keyed by the field's `key`.
+   * Preserved verbatim and folded into the Lead notes on conversion.
+   */
+  extraFields: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 }
@@ -915,8 +921,137 @@ export interface CompanySettings {
    * {@link DD_CHECKLIST_TEMPLATE_DEFAULTS} (all items enabled).
    */
   ddChecklistTemplate: DDChecklistTemplateItem[];
+  /**
+   * Admin-built public contact form (single, single-tenant). Drives the hosted
+   * /contact-us page and the embeddable iframe widget. See {@link ContactFormConfig}.
+   */
+  contactForm: ContactFormConfig;
   createdAt: string;
   updatedAt: string;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Contact form builder
+ * ----------------------------------------------------------------------------
+ * Admins customise a public contact form (fields, styles, content) in Settings,
+ * publish it for a token + embed snippet, and the same published config renders
+ * both the hosted /contact-us page and the embeddable iframe widget. Every
+ * submission becomes a ContactEnquiry in the Enquiries inbox.
+ * ----------------------------------------------------------------------------*/
+
+export type ContactFormFieldType = 'text' | 'email' | 'tel' | 'textarea' | 'select' | 'checkbox';
+
+export interface ContactFormField {
+  /** Stable identifier, unique within the form. System fields map to enquiry columns. */
+  key: string;
+  type: ContactFormFieldType;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  /** Whether the field appears on the rendered form ("add or not"). */
+  enabled: boolean;
+  /** Options for `select` fields (ignored for other types). */
+  options?: string[];
+  /** True for predefined catalog fields; admin-added custom fields are false/undefined. */
+  system?: boolean;
+  /**
+   * In a two-column layout, `false` lets the field share a row (half width).
+   * Defaults to full width. Ignored in one-column layout / for textarea+checkbox.
+   */
+  fullWidth?: boolean;
+}
+
+export type ContactFormLayout = 'one-column' | 'two-column';
+export type ContactFormFont = 'sans' | 'serif' | 'mono' | 'display';
+export type ContactFormShadow = 'none' | 'sm' | 'md' | 'lg';
+/** Field labels above the input, or used as the input placeholder. */
+export type ContactFormLabelStyle = 'top' | 'placeholder';
+/** Submit button fill style. */
+export type ContactFormButtonStyle = 'solid' | 'outline';
+
+/** Bounded, validated style tokens — admins pick from controls, never raw CSS. */
+export interface ContactFormStyles {
+  /** Accent colour (#rrggbb): buttons, focus rings, label accents. */
+  accentColor: string;
+  /** Page background (#rrggbb). */
+  backgroundColor: string;
+  /** Form card surface (#rrggbb). */
+  surfaceColor: string;
+  /** Body text (#rrggbb). */
+  textColor: string;
+  /** Button label text (#rrggbb). */
+  buttonTextColor: string;
+  /** Card border colour (#rrggbb). */
+  borderColor: string;
+  font: ContactFormFont;
+  /** Corner radius in px for inputs/buttons/card (0–32). */
+  cornerRadius: number;
+  /** Card max width in px (320–1200). */
+  maxWidth: number;
+  /** Card inner padding in px (0–64). */
+  padding: number;
+  /** Card border width in px (0–8). */
+  borderWidth: number;
+  /** Card drop shadow depth. */
+  shadow: ContactFormShadow;
+  layout: ContactFormLayout;
+  /** Whether field labels sit above the input or act as the placeholder. */
+  labelStyle: ContactFormLabelStyle;
+  /** Submit button fill style. */
+  buttonStyle: ContactFormButtonStyle;
+  /** Show the firm logo (from branding) above the form. */
+  showLogo: boolean;
+}
+
+export interface ContactFormContactDetail {
+  label: string;
+  value: string;
+  /** Optional link target (mailto:, tel:, https:). '' = plain text. */
+  href: string;
+}
+
+export interface ContactFormContent {
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  submitLabel: string;
+  successHeading: string;
+  successMessage: string;
+  /** Contact rows (email/phone/office) shown beside the form. */
+  contactDetails: ContactFormContactDetail[];
+}
+
+/**
+ * Admin-built public contact form. Stored on {@link CompanySettings} (one form,
+ * single-tenant). Submissions land as {@link ContactEnquiry} records.
+ */
+export interface ContactFormConfig {
+  /** Live forms are reachable by token; unpublished ones 404 publicly. */
+  published: boolean;
+  /**
+   * Publishable key embedded in the <script> snippet (e.g. "cf_live_…"). Not a
+   * secret — it only grants form-read + submit. Regenerate to revoke live embeds.
+   */
+  token: string;
+  /**
+   * Hostnames allowed to embed/submit (no scheme, e.g. "example.com"). Empty =
+   * any origin. Checked against the request Origin/Referer on submit.
+   */
+  allowedOrigins: string[];
+  fields: ContactFormField[];
+  styles: ContactFormStyles;
+  content: ContactFormContent;
+}
+
+/** Shape returned by GET /api/public/form/:token — the published config, no internals. */
+export interface PublicContactForm {
+  fields: ContactFormField[];
+  styles: ContactFormStyles;
+  content: ContactFormContent;
+  /** Firm logo data URL (when styles.showLogo and a logo is set); '' otherwise. */
+  logoDataUrl: string;
+  /** Firm name, for the wordmark fallback when there is no logo. */
+  firmName: string;
 }
 
 /**
@@ -1027,6 +1162,102 @@ export const COMPANY_SETTINGS_DEFAULTS = {
   emailSignatureHtml: '',
   emailBrandingEnabled: true,
 } as const;
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Contact form defaults
+ * ----------------------------------------------------------------------------
+ * Single source of truth for the field catalog, default styles/content and the
+ * Mongoose schema defaults. The default field set reproduces today's hardcoded
+ * /contact-us form exactly, so behaviour is unchanged until an admin customises.
+ * Predefined fields that ship disabled (company, timeframe) are the ones an
+ * admin can toggle on.
+ * ----------------------------------------------------------------------------*/
+
+/** System field keys that map to a dedicated ContactEnquiry column (or are folded in). */
+export const CONTACT_FORM_SYSTEM_KEYS = [
+  'name', 'lastName', 'email', 'phone', 'enquiryType', 'budget', 'location', 'referralSource', 'message', 'consent',
+] as const;
+
+/** Keys that must always stay enabled + required (an enquiry is useless without them). */
+export const CONTACT_FORM_LOCKED_KEYS = ['name', 'email'] as const;
+
+/**
+ * The predefined field catalog = the default `fields` array. All system fields
+ * are present; some ship disabled so admins can toggle them on. Order is the
+ * default render order. Defaults reproduce the Martelli "Get in touch" form.
+ */
+export const CONTACT_FORM_FIELD_CATALOG: ContactFormField[] = [
+  { key: 'name', type: 'text', label: 'First name', placeholder: 'First Name', required: true, enabled: true, system: true, fullWidth: false },
+  { key: 'lastName', type: 'text', label: 'Last name', placeholder: 'Last Name', required: false, enabled: true, system: true, fullWidth: false },
+  { key: 'email', type: 'email', label: 'Email', placeholder: 'Email', required: true, enabled: true, system: true },
+  { key: 'phone', type: 'tel', label: 'Phone', placeholder: 'Phone', required: false, enabled: true, system: true },
+  {
+    key: 'referralSource', type: 'select', label: 'How did you hear about us?', placeholder: '', required: false, enabled: true, system: true,
+    options: ['Google search', 'Social media', 'Referral from a friend', 'Real estate agent', 'Saw our signboard', 'Other'],
+  },
+  { key: 'message', type: 'textarea', label: 'Message', placeholder: 'Message', required: false, enabled: true, system: true },
+  {
+    key: 'consent', type: 'checkbox', required: true, enabled: true, system: true, placeholder: '',
+    label: 'By submitting this form, you confirm that you have read and agree to Martelli Buyers Agents Privacy Statement.',
+  },
+  // Predefined extras — ship disabled; admins enable them as needed.
+  {
+    key: 'enquiryType', type: 'select', label: 'Type of enquiry', placeholder: '', required: false, enabled: false, system: true,
+    options: ['Buyer representation', 'Off-market property search', 'Property due diligence', 'Auction bidding', 'General enquiry'],
+  },
+  {
+    key: 'budget', type: 'select', label: 'Budget range', placeholder: '', required: false, enabled: false, system: true,
+    options: ['Under $750k', '$750k – $1.25m', '$1.25m – $2m', '$2m – $3.5m', '$3.5m – $5m', '$5m+'],
+  },
+  { key: 'location', type: 'text', label: 'Preferred location', placeholder: 'Suburb, region or postcode', required: false, enabled: false, system: true },
+  { key: 'company', type: 'text', label: 'Company', placeholder: 'Company name', required: false, enabled: false, system: true },
+  {
+    key: 'timeframe', type: 'select', label: 'Buying timeframe', placeholder: '', required: false, enabled: false, system: true,
+    options: ['Immediately', '1–3 months', '3–6 months', '6–12 months', 'Just researching'],
+  },
+];
+
+export const CONTACT_FORM_STYLE_DEFAULTS: ContactFormStyles = {
+  accentColor: '#768255',
+  backgroundColor: '#efece3',
+  surfaceColor: '#efece3',
+  textColor: '#3d3d34',
+  buttonTextColor: '#3d3d34',
+  borderColor: '#d8d4c7',
+  font: 'display',
+  cornerRadius: 2,
+  maxWidth: 680,
+  padding: 40,
+  borderWidth: 0,
+  shadow: 'none',
+  layout: 'two-column',
+  labelStyle: 'placeholder',
+  buttonStyle: 'outline',
+  showLogo: false,
+};
+
+export const CONTACT_FORM_CONTENT_DEFAULTS: ContactFormContent = {
+  eyebrow: '',
+  heading: 'Get in touch here',
+  intro: 'Bookings by appointment in our Newmarket office, Auckland.',
+  submitLabel: 'Confirm',
+  successHeading: 'Thank you',
+  successMessage: 'We’ve received your enquiry and will be in touch shortly.',
+  contactDetails: [{ label: '', value: '+64 21 366 032', href: 'tel:+6421366032' }],
+};
+
+/** Full default contact-form config. Token is assigned by the server on first save. */
+export const CONTACT_FORM_DEFAULTS: ContactFormConfig = {
+  published: true,
+  token: '',
+  allowedOrigins: [],
+  fields: CONTACT_FORM_FIELD_CATALOG.map((f) => ({ ...f, options: f.options ? [...f.options] : undefined })),
+  styles: { ...CONTACT_FORM_STYLE_DEFAULTS },
+  content: {
+    ...CONTACT_FORM_CONTENT_DEFAULTS,
+    contactDetails: CONTACT_FORM_CONTENT_DEFAULTS.contactDetails.map((d) => ({ ...d })),
+  },
+};
 
 /** Shape returned by GET /api/outlook/status (never includes tokens). */
 export interface OutlookStatus {
