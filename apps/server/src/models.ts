@@ -191,6 +191,14 @@ const QualificationStageSchema = new Schema(
     order: { type: Number, default: 0 },
     color: { type: String, default: 'cyan' },
     checklistItems: { type: [StageChecklistItemSchema], default: [] },
+    // Pipeline status applied to a lead when it reaches this stage. '' = leave
+    // the status untouched. won/lost are intentionally NOT in the enum: they're
+    // deliberate actions (win conversion / lost outcome), never a stage side-effect.
+    linkedStatus: {
+      type: String,
+      enum: ['', 'new', 'contacted', 'qualified', 'agreement_sent', 'active'],
+      default: '',
+    },
   },
   baseOpts,
 );
@@ -454,6 +462,17 @@ const EmailTemplateSchema = new Schema(
     bodyHtml: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
     variables: { type: [String], default: [] },
+  },
+  baseOpts,
+);
+
+// Singleton — names of default email templates ever seeded into this workspace.
+// Lets seeding stay idempotent AND respect deletions: a default the user removes
+// is recorded here so it is never re-created, while genuinely new defaults still
+// seed once.
+const EmailSeedStateSchema = new Schema(
+  {
+    seededNames: { type: [String], default: [] },
   },
   baseOpts,
 );
@@ -862,6 +881,8 @@ export const OffMarketProperty = model('OffMarketProperty', OffMarketPropertySch
 export const Agent = model('Agent', AgentSchema);
 export const EmailTemplate = model('EmailTemplate', EmailTemplateSchema);
 export const EmailCampaign = model('EmailCampaign', EmailCampaignSchema);
+// Singleton seed-state for default templates — not a CRUD resource (managed via /api/email/seed-state).
+export const EmailSeedState = model('EmailSeedState', EmailSeedStateSchema);
 export const Invoice = model('Invoice', InvoiceSchema);
 export const DueDiligence = model('DueDiligence', DueDiligenceSchema);
 export const ClientComment = model('ClientComment', ClientCommentSchema);

@@ -58,3 +58,49 @@ export function QualStageBadge({ stageId }: { stageId: string }) {
     </span>
   );
 }
+
+/**
+ * Compact mini-stepper for list/kanban/table rows: a short progress track (one
+ * segment per stage, filled up to the current one) plus the current stage label.
+ * Mirrors the full stepper on the detail page so progress reads the same
+ * everywhere. Renders nothing if no stages are configured.
+ */
+export function MiniStageStepper({ stageId, className }: { stageId: string; className?: string }) {
+  const stages = useQualificationStagesStore((s) => s.stages);
+  const sorted = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
+  if (sorted.length === 0) return null;
+
+  const currentIdx = sorted.findIndex((s) => s.id === stageId);
+  const current = currentIdx >= 0 ? sorted[currentIdx] : null;
+
+  return (
+    <div className={cn('flex items-center gap-2 min-w-0', className)}>
+      <div className="flex items-center gap-1 shrink-0">
+        {sorted.map((stage, idx) => {
+          const isCurrent = idx === currentIdx;
+          const reached = currentIdx >= 0 && idx < currentIdx;
+          return (
+            <span
+              key={stage.id}
+              title={stage.label}
+              className={cn(
+                'h-1.5 rounded-full transition-all',
+                isCurrent ? cn('w-5', getStageDotClass(stage.color))
+                  : reached ? 'w-3 bg-primary/60'
+                  : 'w-3 bg-muted-foreground/20',
+              )}
+            />
+          );
+        })}
+      </div>
+      {current ? (
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground truncate">
+          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', getStageDotClass(current.color))} />
+          <span className="truncate">{current.label}</span>
+        </span>
+      ) : (
+        <span className="text-[10px] text-muted-foreground/50 shrink-0">No stage yet</span>
+      )}
+    </div>
+  );
+}

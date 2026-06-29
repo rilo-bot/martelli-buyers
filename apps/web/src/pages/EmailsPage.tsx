@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { sendBlast } from '@/lib/email';
 import { usePermissions } from '@/lib/permissions';
 import { dealVariables, interpolate, unresolvedVariables, hasRecipientVars, plainTextToHtml, htmlToPlainText } from '@/lib/templates';
+import { catalogPlaceholderGroups, composePlaceholderGroups } from '@/lib/templateVariables';
 import { emailTemplateAudience } from '@/types';
 import type { EmailTemplateCategory, EmailRecipientType, AgentGeo } from '@/types';
 
@@ -108,6 +109,15 @@ export default function EmailsPage() {
   const personalizesPerAgent = useMemo(
     () => hasRecipientVars(`${blastForm.subject}\n${blastForm.bodyHtml}`),
     [blastForm.subject, blastForm.bodyHtml],
+  );
+
+  // Full catalog for authoring a reusable template (no record in context).
+  const templatePlaceholders = useMemo(() => catalogPlaceholderGroups(), []);
+  // Blast: live values from the linked campaign's deal; {{agentName}} is filled
+  // per recipient by the server, so it's flagged rather than resolved here.
+  const blastPlaceholders = useMemo(
+    () => composePlaceholderGroups(dealVariables(deals.find((d) => d.id === blastForm.dealId)), ['agentName']),
+    [deals, blastForm.dealId],
   );
 
   /** Fill subject/body from a template, interpolating the linked deal's data. */
@@ -477,7 +487,8 @@ export default function EmailsPage() {
               <RichTextEditor
                 value={templateForm.bodyHtml}
                 onChange={(html) => setTemplateForm((f) => ({ ...f, bodyHtml: html }))}
-                placeholder="Email body. Use the toolbar to format and {{ }} to insert variables."
+                placeholders={templatePlaceholders}
+                placeholder="Email body. Use the toolbar to format and the placeholder menu to insert variables."
               />
               <p className="text-xs text-muted-foreground">Your logo, brand colour and signature are applied automatically on send.</p>
             </div>
@@ -607,6 +618,7 @@ export default function EmailsPage() {
                     <RichTextEditor
                       value={blastForm.bodyHtml}
                       onChange={(html) => setBlastForm((f) => ({ ...f, bodyHtml: html }))}
+                      placeholders={blastPlaceholders}
                       placeholder="Compose your message…"
                     />
                   </div>

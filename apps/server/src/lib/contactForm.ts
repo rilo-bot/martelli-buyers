@@ -298,7 +298,7 @@ export function validateSubmission(config: ContactFormConfig, rawValues: unknown
       const checked = raw === true || raw === 'true' || raw === 'on';
       if (field.required && !checked) throw new ContactFormError(`${field.label} is required.`);
       if (field.key === 'consent') result.consent = checked;
-      else result.extraFields[field.key] = checked ? 'Yes' : 'No';
+      else result.extraFields[field.label] = checked ? 'Yes' : 'No';
       continue;
     }
 
@@ -320,7 +320,9 @@ export function validateSubmission(config: ContactFormConfig, rawValues: unknown
       case 'budget': result.budget = val; break;
       case 'location': result.location = val; break;
       case 'message': result.message = val; break;
-      default: if (val) result.extraFields[field.key] = val;
+      // Non-column fields (custom + extras) are captured under their label so
+      // they read cleanly in the enquiry and the converted lead's notes.
+      default: if (val) result.extraFields[field.label] = val;
     }
   }
 

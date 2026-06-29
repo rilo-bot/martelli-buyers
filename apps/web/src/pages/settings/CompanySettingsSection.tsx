@@ -290,7 +290,6 @@ export function CompanySettingsSection() {
             <RichTextEditor
               value={form.emailSignatureHtml}
               onChange={(html) => set('emailSignatureHtml', html)}
-              variables={[]}
               placeholder="e.g. The Martelli Buyers Team · 09 123 4567 · martelli.example"
             />
           </Field>

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Mail, Phone, DollarSign, ArrowRight, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { QualStageBadge, STATUS_STYLES } from './leadShared';
+import { MiniStageStepper, STATUS_STYLES } from './leadShared';
 import type { Lead } from '@/types';
 
 export function CardView({ leads, onMarkWon }: { leads: Lead[]; onMarkWon: (id: string) => void }) {
@@ -33,12 +33,7 @@ export function CardView({ leads, onMarkWon }: { leads: Lead[]; onMarkWon: (id: 
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {lead.qualificationStageId && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground font-medium">Stage:</span>
-                  <QualStageBadge stageId={lead.qualificationStageId} />
-                </div>
-              )}
+              <MiniStageStepper stageId={lead.qualificationStageId} className="pb-0.5" />
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Mail className="h-3.5 w-3.5 shrink-0" />

@@ -5,6 +5,7 @@ import { requirePermission } from '../lib/permissions';
 import { keyFromUrl, deleteObject, hasS3 } from '../lib/s3';
 import { syncClientToXero, syncInvoiceToXero } from '../lib/xeroSync';
 import { recordEvent } from '../lib/audit';
+import { sanitizeEmailHtml } from '../lib/email/render';
 import {
   type AnyModel,
   Property,
@@ -21,6 +22,7 @@ import {
   Task,
   Purchase,
   Document,
+  QualificationStage,
 } from '../models';
 
 // Fields the server owns — never accept them from the client on write.
@@ -30,6 +32,17 @@ function sanitize(body: Record<string, unknown>): Record<string, unknown> {
   for (const k of STRIP) delete out[k];
   return out;
 }
+
+/**
+ * Per-resource sanitisation of the write body, applied to both create and
+ * update. Keeps stored rich HTML safe at the persistence boundary so admin
+ * surfaces (e.g. the template preview) can render it without re-sanitising.
+ */
+const WRITE_TRANSFORMS: Record<string, (body: Record<string, unknown>) => void> = {
+  'email-templates'(body) {
+    if (typeof body.bodyHtml === 'string') body.bodyHtml = sanitizeEmailHtml(body.bodyHtml);
+  },
+};
 
 /**
  * Best-effort removal of uploaded media objects from S3. Never throws — orphan
@@ -332,6 +345,72 @@ async function validateDealStage(before: Doc, patch: Record<string, unknown>): P
   return null;
 }
 
+/* ───────────────────── Lead stage gate + status link ───────────────────── */
+
+// Statuses a stage may drive a lead into. won/lost are deliberate actions
+// (win conversion / lost outcome), never a side-effect of advancing a stage.
+const LEAD_LINKABLE_STATUSES = new Set(['new', 'contacted', 'qualified', 'agreement_sent', 'active']);
+
+type StageDoc = {
+  _id: unknown;
+  linkedStatus?: string;
+  checklistItems?: Array<{ id: string; required?: boolean }>;
+};
+
+/**
+ * Authoritative lead stage gate + one-way stage→status link, applied on PATCH.
+ *
+ *  - Forward moves are gated: every stage from the current one up to the target
+ *    must have all its *required* checklist items complete (mirrors the client
+ *    gate in LeadStageManager, but enforced here so the API/kanban can't bypass it).
+ *  - Same-stage, backward, and clear ('') moves are always allowed.
+ *  - On a legal move the target stage's linkedStatus is written onto the lead's
+ *    status — unless the lead is already won/lost, or the same request sets
+ *    status itself (a manual status edit always wins).
+ *
+ * Mutates `patch` in place. Returns an error string (→ 400) or null.
+ */
+async function applyLeadStage(before: Doc, patch: Record<string, unknown>): Promise<string | null> {
+  if (typeof patch.qualificationStageId !== 'string') return null;
+  const targetId = patch.qualificationStageId;
+  const currentId = (before.get('qualificationStageId') as string) ?? '';
+  if (targetId === currentId) return null;
+  // Clearing the stage is always allowed and never changes the lead's status.
+  if (!targetId) return null;
+
+  const stages = (await QualificationStage.find().sort({ order: 1 }).lean()) as unknown as StageDoc[];
+  const targetIdx = stages.findIndex((s) => String(s._id) === targetId);
+  if (targetIdx === -1) return 'That qualification stage no longer exists.';
+  const currentIdx = stages.findIndex((s) => String(s._id) === currentId);
+
+  // Gate forward moves on required-checklist completion of intervening stages.
+  if (targetIdx > currentIdx) {
+    const progress = {
+      ...((before.get('stageProgress') as Record<string, string[]>) ?? {}),
+      ...(patch.stageProgress && typeof patch.stageProgress === 'object' ? (patch.stageProgress as Record<string, string[]>) : {}),
+    };
+    const start = currentIdx < 0 ? 0 : currentIdx;
+    let reachable = start;
+    for (let k = start; k < stages.length; k++) {
+      const required = (stages[k].checklistItems ?? []).filter((i) => i.required);
+      const done = progress[String(stages[k]._id)] ?? [];
+      if (required.every((i) => done.includes(i.id))) reachable = k + 1;
+      else break;
+    }
+    if (targetIdx > reachable) {
+      return 'Complete the required checklist items in the current stage before advancing this lead.';
+    }
+  }
+
+  // One-way stage→status link.
+  const linked = stages[targetIdx].linkedStatus;
+  const cur = before.get('status');
+  if (linked && LEAD_LINKABLE_STATUSES.has(linked) && !('status' in patch) && cur !== 'won' && cur !== 'lost') {
+    patch.status = linked;
+  }
+  return null;
+}
+
 /**
  * Resolve the permission string a CRUD action requires for a module. Modules
  * that don't define a write action (e.g. `settings` has only view/manage)
@@ -376,6 +455,7 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
     requirePermission(permFor(module, 'create')),
     asyncHandler(async (req, res) => {
       const body = sanitize(req.body ?? {});
+      WRITE_TRANSFORMS[resource]?.(body);
       // A document's owner (used by the download gate) is the session user — never
       // client-supplied, so it can't be spoofed to obtain someone else's file.
       if (resource === 'documents') body.uploadedBy = req.session.userId ?? '';
@@ -398,16 +478,27 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
     requirePermission(permFor(module, 'edit')),
     asyncHandler(async (req, res) => {
       const patch = sanitize(req.body ?? {});
+      WRITE_TRANSFORMS[resource]?.(patch);
       // The stored file and its owner are immutable once uploaded; only metadata
       // and the attachment link may be edited. Strip any attempt to change them.
       if (resource === 'documents') {
         for (const k of ['url', 'storageKey', 'uploadedBy', 'size', 'mimeType']) delete patch[k];
       }
-      // Capture the pre-update doc when this resource records timeline events.
-      const before = AUDITED.has(resource) ? await modelRef.findById(req.params.id) : null;
+      // Capture the pre-update doc when this resource records timeline events,
+      // or when it needs its prior state to validate a transition (leads).
+      const before =
+        AUDITED.has(resource) || resource === 'leads' ? await modelRef.findById(req.params.id) : null;
       // Buyer-journey stage gate: enforce DD completion before crossing past it.
       if (resource === 'deals' && before) {
         const stageErr = await validateDealStage(before, patch);
+        if (stageErr) {
+          res.status(400).json({ error: stageErr });
+          return;
+        }
+      }
+      // Lead stage gate + one-way stage→status link (mutates patch in place).
+      if (resource === 'leads' && before) {
+        const stageErr = await applyLeadStage(before, patch);
         if (stageErr) {
           res.status(400).json({ error: stageErr });
           return;

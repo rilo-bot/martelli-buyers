@@ -2,13 +2,48 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { sendMail } from '../lib/mailer';
-import { EmailCampaign } from '../models';
+import { EmailCampaign, EmailSeedState } from '../models';
 import { asyncHandler } from '../middleware/error';
 import { requirePermission } from '../lib/permissions';
 import { getCompanySettingsDto } from '../lib/companySettings';
 import { renderBrandedEmail, htmlToText, plainTextToHtml } from '../lib/email/render';
 
 export const emailRouter = Router();
+
+/* ── Default-template seed state ───────────────────────────────────────────
+ * Tracks which default template names have ever been seeded so the client can
+ * seed idempotently while respecting deletions (a removed default is not
+ * re-created). Registered BEFORE the emails:send guard below, since seeding
+ * needs only view/create — not send. */
+async function getSeedState() {
+  const existing = await EmailSeedState.findOne();
+  if (existing) return existing;
+  return EmailSeedState.create({});
+}
+
+const seedStateSchema = z.object({ names: z.array(z.string()).default([]) });
+
+emailRouter.get(
+  '/seed-state',
+  requirePermission('emails:view'),
+  asyncHandler(async (_req, res) => {
+    const doc = await getSeedState();
+    res.json({ seededNames: doc.seededNames ?? [] });
+  }),
+);
+
+emailRouter.patch(
+  '/seed-state',
+  requirePermission('emails:create'),
+  asyncHandler(async (req, res) => {
+    const { names } = seedStateSchema.parse(req.body);
+    const doc = await getSeedState();
+    const merged = Array.from(new Set([...(doc.seededNames ?? []), ...names]));
+    doc.seededNames = merged;
+    await doc.save();
+    res.json({ seededNames: merged });
+  }),
+);
 
 // All outbound email requires the emails:send permission.
 emailRouter.use(requirePermission('emails:send'));

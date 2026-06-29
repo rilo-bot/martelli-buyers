@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { DollarSign, MapPin, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { QualStageBadge, STATUS_OPTIONS, STATUS_STYLES } from './leadShared';
+import { MiniStageStepper, STATUS_OPTIONS, STATUS_STYLES } from './leadShared';
 import type { Lead, LeadStatus } from '@/types';
 
 export function KanbanView({
@@ -149,7 +149,7 @@ function KanbanCard({
         </div>
       </div>
 
-      {lead.qualificationStageId && <div><QualStageBadge stageId={lead.qualificationStageId} /></div>}
+      <MiniStageStepper stageId={lead.qualificationStageId} />
 
       <div className="space-y-1">
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

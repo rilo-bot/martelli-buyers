@@ -3,11 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import {
-  CheckCircle, ChevronRight, AlertTriangle, ClipboardList, ArrowRight, ArrowLeft,
-  Circle, CheckSquare, Square, Lock,
+  CheckCircle, AlertTriangle, ClipboardList, ArrowRight, ArrowLeft,
+  CheckSquare, Square, Lock, Check, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getStagePillClass, getStageDotClass } from '@/pages/SettingsPage';
+import { STATUS_STYLES } from '@/pages/leads/leadShared';
+import { LEAD_STATUS_LABELS } from '@/types';
 import type { QualificationStage, StageChecklistItem } from '@/types';
 
 type StageProgress = Record<string, string[]>;
@@ -72,54 +74,93 @@ export function LeadStageManager({
 
   return (
     <div className="space-y-5">
-      {/* ── Pipeline track ─────────────────────────────────────────────── */}
+      {/* ── Stage stepper ──────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/60 bg-card p-4">
-        <div className="flex items-center gap-1 flex-wrap">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mr-2">Qual. Stage</p>
-          {sortedStages.map((stage, idx) => {
-            const isActive = currentStageId === stage.id;
-            const completedIds = stageProgress[stage.id] ?? [];
-            const required = stage.checklistItems.filter((i) => i.required);
-            const stageDone = required.length > 0 && required.every((i) => completedIds.includes(i.id));
-            const stageStarted = completedIds.length > 0;
-            const locked = idx > maxReachable;
-            return (
-              <div key={stage.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => attemptStage(idx)}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-semibold transition-all border',
-                    isActive
-                      ? cn(getStagePillClass(stage.color), 'ring-2 ring-offset-1 ring-current')
-                      : locked
-                        ? 'border-border bg-muted/40 text-muted-foreground/50'
-                        : 'border-border bg-card text-muted-foreground hover:bg-muted',
-                  )}
-                  title={locked ? 'Complete the current stage to unlock' : stage.description || stage.label}
-                >
-                  <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', isActive ? getStageDotClass(stage.color) : 'bg-muted-foreground/40')} />
-                  {stage.label}
-                  {stageDone && <CheckCircle className="h-3 w-3 ml-0.5 text-emerald-500" />}
-                  {stageStarted && !stageDone && stage.checklistItems.length > 0 && <Circle className="h-3 w-3 ml-0.5 text-amber-400" />}
-                  {locked && <Lock className="h-3 w-3 ml-0.5" />}
-                </button>
-                {idx < sortedStages.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
-              </div>
-            );
-          })}
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Qualification</p>
+            <StageStatusInfo sortedStages={sortedStages} />
+          </div>
           {currentStageId && (
             <button
               type="button"
               onClick={() => onChangeStage('')}
-              className="ml-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
-              Clear
+              Clear stage
             </button>
           )}
         </div>
+
+        <div className="overflow-x-auto pb-1">
+          <ol className="flex min-w-max items-start">
+            {sortedStages.map((stage, idx) => {
+              const isActive = currentStageId === stage.id;
+              const completedIds = stageProgress[stage.id] ?? [];
+              const required = stage.checklistItems.filter((i) => i.required);
+              const stageDone = required.length > 0 && required.every((i) => completedIds.includes(i.id));
+              const isPast = currentIdx >= 0 && idx < currentIdx;
+              const locked = idx > maxReachable;
+              const done = isPast || (stageDone && !isActive);
+              // The connector entering this step is "travelled" once the lead has reached it.
+              const connectorReached = currentIdx >= 0 && idx <= currentIdx;
+              const linked = stage.linkedStatus;
+
+              return (
+                <li key={stage.id} className="relative flex w-32 shrink-0 flex-col items-center text-center">
+                  {/* connector from the previous node's centre to this one's */}
+                  {idx > 0 && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'absolute top-[18px] -left-1/2 -z-0 h-0.5 w-full',
+                        connectorReached ? 'bg-primary' : 'bg-border',
+                      )}
+                    />
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => attemptStage(idx)}
+                    title={locked ? 'Complete the current stage to unlock' : stage.description || stage.label}
+                    aria-current={isActive ? 'step' : undefined}
+                    className={cn(
+                      'relative z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 text-xs font-bold transition-all',
+                      isActive
+                        ? cn(getStageDotClass(stage.color), 'border-transparent text-white shadow-md ring-2 ring-primary/25')
+                        : done
+                          ? 'border-transparent bg-emerald-500 text-white'
+                          : locked
+                            ? 'border-border bg-muted/40 text-muted-foreground/40'
+                            : 'border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground',
+                    )}
+                  >
+                    {done ? <Check className="h-4 w-4" /> : locked ? <Lock className="h-3.5 w-3.5" /> : idx + 1}
+                  </button>
+
+                  <span className={cn('mt-2 px-1 text-xs font-semibold leading-tight', isActive ? 'text-foreground' : 'text-muted-foreground')}>
+                    {stage.label}
+                  </span>
+
+                  {linked ? (
+                    <span
+                      className={cn('mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize', STATUS_STYLES[linked].pill)}
+                      title={`Reaching this stage sets status → ${LEAD_STATUS_LABELS[linked]}`}
+                    >
+                      <span className={cn('h-1 w-1 rounded-full', STATUS_STYLES[linked].dot)} />
+                      {LEAD_STATUS_LABELS[linked]}
+                    </span>
+                  ) : (
+                    <span className="mt-1.5 text-[10px] text-muted-foreground/50">no status change</span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
         {currentStage?.description && (
-          <p className="text-xs text-muted-foreground mt-2 pl-0.5 leading-relaxed">{currentStage.description}</p>
+          <p className="mt-3 border-t border-border/50 pt-3 text-xs leading-relaxed text-muted-foreground">{currentStage.description}</p>
         )}
       </div>
 
@@ -368,6 +409,75 @@ function AdvanceRow({
         <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
           <CheckCircle className="h-4 w-4" /> Final stage reached
         </span>
+      )}
+    </div>
+  );
+}
+
+/* ─── Stage → status connection popover ──────────────────────────────────── */
+
+/**
+ * Small "how does this work?" popover explaining the one-way stage→status link.
+ * Lists every stage and the pipeline status it sets on arrival. No popover
+ * primitive in the kit, so this is a self-contained button + click-away panel.
+ */
+function StageStatusInfo({ sortedStages }: { sortedStages: QualificationStage[] }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="How qualification stages connect to lead status"
+        aria-expanded={open}
+        className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <Info className="h-3.5 w-3.5" />
+      </button>
+
+      {open && (
+        <>
+          {/* click-away catcher */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden />
+          <div
+            role="dialog"
+            className="absolute left-0 top-7 z-50 w-72 rounded-xl border border-border bg-card p-3.5 shadow-lg"
+          >
+            <p className="text-xs font-semibold text-foreground">How stages connect to status</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              When a lead reaches a stage, its pipeline status updates automatically — so the
+              stage checklist is the single thing you drive.
+            </p>
+
+            <div className="mt-3 space-y-1.5">
+              {sortedStages.map((stage) => (
+                <div key={stage.id} className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', getStageDotClass(stage.color))} />
+                    <span className="truncate">{stage.label}</span>
+                  </span>
+                  {stage.linkedStatus ? (
+                    <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                      <ArrowRight className="h-3 w-3" />
+                      <span className={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold capitalize', STATUS_STYLES[stage.linkedStatus].pill)}>
+                        {LEAD_STATUS_LABELS[stage.linkedStatus]}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-[10px] text-muted-foreground/50">no change</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-3 border-t border-border/60 pt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-semibold text-foreground">Won</span> and{' '}
+              <span className="font-semibold text-foreground">Lost</span> are always set manually —
+              winning a lead creates the client &amp; deal.
+            </p>
+          </div>
+        </>
       )}
     </div>
   );

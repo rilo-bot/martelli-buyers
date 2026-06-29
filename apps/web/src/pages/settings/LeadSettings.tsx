@@ -11,12 +11,13 @@ import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Plus, Pencil, Trash, GripVertical, RotateCcw, CheckCircle, AlertTriangle,
-  ChevronDown, ChevronRight, ClipboardList,
+  ChevronDown, ChevronRight, ClipboardList, ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ChecklistSection } from '@/pages/settings/ChecklistSection';
 import { STAGE_COLORS, BLANK_STAGE_FORM, getStagePillClass, getStageDotClass } from '@/pages/settings/stageColors';
+import { STAGE_LINKABLE_STATUSES, LEAD_STATUS_LABELS } from '@/types';
 import type { QualificationStage } from '@/types';
 
 export function LeadSettings() {
@@ -43,13 +44,13 @@ export function LeadSettings() {
   const openAdd = () => { setEditingId(null); setForm(BLANK_STAGE_FORM); setDialogOpen(true); };
   const openEdit = (stage: QualificationStage) => {
     setEditingId(stage.id);
-    setForm({ label: stage.label, description: stage.description, color: stage.color });
+    setForm({ label: stage.label, description: stage.description, color: stage.color, linkedStatus: stage.linkedStatus ?? '' });
     setDialogOpen(true);
   };
 
   const handleSave = () => {
     if (!form.label.trim()) { toast.error('Stage name is required.'); return; }
-    const payload = { label: form.label.trim(), description: form.description.trim(), color: form.color };
+    const payload = { label: form.label.trim(), description: form.description.trim(), color: form.color, linkedStatus: form.linkedStatus };
     if (editingId) { updateStage(editingId, payload); toast.success('Stage updated.'); }
     else { addStage(payload); toast.success('Stage added.'); }
     setDialogOpen(false);
@@ -98,7 +99,8 @@ export function LeadSettings() {
             <CardDescription className="mt-1 text-sm leading-relaxed">
               Define the stages a lead moves through during qualification. Each stage can have a
               configurable checklist of required items that must be completed before the lead can
-              advance. Drag rows to reorder.
+              advance, and an optional <strong className="font-medium text-foreground">linked status</strong> —
+              reaching the stage automatically moves the lead to that pipeline status. Drag rows to reorder.
             </CardDescription>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -152,11 +154,16 @@ export function LeadSettings() {
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="w-5 text-xs font-bold tabular-nums text-muted-foreground/50">{idx + 1}.</span>
                         <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', pill)}>
                           <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot)} />{stage.label}
                         </span>
+                        {stage.linkedStatus && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground" title="Reaching this stage sets the lead's status">
+                            <ArrowRight className="h-3 w-3" />{LEAD_STATUS_LABELS[stage.linkedStatus]}
+                          </span>
+                        )}
                       </div>
                       {stage.description && <p className="mt-1 pl-7 text-xs leading-relaxed text-muted-foreground">{stage.description}</p>}
                     </div>
@@ -232,6 +239,24 @@ export function LeadSettings() {
                   <span className={cn('h-1.5 w-1.5 rounded-full', getStageDotClass(form.color))} />{form.label || 'Preview'}
                 </span>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="stage-status">Linked pipeline status</Label>
+              <Select
+                id="stage-status"
+                value={form.linkedStatus}
+                onChange={(e) => setForm((f) => ({ ...f, linkedStatus: e.target.value as typeof f.linkedStatus }))}
+                className="h-10 w-full"
+              >
+                <option value="">Don't change status</option>
+                {STAGE_LINKABLE_STATUSES.map((s) => (
+                  <option key={s} value={s}>{LEAD_STATUS_LABELS[s]}</option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                When a lead reaches this stage its pipeline status is set automatically.
+                Won and Lost stay manual.
+              </p>
             </div>
           </SheetBody>
           <SheetFooter>

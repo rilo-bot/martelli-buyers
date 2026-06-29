@@ -291,6 +291,27 @@ export interface StageChecklistItem {
   order: number;
 }
 
+/**
+ * Pipeline statuses a qualification stage may be linked to. Reaching the stage
+ * auto-sets the lead's `status` to its linked value. `won`/`lost` are excluded:
+ * winning fires the client+deal conversion and losing is an outcome, so both
+ * stay deliberate manual actions rather than a side-effect of advancing a stage.
+ */
+export const STAGE_LINKABLE_STATUSES: LeadStatus[] = [
+  'new', 'contacted', 'qualified', 'agreement_sent', 'active',
+];
+
+/** Human labels for every lead status (used by pickers, badges and settings). */
+export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  qualified: 'Qualified',
+  agreement_sent: 'Agreement sent',
+  active: 'Active',
+  won: 'Won',
+  lost: 'Lost',
+};
+
 export interface QualificationStage {
   id: string;
   label: string;
@@ -299,6 +320,11 @@ export interface QualificationStage {
   color: string;
   /** Checklist items required to complete this stage before advancing */
   checklistItems: StageChecklistItem[];
+  /**
+   * Pipeline status applied to a lead when it reaches this stage. Empty string
+   * means "don't touch the lead's status". Limited to STAGE_LINKABLE_STATUSES.
+   */
+  linkedStatus: LeadStatus | '';
   createdAt: string;
   updatedAt: string;
 }

@@ -35,6 +35,7 @@ import {
 import type { DealStage, PropertyStatus, ConsentStatus, OffMarketProperty } from '@/types';
 import { SendEmailDialog } from '@/components/SendEmailDialog';
 import type { EmailRecipient } from '@/components/SendEmailDialog';
+import { formatNzd } from '@/lib/templates';
 import { EmailList } from '@/components/EmailList';
 import { MediaUploader } from '@/components/MediaUploader';
 import { useEmailMessagesStore } from '@/stores/emailMessagesStore';
@@ -199,7 +200,7 @@ export default function DealDetailPage() {
   const emailVariables: Record<string, string> = useMemo(() => ({
     clientName: deal?.clientName ?? '',
     clientEmail: deal?.clientEmail ?? '',
-    budget: deal ? `$${deal.budget.toLocaleString()}` : '',
+    budget: deal && deal.budget > 0 ? formatNzd(deal.budget) : '',
     propertyType: deal?.propertyType ?? '',
     bedrooms: deal ? String(deal.bedrooms) : '',
     suburbs: deal?.preferredSuburbs.join(', ') ?? '',

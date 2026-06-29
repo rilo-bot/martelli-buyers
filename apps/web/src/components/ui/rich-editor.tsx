@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TextStyle } from '@tiptap/extension-text-style';
@@ -11,20 +11,18 @@ import {
 import { cn } from '@/lib/utils';
 import { uploadFile } from '@/lib/upload';
 import { toast } from 'sonner';
-
-/* The set of variables offered in the "Insert variable" menu. These are the
- * tokens the server / client interpolate via {@link interpolate}. */
-const DEFAULT_VARIABLES = [
-  'clientName', 'agentName', 'budget', 'propertyType', 'bedrooms',
-  'bathrooms', 'suburbs', 'requirements',
-];
+import type { EditorPlaceholderGroup } from '@/lib/templateVariables';
 
 export interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
-  /** Variable tokens shown in the insert-variable menu (without braces). */
-  variables?: string[];
+  /**
+   * Grouped placeholders shown in the "Insert placeholder" menu. Built via
+   * `composePlaceholderGroups` (live record values) or `catalogPlaceholderGroups`
+   * (authoring). Omit/empty to hide the menu entirely.
+   */
+  placeholders?: EditorPlaceholderGroup[];
   className?: string;
 }
 
@@ -58,10 +56,107 @@ function ToolBtn({
   );
 }
 
-function Toolbar({ editor, variables }: { editor: Editor; variables: string[] }) {
+/**
+ * Searchable, grouped "Insert placeholder" menu. Each row inserts either a live
+ * resolved value (composing against a record) or the raw `{{token}}` (authoring
+ * / per-recipient), per the item's `insert` field.
+ */
+function PlaceholderMenu({ editor, groups }: { editor: Editor; groups: EditorPlaceholderGroup[] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups;
+    return groups
+      .map((g) => ({
+        ...g,
+        items: g.items.filter(
+          (it) =>
+            it.label.toLowerCase().includes(q) ||
+            it.token.toLowerCase().includes(q) ||
+            (it.value ?? '').toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [groups, query]);
+
+  const insert = (text: string) => {
+    editor.chain().focus().insertContent(text).run();
+    setOpen(false);
+    setQuery('');
+  };
+
+  return (
+    <>
+      <span className="mx-1 h-5 w-px bg-border" />
+      <div className="relative">
+        <ToolBtn title="Insert placeholder" active={open} onClick={() => setOpen((v) => !v)}>
+          <Braces className="h-4 w-4" />
+        </ToolBtn>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div className="absolute left-0 top-9 z-20 w-72 rounded-lg border border-border bg-popover shadow-lg">
+              <div className="border-b border-border p-2">
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search placeholders…"
+                  className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="max-h-72 overflow-y-auto p-1">
+                {filtered.length === 0 ? (
+                  <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">No placeholders match.</p>
+                ) : (
+                  filtered.map((group) => (
+                    <div key={group.label} className="mb-1 last:mb-0">
+                      <p className="px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        {group.label}
+                      </p>
+                      {group.items.map((it) => (
+                        <button
+                          key={it.token}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => insert(it.insert)}
+                          className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-muted"
+                          title={it.value ? `Inserts: ${it.value}` : `Inserts ${it.token}`}
+                        >
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-xs font-medium text-foreground">{it.label}</span>
+                            {it.value !== undefined ? (
+                              <span className="shrink-0 truncate text-[11px] text-primary" style={{ maxWidth: '55%' }}>
+                                → {it.value}
+                              </span>
+                            ) : (
+                              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{it.token}</span>
+                            )}
+                          </span>
+                          {it.hint && (
+                            <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{it.hint}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function Toolbar({ editor, placeholders }: { editor: Editor; placeholders: EditorPlaceholderGroup[] }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [showVars, setShowVars] = useState(false);
+
+  const hasPlaceholders = placeholders.some((g) => g.items.length > 0);
 
   const addLink = () => {
     const prev = editor.getAttributes('link').href as string | undefined;
@@ -134,41 +229,13 @@ function Toolbar({ editor, variables }: { editor: Editor; variables: string[] })
       </ToolBtn>
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onImageFile} />
 
-      {variables.length > 0 && (
-        <>
-          <span className="mx-1 h-5 w-px bg-border" />
-          <div className="relative">
-            <ToolBtn title="Insert variable" active={showVars} onClick={() => setShowVars((v) => !v)}><Braces className="h-4 w-4" /></ToolBtn>
-            {showVars && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowVars(false)} />
-                <div className="absolute left-0 top-9 z-20 w-48 max-h-60 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg">
-                  {variables.map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        editor.chain().focus().insertContent(`{{${v}}}`).run();
-                        setShowVars(false);
-                      }}
-                      className="block w-full rounded-md px-2.5 py-1.5 text-left text-xs font-mono text-foreground hover:bg-muted"
-                    >
-                      {`{{${v}}}`}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </>
-      )}
+      {hasPlaceholders && <PlaceholderMenu editor={editor} groups={placeholders} />}
     </div>
   );
 }
 
 export function RichTextEditor({
-  value, onChange, placeholder, variables = DEFAULT_VARIABLES, className,
+  value, onChange, placeholder, placeholders = [], className,
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -204,7 +271,7 @@ export function RichTextEditor({
 
   return (
     <div className={cn('overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring', className)}>
-      {editor && <Toolbar editor={editor} variables={variables} />}
+      {editor && <Toolbar editor={editor} placeholders={placeholders} />}
       <EditorContent editor={editor} data-placeholder={placeholder} />
     </div>
   );

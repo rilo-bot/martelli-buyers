@@ -10,6 +10,7 @@ const DEFAULT_STAGES = [
     description: "Initial call to understand the buyer's needs and situation.",
     order: 0,
     color: 'cyan',
+    linkedStatus: 'contacted',
     checklistItems: [
       { id: 'dc-1', label: 'Call completed', description: 'Discovery call has taken place.', required: true, order: 0 },
       { id: 'dc-2', label: 'Budget confirmed', description: 'Buyer budget range established and recorded.', required: true, order: 1 },
@@ -22,6 +23,7 @@ const DEFAULT_STAGES = [
     description: 'Face-to-face meeting to deepen the relationship and present services.',
     order: 1,
     color: 'violet',
+    linkedStatus: 'qualified',
     checklistItems: [
       { id: 'ipm-1', label: 'Meeting scheduled', description: 'In-person meeting time and location confirmed.', required: true, order: 0 },
       { id: 'ipm-2', label: 'Services presentation delivered', description: "Buyer's agency services, fees and process explained.", required: true, order: 1 },
@@ -34,6 +36,7 @@ const DEFAULT_STAGES = [
     description: "Buyer's agency agreement and supporting documents sent for review.",
     order: 2,
     color: 'amber',
+    linkedStatus: 'agreement_sent',
     checklistItems: [
       { id: 'pw-1', label: 'Agreement sent to buyer', description: "Buyer's agency agreement emailed for review.", required: true, order: 0 },
       { id: 'pw-2', label: 'ID verification complete', description: 'AML/ID documents collected and verified.', required: true, order: 1 },
@@ -46,6 +49,7 @@ const DEFAULT_STAGES = [
     description: 'Agreement signed — buyer is now an active client.',
     order: 3,
     color: 'emerald',
+    linkedStatus: 'active',
     checklistItems: [
       { id: 'sc-1', label: 'Agreement signed and returned', description: 'Countersigned agreement received from buyer.', required: true, order: 0 },
       { id: 'sc-2', label: 'Engagement invoice issued', description: 'Xero engagement invoice created and sent.', required: true, order: 1 },

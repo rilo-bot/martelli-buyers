@@ -5,11 +5,10 @@ import { useClientsStore } from '@/stores/clientsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/lib/permissions';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
-import { getStageDotClass } from '@/pages/SettingsPage';
+import { getStageDotClass, getStagePillClass } from '@/pages/SettingsPage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CardGridSkeleton } from '@/components/ui/skeleton';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -141,25 +140,24 @@ export default function LeadsPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Page header */}
-      <PageHeader
-        eyebrow="Pipeline"
-        title="Leads"
-        subtitle="Track and qualify your incoming buyer enquiries."
-        actions={
-          can('leads:create') && (
-            <Button onClick={() => setShowAddDialog(true)} className="h-10">
-              <Plus className="mr-2 h-4 w-4" /> Add Lead
-            </Button>
-          )
-        }
-      />
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <p className="section-eyebrow mb-1">Pipeline</p>
+          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
+        </div>
+        {can('leads:create') && (
+          <Button onClick={() => setShowAddDialog(true)} className="h-9">
+            <Plus className="mr-2 h-4 w-4" /> Add Lead
+          </Button>
+        )}
+      </div>
 
-      {/* Qualification stage pipeline strip */}
+      {/* Qualification stage pipeline strip — slim segmented track, tinted per stage */}
       {sortedStages.length > 0 && (
-        <div className="flex items-center gap-0 overflow-x-auto rounded-lg border border-border bg-card">
-          {sortedStages.map((stage, idx) => {
+        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">
+          {sortedStages.map((stage) => {
             const isActive = stageFilter === stage.id;
             const count = leads.filter((l) => l.qualificationStageId === stage.id).length;
             return (
@@ -168,56 +166,56 @@ export default function LeadsPage() {
                 type="button"
                 onClick={() => setStageFilter(isActive ? '' : stage.id)}
                 className={cn(
-                  'relative flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-all shrink-0 whitespace-nowrap',
-                  isActive ? 'text-primary bg-primary/5' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
-                  idx > 0 && 'border-l border-border',
+                  'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all shrink-0 whitespace-nowrap',
+                  isActive ? getStagePillClass(stage.color) : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                 )}
               >
                 <span className={cn('h-2 w-2 rounded-full shrink-0', getStageDotClass(stage.color))} />
                 {stage.label}
-                <span className={cn('ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold', isActive ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>{count}</span>
+                <span className={cn('rounded-full px-1.5 text-[10px] font-bold tabular-nums', isActive ? 'bg-background/50' : 'bg-muted text-muted-foreground')}>{count}</span>
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Status filter chips */}
-      <div className="flex gap-2 flex-wrap">
-        <button type="button" onClick={() => setStatusFilter('')}
-          className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border', !statusFilter ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card hover:bg-muted text-muted-foreground')}>
-          All ({leads.length})
-        </button>
-        {STATUS_OPTIONS.map((status) => {
-          const count = leads.filter((l) => l.status === status).length;
-          return (
-            <button key={status} type="button" onClick={() => setStatusFilter(statusFilter === status ? '' : status)}
-              className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border capitalize', statusFilter === status ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card hover:bg-muted text-muted-foreground')}>
-              <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[status].dot)} />
-              {status.replace('_', ' ')} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search + filters + view toggle */}
-      <div className="flex gap-3 flex-wrap items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search leads..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-10" />
+      {/* Toolbar: status chips (single scrollable line) + search + view toggle */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 overflow-x-auto -mb-0.5 pb-0.5 flex-1 min-w-[220px]">
+          <button type="button" onClick={() => setStatusFilter('')}
+            className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border shrink-0 capitalize', !statusFilter ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card hover:bg-muted text-muted-foreground')}>
+            All <span className="tabular-nums opacity-80">{leads.length}</span>
+          </button>
+          {STATUS_OPTIONS.map((status) => {
+            const count = leads.filter((l) => l.status === status).length;
+            const active = statusFilter === status;
+            return (
+              <button key={status} type="button" onClick={() => setStatusFilter(active ? '' : status)}
+                className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border shrink-0 capitalize', active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card hover:bg-muted text-muted-foreground')}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[status].dot)} />
+                {status.replace('_', ' ')} <span className="tabular-nums opacity-80">{count}</span>
+              </button>
+            );
+          })}
         </div>
-        {view === 'list' && (
-          <Button variant="outline" size="sm" className="h-10" onClick={() => setDensity((d) => (d === 'comfortable' ? 'compact' : 'comfortable'))}>
-            {density === 'comfortable' ? 'Compact' : 'Comfortable'}
-          </Button>
-        )}
-        <div className="flex items-center rounded-lg border border-border overflow-hidden h-10 shrink-0">
-          {viewButtons.map(({ mode, icon, label }, i) => (
-            <button key={mode} type="button" onClick={() => setView(mode)} title={label}
-              className={cn('flex items-center gap-1.5 px-3 h-full text-xs font-medium transition-colors', view === mode ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground', i > 0 && 'border-l border-border')}>
-              {icon}<span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative w-44 sm:w-56">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search leads..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+          </div>
+          {view === 'list' && (
+            <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={() => setDensity((d) => (d === 'comfortable' ? 'compact' : 'comfortable'))}>
+              {density === 'comfortable' ? 'Compact' : 'Cozy'}
+            </Button>
+          )}
+          <div className="flex items-center rounded-lg border border-border overflow-hidden h-9 shrink-0">
+            {viewButtons.map(({ mode, icon, label }, i) => (
+              <button key={mode} type="button" onClick={() => setView(mode)} title={label}
+                className={cn('flex items-center gap-1.5 px-2.5 h-full text-xs font-medium transition-colors', view === mode ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground', i > 0 && 'border-l border-border')}>
+                {icon}<span className="hidden lg:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

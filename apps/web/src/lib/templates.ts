@@ -7,12 +7,15 @@ const RECIPIENT_SET = new Set<string>(RECIPIENT_VARS);
 
 const TOKEN_RE = /\{\{\s*(\w+)\s*\}\}/g;
 
-const nzd = (n: number) =>
-  new Intl.NumberFormat('en-NZ', {
+/** Canonical budget format (NZD, no cents). Shared by every send path so a
+ *  `{{budget}}` token renders identically wherever it is interpolated. */
+export function formatNzd(n: number): string {
+  return new Intl.NumberFormat('en-NZ', {
     style: 'currency',
     currency: 'NZD',
     maximumFractionDigits: 0,
   }).format(n);
+}
 
 /** Build the variable map a linked deal can resolve in a template. Empty
  *  values are omitted so the token is left intact rather than blanked out. */
@@ -21,7 +24,7 @@ export function dealVariables(deal: Deal | undefined): Record<string, string> {
   const suburbs = deal.preferredSuburbs.filter(Boolean).join(', ');
   const raw: Record<string, string> = {
     clientName: deal.clientName,
-    budget: deal.budget > 0 ? nzd(deal.budget) : '',
+    budget: deal.budget > 0 ? formatNzd(deal.budget) : '',
     propertyType: deal.propertyType,
     bedrooms: deal.bedrooms ? String(deal.bedrooms) : '',
     bathrooms: deal.bathrooms ? String(deal.bathrooms) : '',
@@ -39,13 +42,16 @@ export function interpolate(text: string, vars: Record<string, string>): string 
   );
 }
 
+/** Every distinct `{{token}}` present in the text (whitespace-tolerant). */
+export function templateTokens(text: string): string[] {
+  const found = new Set<string>();
+  for (const m of text.matchAll(TOKEN_RE)) found.add(m[1]);
+  return [...found];
+}
+
 /** Distinct tokens still present, excluding ones the server fills per recipient. */
 export function unresolvedVariables(text: string): string[] {
-  const found = new Set<string>();
-  for (const m of text.matchAll(TOKEN_RE)) {
-    if (!RECIPIENT_SET.has(m[1])) found.add(m[1]);
-  }
-  return [...found];
+  return templateTokens(text).filter((t) => !RECIPIENT_SET.has(t));
 }
 
 /** Whether the text still references a per-recipient token (e.g. {{agentName}}). */

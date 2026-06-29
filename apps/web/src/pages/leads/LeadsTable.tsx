@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { QualStageBadge, STATUS_STYLES } from './leadShared';
+import { MiniStageStepper, STATUS_STYLES } from './leadShared';
 import type { Lead } from '@/types';
 
 interface LeadsTableProps {
@@ -75,7 +75,7 @@ export function LeadsTable({ leads, selectedIds, onSelectedChange, density, onMa
     {
       key: 'stage',
       header: 'Qual. Stage',
-      cell: (l) => (l.qualificationStageId ? <QualStageBadge stageId={l.qualificationStageId} /> : <span className="text-xs text-muted-foreground">—</span>),
+      cell: (l) => <MiniStageStepper stageId={l.qualificationStageId} />,
     },
     {
       key: 'actions',

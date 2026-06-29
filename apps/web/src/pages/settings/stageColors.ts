@@ -2,6 +2,8 @@
 // Settings UI and the Leads pages can import without a circular page dep.
 // (SettingsPage re-exports getStagePillClass/getStageDotClass for back-compat.)
 
+import type { LeadStatus } from '@/types';
+
 export const STAGE_COLORS = [
   { value: 'cyan', label: 'Cyan', dot: 'bg-cyan-500', pill: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300' },
   { value: 'violet', label: 'Violet', dot: 'bg-violet-500', pill: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' },
@@ -21,5 +23,7 @@ export function getStageDotClass(color: string): string {
   return STAGE_COLORS.find((c) => c.value === color)?.dot ?? 'bg-muted-foreground';
 }
 
-export const BLANK_STAGE_FORM = { label: '', description: '', color: 'cyan' };
+export const BLANK_STAGE_FORM: { label: string; description: string; color: string; linkedStatus: LeadStatus | '' } = {
+  label: '', description: '', color: 'cyan', linkedStatus: '',
+};
 export const BLANK_CHECKLIST_FORM = { label: '', description: '', required: true };

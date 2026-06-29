@@ -172,8 +172,21 @@ export default function EnquiriesPage() {
                     <div className="text-xs text-muted-foreground">{e.email}</div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <div className="text-foreground">{e.enquiryType || '—'}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1 max-w-xs">{e.message}</div>
+                    {(() => {
+                      // The default form has no "enquiry type"; fall back to the first
+                      // extra answer (e.g. "How did you hear about us?"), then the message.
+                      const summary = e.enquiryType || Object.values(e.extraFields ?? {})[0] || '';
+                      return summary ? (
+                        <>
+                          <div className="text-foreground line-clamp-1 max-w-xs">{summary}</div>
+                          {e.message && (
+                            <div className="text-xs text-muted-foreground line-clamp-1 max-w-xs">{e.message}</div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-foreground line-clamp-1 max-w-xs">{e.message || '—'}</div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground">{formatDate(e.createdAt)}</td>
                   <td className="px-4 py-3">
@@ -222,16 +235,23 @@ export default function EnquiriesPage() {
               <div className="mt-2 space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Email" value={active.email} />
-                  <Field label="Phone" value={active.phone || '—'} icon={active.phone ? Phone : undefined} />
-                  <Field label="Enquiry type" value={active.enquiryType || '—'} />
-                  <Field label="Budget" value={active.budget || '—'} />
-                  <Field label="Location" value={active.location || '—'} />
+                  {active.phone && <Field label="Phone" value={active.phone} icon={Phone} />}
+                  {active.enquiryType && <Field label="Enquiry type" value={active.enquiryType} />}
+                  {active.budget && <Field label="Budget" value={active.budget} />}
+                  {active.location && <Field label="Location" value={active.location} />}
                   <Field label="Received" value={formatDate(active.createdAt)} />
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Message</p>
-                  <p className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 text-foreground">{active.message}</p>
+                  <p className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 text-foreground">{active.message || '—'}</p>
                 </div>
+                {active.extraFields && Object.keys(active.extraFields).length > 0 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.entries(active.extraFields).map(([label, value]) => (
+                      <Field key={label} label={label} value={value || '—'} />
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 text-xs">
                   <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[active.status].dot)} />
                   <span className="font-medium">{STATUS_STYLES[active.status].label}</span>

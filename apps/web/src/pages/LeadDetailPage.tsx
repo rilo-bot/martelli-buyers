@@ -4,7 +4,8 @@ import { useLeadsStore } from '@/stores/leadsStore';
 import { useClientsStore } from '@/stores/clientsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useQualificationStagesStore } from '@/stores/qualificationStagesStore';
-import { getStagePillClass, getStageDotClass } from '@/pages/SettingsPage';
+import { useMeetStore } from '@/stores/meetStore';
+import { useConfigStore } from '@/stores/configStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
-import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2 } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
+import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2, Video, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
@@ -88,7 +90,6 @@ export default function LeadDetailPage() {
   if (!lead) return <Navigate to="/leads" replace />;
 
   const linkedClient = lead.clientId ? clients.find((c) => c.id === lead.clientId) : null;
-  const currentStage = sortedStages.find((s) => s.id === lead.qualificationStageId);
   const stageProgress = lead.stageProgress ?? {};
   const statusStyle = STATUS_STYLES[lead.status];
 
@@ -177,38 +178,56 @@ export default function LeadDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4 flex-wrap">
-        <Button asChild variant="ghost" size="icon" className="-ml-2 mt-1">
-          <Link to="/leads"><ArrowLeft className="h-4 w-4" /></Link>
+      <div>
+        <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 h-8 gap-1.5 text-xs text-muted-foreground">
+          <Link to="/leads"><ArrowLeft className="h-3.5 w-3.5" /> Back to leads</Link>
         </Button>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary text-base font-bold shrink-0">
-          {lead.firstName?.[0]}{lead.lastName?.[0]}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight truncate">{lead.firstName} {lead.lastName}</h1>
-          <div className="mt-1 flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
-            <span>Lead · {lead.source || 'Direct enquiry'}</span>
-            <span className={cn('inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold capitalize', statusStyle.pill)}>
-              <span className={cn('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
-              {lead.status.replace('_', ' ')}
-            </span>
-            {currentStage && (
-              <span className={cn('inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold', getStagePillClass(currentStage.color))}>
-                <span className={cn('h-1.5 w-1.5 rounded-full', getStageDotClass(currentStage.color))} />
-                {currentStage.label}
-              </span>
-            )}
+        <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-card to-muted/20 p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-4 min-w-0">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary text-lg font-bold shrink-0">
+                {lead.firstName?.[0]}{lead.lastName?.[0]}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-2xl font-bold tracking-tight">{lead.firstName} {lead.lastName}</h1>
+                  <span className={cn('inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold capitalize', statusStyle.pill)}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
+                    {lead.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">Lead · {lead.source || 'Direct enquiry'}</p>
+                <div className="mt-3 flex items-center gap-x-4 gap-y-1.5 flex-wrap text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{lead.email}</span>
+                  </span>
+                  {lead.phone && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 shrink-0" />{lead.phone}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium text-foreground tabular-nums">${lead.budget.toLocaleString()}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-stretch gap-2 shrink-0 sm:w-44">
+              <div className="space-y-1">
+                <Label htmlFor="lead-status" className="text-[11px] uppercase tracking-wide text-muted-foreground">Pipeline status</Label>
+                <Select id="lead-status" value={lead.status} onChange={(e) => handleStatusChange(e.target.value as LeadStatus)} className="text-sm">
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                </Select>
+              </div>
+              {lead.status !== 'won' && lead.status !== 'lost' && (
+                <Button size="sm" onClick={openWonDialog} className="shadow-sm shadow-primary/20">
+                  <Trophy className="mr-1.5 h-3.5 w-3.5" /> Mark as Won
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap shrink-0">
-          <Select value={lead.status} onChange={(e) => handleStatusChange(e.target.value as LeadStatus)} className="w-36 text-sm">
-            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-          </Select>
-          {lead.status !== 'won' && lead.status !== 'lost' && (
-            <Button size="sm" onClick={openWonDialog} className="shadow-sm shadow-primary/20">
-              <Trophy className="mr-1.5 h-3.5 w-3.5" /> Mark as Won
-            </Button>
-          )}
         </div>
       </div>
 
@@ -388,6 +407,9 @@ export default function LeadDetailPage() {
         </Card>
       </form>
 
+      {/* Meetings (RILO Meet) */}
+      <LeadMeetCard lead={lead} />
+
       {/* Agency agreement */}
       <LeadAgreementCard lead={lead} />
 
@@ -508,6 +530,149 @@ function LeadAgreementCard({ lead }: { lead: Lead }) {
           onDownload={() => downloadLeadAgreementPdf(lead.id)}
         />
       )}
+    </Card>
+  );
+}
+
+/* ─── Meetings (RILO Meet) — start/schedule a call with this buyer ─── */
+
+const MEET_FORM_DEFAULTS = { scheduled: false, scheduledStartAt: '', scheduledDurationMinutes: '45' };
+
+function LeadMeetCard({ lead }: { lead: Lead }) {
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const hasMeet = useConfigStore((s) => s.hasMeet);
+  const configLoaded = useConfigStore((s) => s.loaded);
+  const createMeeting = useMeetStore((s) => s.create);
+  const { can } = usePermissions();
+
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: '', hostEmail: '', participants: '', ...MEET_FORM_DEFAULTS,
+  });
+
+  if (!can('meet:create')) return null;
+
+  const openSheet = () => {
+    const name = `${lead.firstName} ${lead.lastName}`.trim() || 'buyer';
+    setForm({
+      title: `Meeting with ${name}`,
+      hostEmail: currentUser?.email ?? '',
+      participants: lead.email,
+      ...MEET_FORM_DEFAULTS,
+    });
+    setOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = form.title.trim();
+    const hostEmail = form.hostEmail.trim().toLowerCase();
+    if (!title) { toast.error('A meeting title is required.'); return; }
+    if (!hostEmail) { toast.error('A host email is required.'); return; }
+
+    const participants = form.participants.split(/[\s,;]+/).map((p) => p.trim().toLowerCase()).filter(Boolean);
+    const payload: Parameters<typeof createMeeting>[0] = { title, hostEmail, participants };
+
+    if (form.scheduled) {
+      if (!form.scheduledStartAt) { toast.error('Pick a start time for the scheduled meeting.'); return; }
+      const duration = Number(form.scheduledDurationMinutes);
+      if (!Number.isFinite(duration) || duration <= 0) { toast.error('Enter a valid duration in minutes.'); return; }
+      payload.scheduledStartAt = new Date(form.scheduledStartAt).toISOString();
+      payload.scheduledDurationMinutes = duration;
+    }
+
+    setSaving(true);
+    try {
+      const meeting = await createMeeting(payload);
+      setOpen(false);
+      if (meeting?.meetingLinkUrl && !form.scheduled) {
+        toast.success('Meeting created.', {
+          action: { label: 'Join', onClick: () => window.open(meeting.meetingLinkUrl, '_blank', 'noopener') },
+        });
+      } else {
+        toast.success(form.scheduled ? 'Meeting scheduled.' : 'Meeting created.');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create the meeting. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Video className="h-4 w-4 text-primary" /> Meetings
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {configLoaded && !hasMeet ? (
+          <p className="text-sm text-muted-foreground">
+            RILO Meet isn’t configured, so video meetings are unavailable. Ask an admin to add the
+            server key to enable instant and scheduled calls.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" onClick={openSheet}>
+              <Video className="mr-1.5 h-3.5 w-3.5" /> New meeting
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Start an instant video call or schedule one with {lead.firstName || 'the buyer'} — they’re pre-added as a participant.
+            </p>
+          </div>
+        )}
+      </CardContent>
+
+      <Sheet open={open} onOpenChange={(o) => { if (!saving) setOpen(o); }}>
+        <SheetContent size="lg">
+          <SheetHeader><SheetTitle>New Meeting</SheetTitle></SheetHeader>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <SheetBody className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="lm-title">Title *</Label>
+                <Input id="lm-title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} autoFocus />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lm-host">Host email *</Label>
+                <Input id="lm-host" type="email" value={form.hostEmail} onChange={(e) => setForm((f) => ({ ...f, hostEmail: e.target.value }))} placeholder="you@yourfirm.com" />
+                <p className="text-[11px] text-muted-foreground">Must be an existing RILO user.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lm-participants">Participants</Label>
+                <Textarea id="lm-participants" rows={2} value={form.participants} onChange={(e) => setForm((f) => ({ ...f, participants: e.target.value }))} placeholder="buyer@example.com" />
+                <p className="text-[11px] text-muted-foreground">Comma- or space-separated emails. They wait in the lobby until the host admits them.</p>
+              </div>
+              <label className="flex items-center gap-2.5 rounded-lg border border-border px-3 py-2.5 text-sm cursor-pointer hover:bg-muted transition-colors">
+                <input type="checkbox" checked={form.scheduled} onChange={(e) => setForm((f) => ({ ...f, scheduled: e.target.checked }))} className="rounded" />
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Schedule for later</span>
+              </label>
+              {form.scheduled && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="lm-start">Start time *</Label>
+                    <Input id="lm-start" type="datetime-local" value={form.scheduledStartAt} onChange={(e) => setForm((f) => ({ ...f, scheduledStartAt: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="lm-duration">Duration (min) *</Label>
+                    <Input id="lm-duration" type="number" min={1} value={form.scheduledDurationMinutes} onChange={(e) => setForm((f) => ({ ...f, scheduledDurationMinutes: e.target.value }))} />
+                  </div>
+                </div>
+              )}
+            </SheetBody>
+            <SheetFooter>
+              <SheetClose asChild><Button type="button" variant="ghost" disabled={saving}>Cancel</Button></SheetClose>
+              <Button type="submit" disabled={saving || !form.title.trim() || !form.hostEmail.trim()} className="shadow-sm shadow-primary/20">
+                {saving
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating…</>
+                  : <><Video className="mr-2 h-4 w-4" />{form.scheduled ? 'Schedule Meeting' : 'Start Meeting'}</>}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
     </Card>
   );
 }

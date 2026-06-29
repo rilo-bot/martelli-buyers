@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { RichTextEditor } from '@/components/ui/rich-editor';
 import { useEmailTemplatesStore } from '@/stores/emailTemplatesStore';
 import { sendEmail } from '@/lib/email';
-import { plainTextToHtml, htmlToPlainText } from '@/lib/templates';
+import { plainTextToHtml, htmlToPlainText, interpolate, templateTokens } from '@/lib/templates';
+import { composePlaceholderGroups } from '@/lib/templateVariables';
 import { cn } from '@/lib/utils';
 import { Mail, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -51,10 +52,6 @@ const CATEGORY_LABELS: Record<EmailTemplateCategory, string> = {
 };
 
 /* ─── Variable interpolation ─────────────────────────────────────────── */
-
-function interpolate(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
-}
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -219,13 +216,26 @@ export function SendEmailDialog({
     !recipients.some((r) => r.type === 'agent');
 
   /* ─── Missing variable highlighting ──────────────────────────────── */
-  const unresolvedVars = useMemo(() => {
-    const found = new Set<string>();
-    const combined = subject + ' ' + bodyHtml;
-    const matches = combined.matchAll(/\{\{(\w+)\}\}/g);
-    for (const m of matches) found.add(m[1]);
-    return Array.from(found);
-  }, [subject, bodyHtml]);
+  // The dialog resolves recipient vars (clientName/agentName) eagerly via
+  // buildVars, so any token still present here is genuinely unfilled — flag all.
+  const unresolvedVars = useMemo(
+    () => templateTokens(subject + ' ' + bodyHtml),
+    [subject, bodyHtml],
+  );
+
+  // Placeholder menu for the body editor: the chosen recipient's name plus the
+  // caller-supplied record values resolve to live values; everything else is
+  // offered as a manual placeholder. All recipient vars resolve at selection
+  // time (single recipient), so none are deferred per-recipient here.
+  const composePlaceholders = useMemo(() => {
+    const chosen = recipients.find((r) => r.id === recipientId);
+    const extra: Record<string, string> = {};
+    if (chosen) {
+      if (chosen.type === 'agent') extra.agentName = chosen.name;
+      else extra.clientName = chosen.name;
+    }
+    return composePlaceholderGroups({ ...extra, ...variables });
+  }, [recipients, recipientId, variables]);
 
   /* ─── Render ──────────────────────────────────────────────────────── */
 
@@ -433,7 +443,7 @@ export function SendEmailDialog({
             {/* Body */}
             <div className="space-y-1.5">
               <Label htmlFor="emailBody">Message</Label>
-              <RichTextEditor value={bodyHtml} onChange={setBodyHtml} placeholder="Write your message…" />
+              <RichTextEditor value={bodyHtml} onChange={setBodyHtml} placeholders={composePlaceholders} placeholder="Write your message…" />
               <p className="text-xs text-muted-foreground">Your company logo, colours and signature are added automatically when the email is sent.</p>
             </div>
 
