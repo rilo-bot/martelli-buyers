@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { FolderArchive, UploadCloud, Search, FileText, Image as ImageIcon, Eye, Pencil, Trash2, Loader2, ExternalLink } from 'lucide-react';
+import { FolderArchive, UploadCloud, Search, FileText, Image as ImageIcon, Eye, Pencil, Trash2, Loader2, ExternalLink, Share2 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { DocumentUploadDialog, DocumentEditDialog } from '@/components/documents/DocumentDialogs';
+import { DocumentShareDialog } from '@/components/documents/DocumentShareDialog';
 import {
   CATEGORY_OPTIONS, ATTACHABLE_TYPES, ENTITY_TYPE_LABELS, categoryLabel, formatBytes, fileKind,
   useEntityCatalog, resolveAttachment,
@@ -22,7 +23,7 @@ import { useDocumentsStore } from '@/stores/documentsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useConfigStore } from '@/stores/configStore';
 import { usePermissions } from '@/lib/permissions';
-import { canDownloadDoc } from '@/lib/docAccess';
+import { canDownloadDoc, canShareDoc } from '@/lib/docAccess';
 import type { Document } from '@/types';
 
 type KindFilter = 'all' | 'image' | 'pdf' | 'doc';
@@ -46,6 +47,7 @@ export default function DocumentsPage() {
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editDoc, setEditDoc] = useState<Document | null>(null);
+  const [shareDoc, setShareDoc] = useState<Document | null>(null);
   const [viewDoc, setViewDoc] = useState<Document | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -53,6 +55,7 @@ export default function DocumentsPage() {
   const canUpload = hasS3 && can('documents:create');
   const canEdit = can('documents:edit');
   const canDelete = can('documents:delete');
+  const canShare = canShareDoc(currentUser);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -195,6 +198,11 @@ export default function DocumentsPage() {
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" onClick={() => setViewDoc(doc)} title="Preview">
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {canShare && (
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" onClick={() => setShareDoc(doc)} title="Share (preview-only)">
+                              <Share2 className="h-4 w-4" />
+                            </Button>
+                          )}
                           {canEdit && (
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" onClick={() => setEditDoc(doc)} title="Edit details">
                               <Pencil className="h-4 w-4" />
@@ -218,6 +226,7 @@ export default function DocumentsPage() {
 
       {uploadOpen && <DocumentUploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />}
       {editDoc && <DocumentEditDialog open={!!editDoc} onClose={() => setEditDoc(null)} doc={editDoc} />}
+      {shareDoc && <DocumentShareDialog open={!!shareDoc} onClose={() => setShareDoc(null)} doc={shareDoc} />}
       {viewDoc && (
         <DocumentViewer
           open={!!viewDoc}

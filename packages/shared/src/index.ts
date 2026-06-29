@@ -829,6 +829,8 @@ export interface Document {
   dealId: string;
   /** User id of the uploader. */
   uploadedBy: string;
+  /** User ids the document is shared with (preview-only access). */
+  sharedWith: string[];
   tags: string[];
   createdAt: string;
   updatedAt: string;

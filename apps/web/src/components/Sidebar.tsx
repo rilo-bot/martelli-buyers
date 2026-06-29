@@ -5,7 +5,7 @@ import { usePermissions } from '@/lib/permissions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   LogOut, Sun, Moon, LayoutDashboard, Users, FileText,
-  Home, Star, Mail, Inbox, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown, Video, FolderArchive,
+  Home, Star, Mail, Inbox, ShieldCheck, UserCheck, Receipt, UserCog, PanelLeft, Menu, Settings, ChevronRight, ChevronsUpDown, Video, FolderArchive, Share2,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useMenu } from '@/lib/useMenu';
@@ -25,6 +25,8 @@ const navGroups: NavGroup[] = [
     label: 'Resources',
     links: [
       { to: '/documents', label: 'Documents', icon: FolderArchive, perm: 'documents:view' },
+      // No `perm` — any user may receive shared documents, even without Documents access.
+      { to: '/shared-with-me', label: 'Shared with me', icon: Share2 },
     ],
   },
   {

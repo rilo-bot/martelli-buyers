@@ -25,13 +25,19 @@ export interface AttachTarget {
 
 interface DocumentsState {
   documents: Document[];
+  /** Documents an admin has shared with the current user (preview-only). */
+  sharedWithMe: Document[];
   loading: boolean;
   loaded: boolean;
   fetch: () => Promise<void>;
+  /** Load the documents shared with the current user (open to any user). */
+  fetchSharedWithMe: () => Promise<void>;
   /** Upload a file to S3 then create its Document record linked to the target. */
   uploadAndAttach: (file: File, target: AttachTarget) => Promise<Document>;
   /** Update a document's metadata (name, category, tags, description, link). */
   updateDocument: (id: string, patch: Partial<Document>) => Promise<Document>;
+  /** Admin-only: set the internal users a document is shared with (preview-only). */
+  shareDocument: (id: string, userIds: string[]) => Promise<Document>;
   deleteDocument: (id: string) => Promise<void>;
   /**
    * Resolve a short-lived presigned URL to view/download a document. The bucket
@@ -49,6 +55,7 @@ interface DocumentsState {
 
 export const useDocumentsStore = create<DocumentsState>()((set, get) => ({
   documents: [],
+  sharedWithMe: [],
   loading: false,
   loaded: false,
 
@@ -60,6 +67,11 @@ export const useDocumentsStore = create<DocumentsState>()((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  fetchSharedWithMe: async () => {
+    const sharedWithMe = await request<Document[]>('GET', '/api/documents/shared-with-me');
+    set({ sharedWithMe });
   },
 
   uploadAndAttach: async (file, target) => {
@@ -89,6 +101,12 @@ export const useDocumentsStore = create<DocumentsState>()((set, get) => ({
 
   updateDocument: async (id, patch) => {
     const doc = await api.update(id, patch);
+    set((s) => ({ documents: s.documents.map((d) => (d.id === id ? doc : d)) }));
+    return doc;
+  },
+
+  shareDocument: async (id, userIds) => {
+    const doc = await request<Document>('PUT', `/api/documents/${id}/share`, { userIds });
     set((s) => ({ documents: s.documents.map((d) => (d.id === id ? doc : d)) }));
     return doc;
   },

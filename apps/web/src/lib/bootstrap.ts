@@ -60,6 +60,8 @@ export function useBootstrapData() {
       [useInvoicesStore.getState().fetch, 'invoices:view'],
       [useDueDiligenceStore.getState().fetch, 'dueDiligence:view'],
       [useDocumentsStore.getState().fetch, 'documents:view'],
+      // Open to any authenticated user — a recipient may hold no Documents perm.
+      [useDocumentsStore.getState().fetchSharedWithMe, null],
       [useEmailTemplatesStore.getState().fetch, 'emails:view'],
       [useQualificationStagesStore.getState().fetch, 'settings:view'],
       [useCompanySettingsStore.getState().fetch, 'settings:view'],

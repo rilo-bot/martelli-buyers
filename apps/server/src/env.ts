@@ -102,8 +102,10 @@ export const env = {
     // read the signed-in account via /me.
     mailbox: (process.env.MS_MAILBOX ?? '').trim().toLowerCase(),
     // Space-separated Graph scopes. Read-only ingest — sending stays on SendGrid.
+    // Mail.Read.Shared is required to read a delegated shared mailbox via
+    // /users/{addr} (MS_MAILBOX); it's harmless for the /me path.
     scopes: process.env.MS_SCOPES
-      ?? 'offline_access openid profile email User.Read Mail.Read',
+      ?? 'offline_access openid profile email User.Read Mail.Read Mail.Read.Shared',
     // How often the background delta sync runs (minutes).
     syncMinutes: Number(process.env.OUTLOOK_SYNC_MINUTES ?? 10),
   },

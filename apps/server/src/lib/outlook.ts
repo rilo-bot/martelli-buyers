@@ -24,6 +24,16 @@ type OutlookConn = InstanceType<AnyModel> & {
 
 export type MailFolder = 'inbox' | 'sent';
 
+/** A non-2xx Graph response, carrying the HTTP status so callers can branch on
+ *  it (e.g. a 410 Gone delta token → fall back to a full re-sync) without
+ *  pattern-matching the error message. */
+export class GraphError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'GraphError';
+  }
+}
+
 /** Graph well-known folder name for each folder we sync. */
 const FOLDER_ID: Record<MailFolder, string> = { inbox: 'inbox', sent: 'sentitems' };
 
@@ -247,7 +257,7 @@ export async function fetchDelta(
     const res = await graphFetch(url);
     if (!res.ok) {
       // A 410 Gone means the delta token expired — caller should retry full.
-      throw new Error(`Graph delta (${folder}) failed (${res.status}): ${await res.text()}`);
+      throw new GraphError(res.status, `Graph delta (${folder}) failed (${res.status}): ${await res.text()}`);
     }
     const data = (await res.json()) as DeltaResponse;
     for (const m of data.value ?? []) messages.push(mapMessage(m, folder));

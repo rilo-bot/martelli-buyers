@@ -1,10 +1,10 @@
-import { EmailMessage, Client, Deal, type AnyModel } from '../models';
+import { EmailMessage, Client, Deal, OutlookConnection, type AnyModel } from '../models';
 import { env, hasOutlook } from '../env';
 import { recordEvent } from './audit';
 import {
-  getConnection,
   fetchDelta,
   listAttachments,
+  GraphError,
   type MailFolder,
   type MappedMessage,
 } from './outlook';
@@ -130,13 +130,16 @@ const FOLDER_CURSOR: Record<MailFolder, 'inboxDeltaLink' | 'sentDeltaLink'> = {
 
 /** One full sync pass across Inbox + Sent. Returns the count of new messages. */
 export async function runSync(): Promise<{ inserted: number }> {
-  const conn = await getConnection();
+  // Atomically claim the running state: matches the singleton connection only
+  // when it exists AND isn't already syncing, so a manual trigger and the
+  // scheduler can't both start a pass. Null → not connected, or a sync is in
+  // flight; either way there's nothing for us to do.
+  const conn = await OutlookConnection.findOneAndUpdate(
+    { syncStatus: { $ne: 'running' } },
+    { $set: { syncStatus: 'running', syncError: '' } },
+    { new: true, sort: { createdAt: 1 } },
+  );
   if (!conn) return { inserted: 0 };
-  if (conn.get('syncStatus') === 'running') return { inserted: 0 };
-
-  conn.set('syncStatus', 'running');
-  conn.set('syncError', '');
-  await conn.save();
 
   let inserted = 0;
   try {
@@ -148,7 +151,7 @@ export async function runSync(): Promise<{ inserted: number }> {
         result = await fetchDelta(folder, saved);
       } catch (err) {
         // A 410 Gone (expired delta token) → fall back to a full re-sync.
-        if (saved && /\(410\)/.test((err as Error).message)) {
+        if (saved && err instanceof GraphError && err.status === 410) {
           result = await fetchDelta(folder, '');
         } else {
           throw err;

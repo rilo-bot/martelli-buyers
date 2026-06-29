@@ -817,6 +817,9 @@ const DocumentSchema = new Schema(
     // Denormalised journey scope so a deal's whole document set is one query.
     dealId: { type: String, default: '', index: true },
     uploadedBy: { type: String, default: '' },
+    // User ids this document has been explicitly shared with (preview-only
+    // access). Managed solely by the admin-gated /documents/:id/share endpoint.
+    sharedWith: { type: [String], default: [], index: true },
     tags: { type: [String], default: [] },
   },
   baseOpts,

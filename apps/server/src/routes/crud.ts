@@ -458,7 +458,12 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
       WRITE_TRANSFORMS[resource]?.(body);
       // A document's owner (used by the download gate) is the session user — never
       // client-supplied, so it can't be spoofed to obtain someone else's file.
-      if (resource === 'documents') body.uploadedBy = req.session.userId ?? '';
+      // Sharing is admin-only via /documents/:id/share, so never accept an
+      // initial `sharedWith` at create time.
+      if (resource === 'documents') {
+        body.uploadedBy = req.session.userId ?? '';
+        delete body.sharedWith;
+      }
       const doc = await modelRef.create(body);
       if (AUDITED.has(resource)) await auditCreate(resource, doc, req.session.userId ?? '');
       const afterCreate = AFTER_CREATE[resource];
@@ -482,7 +487,8 @@ export function crudRouter(resource: string, modelRef: AnyModel, module: string)
       // The stored file and its owner are immutable once uploaded; only metadata
       // and the attachment link may be edited. Strip any attempt to change them.
       if (resource === 'documents') {
-        for (const k of ['url', 'storageKey', 'uploadedBy', 'size', 'mimeType']) delete patch[k];
+        // `sharedWith` is mutated only via the admin-gated /documents/:id/share.
+        for (const k of ['url', 'storageKey', 'uploadedBy', 'size', 'mimeType', 'sharedWith']) delete patch[k];
       }
       // Capture the pre-update doc when this resource records timeline events,
       // or when it needs its prior state to validate a transition (leads).

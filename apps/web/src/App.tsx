@@ -34,6 +34,7 @@ import MeetPage from '@/pages/MeetPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import DueDiligencePage from '@/pages/DueDiligencePage';
 import DocumentsPage from '@/pages/DocumentsPage';
+import SharedWithMePage from '@/pages/SharedWithMePage';
 import TeamPage from '@/pages/TeamPage';
 import SettingsPage from '@/pages/SettingsPage';
 import SignAgreementPage from '@/pages/SignAgreementPage';
@@ -110,6 +111,7 @@ export default function App() {
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
+          <Route path="/shared-with-me" element={<SharedWithMePage />} />
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/leads/:id/agreement" element={<LeadAgreementEditorPage />} />

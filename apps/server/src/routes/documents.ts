@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { Invoice, DueDiligence, Deal, Document, Lead } from '../models';
+import { z } from 'zod';
+import { Invoice, DueDiligence, Deal, Document, Lead, User } from '../models';
 import { asyncHandler } from '../middleware/error';
-import { requirePermission, canDownloadDoc } from '../lib/permissions';
+import { requirePermission, canDownloadDoc, canPreviewDoc, isAdmin } from '../lib/permissions';
 import { presignDownload, getObjectStream, keyFromUrl, normalizeHtmlAssetUrls, hasS3 } from '../lib/s3';
 import { sendMail } from '../lib/mailer';
 import { env, hasEmail } from '../env';
@@ -40,6 +41,58 @@ function wantsDownload(req: { query: Record<string, unknown> }): boolean {
 }
 
 /* ─────────────────── catalogued uploads (private S3) ─────────────────── */
+
+const shareSchema = z.object({
+  userIds: z.array(z.string().min(1)).max(200),
+});
+
+/**
+ * GET /api/documents/shared-with-me — documents an admin has shared with the
+ * current user (preview-only). Open to any authenticated user, so a recipient
+ * who holds no Documents permission can still discover their shared files.
+ */
+documentsRouter.get(
+  '/shared-with-me',
+  asyncHandler(async (req, res) => {
+    const uid = req.session.userId;
+    if (!uid) {
+      res.json([]);
+      return;
+    }
+    const docs = await Document.find({ sharedWith: uid }).sort({ createdAt: 1 });
+    res.json(docs.map((d) => d.toJSON()));
+  }),
+);
+
+/**
+ * PUT /api/documents/:id/share — set the list of internal users a document is
+ * shared with (preview-only access). Admin / super-admin only; this is the sole
+ * authoritative way to mutate `sharedWith` (the generic CRUD PATCH strips it).
+ */
+documentsRouter.put(
+  '/:id/share',
+  asyncHandler(async (req, res) => {
+    if (!isAdmin(req)) {
+      res.status(403).json({ error: 'Only an admin can share documents.' });
+      return;
+    }
+    const { userIds } = shareSchema.parse(req.body ?? {});
+    const doc = await Document.findById(req.params.id);
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found.' });
+      return;
+    }
+    // Dedupe, drop anything that isn't a Mongo id (avoids a CastError on $in),
+    // then keep only ids that map to a real user.
+    const unique = [...new Set(userIds)].filter((id) => /^[a-f0-9]{24}$/i.test(id));
+    const valid = unique.length
+      ? (await User.find({ _id: { $in: unique } }).select('_id')).map((u) => String(u._id))
+      : [];
+    doc.set('sharedWith', valid);
+    await doc.save();
+    res.json(doc.toJSON());
+  }),
+);
 
 /**
  * GET /api/documents/:id/download — a short-lived presigned URL for a catalogued
@@ -93,7 +146,6 @@ documentsRouter.get(
  */
 documentsRouter.get(
   '/:id/preview',
-  requirePermission('documents:view'),
   asyncHandler(async (req, res) => {
     // Reject direct browser navigations (address bar / new tab): those carry
     // Sec-Fetch-Dest: document. Only the app's fetch() path (dest: empty) gets
@@ -109,6 +161,12 @@ documentsRouter.get(
     const doc = await Document.findById(req.params.id);
     if (!doc) {
       res.status(404).json({ error: 'Document not found.' });
+      return;
+    }
+    // Authorize here (not via requirePermission middleware) so a user the doc
+    // has been shared with can preview it even without `documents:view`.
+    if (!canPreviewDoc(req, { uploadedBy: doc.get('uploadedBy'), sharedWith: doc.get('sharedWith') })) {
+      res.status(403).json({ error: 'You do not have access to this document.' });
       return;
     }
     const mime = doc.get('mimeType') || '';

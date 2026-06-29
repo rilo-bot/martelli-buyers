@@ -53,6 +53,13 @@ export async function getEffectivePermissions(user: {
   return { permissions, isSuperAdmin: false };
 }
 
+/** True when the request's user is an admin (role) or the env super-admin. */
+export function isAdmin(req: Request): boolean {
+  if (req.auth?.isSuperAdmin) return true;
+  const role = req.auth?.user?.get?.('role') ?? req.auth?.user?.role;
+  return role === 'admin';
+}
+
 /**
  * Anti-download gate: who may SAVE a file (vs merely preview it). The owner is
  * the uploader for catalogued uploads, or the assigned agent for generated docs
@@ -61,10 +68,28 @@ export async function getEffectivePermissions(user: {
  * admins qualify.
  */
 export function canDownloadDoc(req: Request, ownerId: string): boolean {
-  if (req.auth?.isSuperAdmin) return true;
-  const role = req.auth?.user?.get?.('role') ?? req.auth?.user?.role;
-  if (role === 'admin') return true;
+  if (isAdmin(req)) return true;
   return Boolean(ownerId) && req.session.userId === ownerId;
+}
+
+/**
+ * Preview gate for a catalogued document. Grants inline-preview access to:
+ *  - admins / the super-admin,
+ *  - anyone holding the global `documents:view` permission (unchanged behaviour),
+ *  - the document's uploader,
+ *  - any user the document has been explicitly shared with (preview-only),
+ *    even if they hold no Documents permission at all.
+ */
+export function canPreviewDoc(
+  req: Request,
+  doc: { uploadedBy?: string; sharedWith?: string[] },
+): boolean {
+  if (req.auth?.isSuperAdmin) return true;
+  if (req.auth?.permissions.has('documents:view')) return true;
+  const uid = req.session.userId;
+  if (!uid) return false;
+  if (doc.uploadedBy === uid) return true;
+  return (doc.sharedWith ?? []).includes(uid);
 }
 
 /** Express middleware: 403 unless the request's effective permissions include `perm`. */

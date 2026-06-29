@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Paperclip, UploadCloud, FileText, Eye, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Paperclip, UploadCloud, FileText, Eye, Pencil, Trash2, Loader2, Share2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,9 +12,10 @@ import { useDocumentsStore } from '@/stores/documentsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useConfigStore } from '@/stores/configStore';
 import { usePermissions } from '@/lib/permissions';
-import { canDownloadDoc } from '@/lib/docAccess';
+import { canDownloadDoc, canShareDoc } from '@/lib/docAccess';
 import type { Document, DocumentCategory, DocumentEntityType } from '@/types';
 import { DocumentUploadDialog, DocumentEditDialog, type AttachLink } from './DocumentDialogs';
+import { DocumentShareDialog } from './DocumentShareDialog';
 import { categoryLabel, formatBytes } from './entityMeta';
 
 /**
@@ -44,6 +45,7 @@ export function EntityDocuments({
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editDoc, setEditDoc] = useState<Document | null>(null);
+  const [shareDoc, setShareDoc] = useState<Document | null>(null);
   const [viewDoc, setViewDoc] = useState<Document | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -51,6 +53,7 @@ export function EntityDocuments({
   const canUpload = hasS3 && can('documents:create');
   const canEdit = can('documents:edit');
   const canDelete = can('documents:delete');
+  const canShare = canShareDoc(currentUser);
 
   const docs = useMemo(
     () => documents
@@ -131,6 +134,11 @@ export function EntityDocuments({
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" onClick={() => setViewDoc(doc)} title="Preview">
                   <Eye className="h-4 w-4" />
                 </Button>
+                {canShare && (
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" onClick={() => setShareDoc(doc)} title="Share (preview-only)">
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                )}
                 {canEdit && (
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" onClick={() => setEditDoc(doc)} title="Edit details">
                     <Pencil className="h-4 w-4" />
@@ -152,6 +160,9 @@ export function EntityDocuments({
       )}
       {editDoc && (
         <DocumentEditDialog open={!!editDoc} onClose={() => setEditDoc(null)} doc={editDoc} />
+      )}
+      {shareDoc && (
+        <DocumentShareDialog open={!!shareDoc} onClose={() => setShareDoc(null)} doc={shareDoc} />
       )}
       {viewDoc && (
         <DocumentViewer

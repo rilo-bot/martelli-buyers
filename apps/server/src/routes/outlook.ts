@@ -17,17 +17,21 @@ const WEB = env.CLIENT_ORIGIN.replace(/\/+$/, '');
 /** GET /api/outlook/status — connection state for the UI (never returns tokens). */
 outlookRouter.get(
   '/status',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const conn = await getConnection();
+    // Admin-only fields: the connector's identity and the raw Graph error text
+    // (which can carry operational detail). Everyone else gets just enough to
+    // render the inbox/connection state.
+    const isManager = Boolean(req.auth?.isSuperAdmin || req.auth?.permissions.has('settings:manage'));
     res.json({
       configured: hasOutlook,
       connected: Boolean(conn),
       accountEmail: conn?.get('accountEmail') ?? '',
-      connectedByEmail: conn?.get('connectedByEmail') ?? '',
+      connectedByEmail: isManager ? conn?.get('connectedByEmail') ?? '' : '',
       syncStatus: conn?.get('syncStatus') ?? 'idle',
       lastSyncAt: conn?.get('lastSyncAt') ?? '',
       syncedCount: conn?.get('syncedCount') ?? 0,
-      syncError: conn?.get('syncError') ?? '',
+      syncError: isManager ? conn?.get('syncError') ?? '' : '',
     });
   }),
 );
@@ -52,8 +56,20 @@ outlookRouter.get(
       return;
     }
     const buf = Buffer.from(await graphRes.arrayBuffer());
-    res.setHeader('Content-Type', meta?.contentType || graphRes.headers.get('content-type') || 'application/octet-stream');
-    if (meta?.name) res.setHeader('Content-Disposition', `inline; filename="${meta.name.replace(/"/g, '')}"`);
+    const contentType = meta?.contentType || graphRes.headers.get('content-type') || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Attachment bytes are fully attacker-controlled (anyone can email the
+    // mailbox an .html/.svg). Only render known-safe types inline; force a
+    // download for everything else so untrusted markup can't execute in the
+    // API origin's context.
+    const inlineSafe = /^(image\/(png|jpe?g|gif|webp|bmp)|application\/pdf)$/i.test(contentType);
+    const disposition = inlineSafe ? 'inline' : 'attachment';
+    const filename = (meta?.name ?? '').replace(/[\r\n"]/g, '');
+    res.setHeader(
+      'Content-Disposition',
+      filename ? `${disposition}; filename="${filename}"` : disposition,
+    );
     res.send(buf);
   }),
 );

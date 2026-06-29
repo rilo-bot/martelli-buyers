@@ -15,3 +15,12 @@ export function canDownloadDoc(ownerId: string, user: User | null): boolean {
   if (user.role === 'admin') return true
   return Boolean(ownerId) && user.id === ownerId
 }
+
+/**
+ * Who may share a document with internal users (preview-only access): admins and
+ * the super-admin only. Mirrors the server's `isAdmin` gate on the share route.
+ */
+export function canShareDoc(user: User | null): boolean {
+  if (!user) return false
+  return Boolean(user.isSuperAdmin) || user.role === 'admin'
+}
