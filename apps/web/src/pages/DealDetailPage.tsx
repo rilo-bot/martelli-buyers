@@ -60,6 +60,8 @@ import { ExternalLink } from 'lucide-react';
 const STAGE_OPTIONS = DEAL_STAGE_ORDER;
 const PROPERTY_STATUS_OPTIONS = PROPERTY_STATUS_ORDER;
 const STAGE_PILL_STYLES = STAGE_PILL;
+// Sentinel for the "enter agent name manually" option in the source-agent Select.
+const MANUAL_AGENT = '__manual__';
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -133,7 +135,7 @@ export default function DealDetailPage() {
   const [propForm, setPropForm] = useState({
     address: '', suburb: '', priceGuide: '', bedrooms: '3', bathrooms: '2',
     carparks: '1', landSize: '', propertyType: '', notes: '', listingUrl: '',
-    sourceAgentName: '', isOffMarket: false,
+    sourceAgentId: '', sourceAgentName: '', isOffMarket: false,
   });
   // Media uploaded while filling in a new property — attached on submit.
   const [propMedia, setPropMedia] = useState<string[]>([]);
@@ -231,14 +233,14 @@ export default function DealDetailPage() {
       notes: propForm.notes.trim(),
       clientVisibleNotes: '',
       isClientVisible: true,
-      agentId: '',
+      agentId: propForm.sourceAgentId === MANUAL_AGENT ? '' : propForm.sourceAgentId,
       sourceAgentName: propForm.sourceAgentName.trim(),
       listingUrl: propForm.listingUrl.trim(),
       photos: propMedia,
       isOffMarket: propForm.isOffMarket,
       offMarketPropertyId: '',
     });
-    setPropForm({ address: '', suburb: '', priceGuide: '', bedrooms: '3', bathrooms: '2', carparks: '1', landSize: '', propertyType: '', notes: '', listingUrl: '', sourceAgentName: '', isOffMarket: false });
+    setPropForm({ address: '', suburb: '', priceGuide: '', bedrooms: '3', bathrooms: '2', carparks: '1', landSize: '', propertyType: '', notes: '', listingUrl: '', sourceAgentId: '', sourceAgentName: '', isOffMarket: false });
     setPropMedia([]);
     setShowAddProperty(false);
   };
@@ -932,7 +934,39 @@ export default function DealDetailPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="propAgent">Source agent</Label>
-                    <Input id="propAgent" value={propForm.sourceAgentName} onChange={(e) => setPropForm((f) => ({ ...f, sourceAgentName: e.target.value }))} placeholder="Agent name" />
+                    <Select
+                      id="propAgent"
+                      value={propForm.sourceAgentId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const agent = agents.find((a) => a.id === val);
+                        setPropForm((f) => ({
+                          ...f,
+                          sourceAgentId: val,
+                          sourceAgentName: agent
+                            ? `${agent.firstName} ${agent.lastName}`.trim()
+                            : val === MANUAL_AGENT
+                              ? f.sourceAgentName
+                              : '',
+                        }));
+                      }}
+                    >
+                      <option value="">— None —</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.firstName} {a.lastName}{a.agency ? ` — ${a.agency}` : ''}{a.isPreferred ? ' ★' : ''}
+                        </option>
+                      ))}
+                      <option value={MANUAL_AGENT}>Other (enter manually)…</option>
+                    </Select>
+                    {propForm.sourceAgentId === MANUAL_AGENT && (
+                      <Input
+                        className="mt-2"
+                        value={propForm.sourceAgentName}
+                        onChange={(e) => setPropForm((f) => ({ ...f, sourceAgentName: e.target.value }))}
+                        placeholder="Agent name"
+                      />
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1.5">

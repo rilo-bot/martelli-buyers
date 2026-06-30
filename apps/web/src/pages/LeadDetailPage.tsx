@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetBody, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2, Video, CalendarClock, ExternalLink, Plus, Users } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, DollarSign, MapPin, Trophy, Pencil, X, FileSignature, Eye, Copy, Check, Loader2, Video, CalendarClock, ExternalLink, Plus, Users, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { usePermissions } from '@/lib/permissions';
@@ -87,6 +87,7 @@ export default function LeadDetailPage() {
   const [saving, setSaving] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [meetOpen, setMeetOpen] = useState(false);
+  const [showMeetings, setShowMeetings] = useState(false);
 
   useDetailBreadcrumb(lead ? `${lead.firstName} ${lead.lastName}`.trim() : null);
 
@@ -103,6 +104,8 @@ export default function LeadDetailPage() {
   if (!lead) return <Navigate to="/leads" replace />;
 
   const linkedClient = lead.clientId ? clients.find((c) => c.id === lead.clientId) : null;
+  // Client this lead points to — explicit link first, else an email match. Drives the "View client" button.
+  const clientForLead = linkedClient ?? findClientByEmail(lead.email);
   const stageProgress = lead.stageProgress ?? {};
   const statusStyle = STATUS_STYLES[lead.status];
 
@@ -261,29 +264,54 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
-      {/* Scheduled meetings strip — the buyer's upcoming RILO Meet calls */}
-      {hasMeet && (upcomingMeetings.length > 0 || canCreateMeet) && (
+      {/* Quick actions — toggle the meetings panel / jump to the linked client */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {hasMeet && canViewMeet && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowMeetings((v) => !v)}
+            aria-expanded={showMeetings}
+            className="gap-1.5"
+          >
+            <CalendarClock className="h-4 w-4 text-primary" />
+            See scheduled meetings
+            {upcomingMeetings.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary tabular-nums">
+                {upcomingMeetings.length}
+              </span>
+            )}
+            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', showMeetings && 'rotate-180')} />
+          </Button>
+        )}
+        {clientForLead ? (
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link to={`/clients/${clientForLead.id}`}>
+              <Users className="h-4 w-4 text-primary" />
+              View client
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled
+            className="gap-1.5"
+            title="This lead isn’t linked to a client yet — mark it as Won to create one."
+          >
+            <Users className="h-4 w-4" />
+            View client
+          </Button>
+        )}
+      </div>
+
+      {/* Collapsible scheduled-meetings panel — the buyer's upcoming RILO Meet calls */}
+      {hasMeet && canViewMeet && showMeetings && (
         <LeadMeetingsStrip
           meetings={upcomingMeetings}
           canCreate={canCreateMeet}
           onNew={() => setMeetOpen(true)}
         />
-      )}
-
-      {/* Linked client banner */}
-      {linkedClient && (
-        <div className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary text-xs font-bold shrink-0">
-            {linkedClient.firstName[0]}{linkedClient.lastName[0]}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold">{linkedClient.firstName} {linkedClient.lastName}</p>
-            <p className="text-xs text-muted-foreground">Linked client profile</p>
-          </div>
-          <Button asChild variant="outline" size="sm" className="h-8 text-xs shrink-0">
-            <Link to={`/clients/${linkedClient.id}`}>View Client</Link>
-          </Button>
-        </div>
       )}
 
       {/* Qualification stage manager (track + checklist + advance) */}
