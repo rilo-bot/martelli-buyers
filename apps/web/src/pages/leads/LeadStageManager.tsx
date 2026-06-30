@@ -204,30 +204,43 @@ export function LeadStageManager({
 
       {/* ── Blocked dialog ─────────────────────────────────────────────── */}
       <Dialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <Lock className="h-5 w-5" /> Stage Locked
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Complete these required items in <strong className="text-foreground">{blocked?.stageLabel}</strong> before moving further:
-            </p>
-            <div className="space-y-2">
-              {blocked?.items.map((item) => (
-                <div key={item.id} className="flex items-start gap-2.5 px-3 py-2 rounded-lg border border-amber-200/80 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-900/10">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">{item.label}</p>
-                    {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-start gap-3 pr-6">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>Stage Locked</DialogTitle>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  Complete these required items in{' '}
+                  <strong className="font-semibold text-foreground">{blocked?.stageLabel}</strong> before moving further.
+                </p>
+              </div>
             </div>
+          </DialogHeader>
+
+          <div className="mt-4 space-y-2">
+            {blocked?.items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/30 px-3.5 py-3"
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-500">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-snug">{item.label}</p>
+                  {item.description && (
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="ghost">Close</Button></DialogClose>
+
+          <DialogFooter className="mt-5">
+            <DialogClose asChild><Button>Got it</Button></DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
